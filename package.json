@@ -1,0 +1,40 @@
+{
+  "name": "shanghai-writing-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "上海板块写作工作台 MVP",
+  "scripts": {
+    "dev": "next dev",
+    "dev:all": "node --experimental-strip-types scripts/dev-all.ts",
+    "build": "next build",
+    "start": "next start",
+    "worker": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/worker.ts",
+    "worker:once": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/worker.ts --once",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "import-samples": "python3 scripts/import_wz_samples.py --source-dir wz --db-path data/workbench.db",
+    "backfill-project-frames": "python3 scripts/backfill_project_frames.py --db-path data/workbench.db"
+  },
+  "keywords": [
+    "nextjs",
+    "sqlite",
+    "writing-workbench"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "next": "^16.2.3",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.3",
+    "playwright": "^1.59.1",
+    "typescript": "^6.0.2"
+  }
+}
