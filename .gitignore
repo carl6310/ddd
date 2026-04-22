@@ -18,3 +18,5 @@ __pycache__/
 .vscode/
 output/
 tsconfig.tsbuildinfo
+
+wz/
