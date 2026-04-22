@@ -1,6 +1,8 @@
 .next
 node_modules
 data/*.db
+data/*.db-shm
+data/*.db-wal
 data/*.sqlite
 data/*.sqlite3
 data/import-manifest.json
