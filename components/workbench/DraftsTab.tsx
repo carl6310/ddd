@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 import type { ProjectBundle } from "@/lib/types";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
+import { InlineTextEdit, InlineTextAreaEdit } from "@/components/ui/inline-edit";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
+import { AccordionCard } from "@/components/ui/accordion-card";
 import { canPreparePublish } from "@/lib/workflow";
+import { classifyEditorialFeedbackEvents } from "@/lib/editorial-feedback/classifier";
 
 type DraftsSection = "sector-model" | "outline" | "drafts" | "publish-prep";
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
@@ -170,83 +173,53 @@ export function DraftsTab({
                   <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
                     <label>
                       总判断
-                      <AutoGrowTextarea
-                        value={selectedBundle.sectorModel.summaryJudgement}
-                        onChange={(event) =>
-                          updateSectorModel(setSelectedBundle, {
+                      <InlineTextAreaEdit value={selectedBundle.sectorModel.summaryJudgement} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                             ...selectedBundle.sectorModel!,
-                            summaryJudgement: event.target.value,
+                            summaryJudgement: val,
                           })
-                        }
-                        rows={3}
-                      />
+                        } rows={3} />
                     </label>
                     <label>
                       误解点
-                      <AutoGrowTextarea
-                        value={selectedBundle.sectorModel.misconception}
-                        onChange={(event) =>
-                          updateSectorModel(setSelectedBundle, {
+                      <InlineTextAreaEdit value={selectedBundle.sectorModel.misconception} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                             ...selectedBundle.sectorModel!,
-                            misconception: event.target.value,
+                            misconception: val,
                           })
-                        }
-                        rows={3}
-                      />
+                        } rows={3} />
                     </label>
                     <label>
                       空间骨架
-                      <AutoGrowTextarea
-                        value={selectedBundle.sectorModel.spatialBackbone}
-                        onChange={(event) =>
-                          updateSectorModel(setSelectedBundle, {
+                      <InlineTextAreaEdit value={selectedBundle.sectorModel.spatialBackbone} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                             ...selectedBundle.sectorModel!,
-                            spatialBackbone: event.target.value,
+                            spatialBackbone: val,
                           })
-                        }
-                        rows={4}
-                      />
+                        } rows={4} />
                     </label>
                     <div className="two-column">
                       <label>
                         切割线
-                        <AutoGrowTextarea
-                          value={selectedBundle.sectorModel.cutLines.join("\n")}
-                          onChange={(event) =>
-                            updateSectorModel(setSelectedBundle, {
+                        <InlineTextAreaEdit value={selectedBundle.sectorModel.cutLines.join("\n")} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                               ...selectedBundle.sectorModel!,
-                              cutLines: splitLines(event.target.value),
+                              cutLines: splitLines(val),
                             })
-                          }
-                          rows={5}
-                        />
+                          } rows={5} />
                       </label>
                       <label>
                         未来变量
-                        <AutoGrowTextarea
-                          value={selectedBundle.sectorModel.futureWatchpoints.join("\n")}
-                          onChange={(event) =>
-                            updateSectorModel(setSelectedBundle, {
+                        <InlineTextAreaEdit value={selectedBundle.sectorModel.futureWatchpoints.join("\n")} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                               ...selectedBundle.sectorModel!,
-                              futureWatchpoints: splitLines(event.target.value),
+                              futureWatchpoints: splitLines(val),
                             })
-                          }
-                          rows={5}
-                        />
+                          } rows={5} />
                       </label>
                     </div>
                     <label>
                       供地判断
-                      <AutoGrowTextarea
-                        value={selectedBundle.sectorModel.supplyObservation}
-                        onChange={(event) =>
-                          updateSectorModel(setSelectedBundle, {
+                      <InlineTextAreaEdit value={selectedBundle.sectorModel.supplyObservation} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                             ...selectedBundle.sectorModel!,
-                            supplyObservation: event.target.value,
+                            supplyObservation: val,
                           })
-                        }
-                        rows={3}
-                      />
+                        } rows={3} />
                     </label>
                     <button onClick={saveSectorModel} disabled={isPending}>
                       保存板块建模
@@ -259,66 +232,48 @@ export function DraftsTab({
                     </div>
                     <div className="zone-grid zone-grid-scroll">
                   {selectedBundle.sectorModel.zones.map((zone, index) => (
-                    <article className="zone-card stack" key={zone.id}>
+                    <AccordionCard title={zone.name || "未命名片区"} description={zone.label || "未设置标签"} className="zone-card" key={zone.id}>
                       <label>
                         片区名
-                        <input
-                          value={zone.name}
-                          onChange={(event) =>
-                            updateSectorModel(setSelectedBundle, {
+                        <InlineTextEdit value={zone.name} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                               ...selectedBundle.sectorModel!,
                               zones: selectedBundle.sectorModel!.zones.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, name: event.target.value } : entry,
+                                entryIndex === index ? { ...entry, name: val } : entry,
                               ),
                             })
-                          }
-                        />
+                          } />
                       </label>
                       <label>
                         标签
-                        <input
-                          value={zone.label}
-                          onChange={(event) =>
-                            updateSectorModel(setSelectedBundle, {
+                        <InlineTextEdit value={zone.label} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                               ...selectedBundle.sectorModel!,
                               zones: selectedBundle.sectorModel!.zones.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, label: event.target.value } : entry,
+                                entryIndex === index ? { ...entry, label: val } : entry,
                               ),
                             })
-                          }
-                        />
+                          } />
                       </label>
                       <label>
                         片区描述
-                        <AutoGrowTextarea
-                          value={zone.description}
-                          onChange={(event) =>
-                            updateSectorModel(setSelectedBundle, {
+                        <InlineTextAreaEdit value={zone.description} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                               ...selectedBundle.sectorModel!,
                               zones: selectedBundle.sectorModel!.zones.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, description: event.target.value } : entry,
+                                entryIndex === index ? { ...entry, description: val } : entry,
                               ),
                             })
-                          }
-                          rows={5}
-                        />
+                          } rows={5} />
                       </label>
                       <label>
                         证据 ID
-                        <AutoGrowTextarea
-                          value={zone.evidenceIds.join("\n")}
-                          onChange={(event) =>
-                            updateSectorModel(setSelectedBundle, {
+                        <InlineTextAreaEdit value={zone.evidenceIds.join("\n")} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
                               ...selectedBundle.sectorModel!,
                               zones: selectedBundle.sectorModel!.zones.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, evidenceIds: splitLines(event.target.value) } : entry,
+                                entryIndex === index ? { ...entry, evidenceIds: splitLines(val) } : entry,
                               ),
                             })
-                          }
-                          rows={4}
-                        />
+                          } rows={4} />
                       </label>
-                    </article>
+                    </AccordionCard>
                   ))}
                     </div>
                   </ContainedScrollArea>
@@ -352,29 +307,19 @@ export function DraftsTab({
                   <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
                     <label>
                       开头钩子
-                      <AutoGrowTextarea
-                        value={selectedBundle.outlineDraft.hook}
-                        onChange={(event) =>
-                          updateOutlineDraft(setSelectedBundle, {
+                      <InlineTextAreaEdit value={selectedBundle.outlineDraft.hook} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                             ...selectedBundle.outlineDraft!,
-                            hook: event.target.value,
+                            hook: val,
                           })
-                        }
-                        rows={4}
-                      />
+                        } rows={4} />
                     </label>
                     <label>
                       结尾收束
-                      <AutoGrowTextarea
-                        value={selectedBundle.outlineDraft.closing}
-                        onChange={(event) =>
-                          updateOutlineDraft(setSelectedBundle, {
+                      <InlineTextAreaEdit value={selectedBundle.outlineDraft.closing} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                             ...selectedBundle.outlineDraft!,
-                            closing: event.target.value,
+                            closing: val,
                           })
-                        }
-                        rows={4}
-                      />
+                        } rows={4} />
                     </label>
                     <button onClick={saveOutlineDraft} disabled={isPending}>
                       保存段落提纲
@@ -387,97 +332,140 @@ export function DraftsTab({
                     </div>
                     <ContainedScrollArea className="outline-list editor-scroll-stack">
                   {selectedBundle.outlineDraft.sections.map((section, index) => (
-                    <article className="outline-item stack" key={section.id}>
+                    <AccordionCard title={`段落 ${index + 1}: ${section.heading || "未命名段落"}`} description={section.purpose} className="outline-item" key={section.id}>
                       <label>
                         段落标题
-                        <input
-                          value={section.heading}
-                          onChange={(event) =>
-                            updateOutlineDraft(setSelectedBundle, {
+                        <InlineTextEdit value={section.heading} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                               ...selectedBundle.outlineDraft!,
                               sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, heading: event.target.value } : entry,
+                                entryIndex === index ? { ...entry, heading: val } : entry,
                               ),
                             })
-                          }
-                        />
+                          } />
                       </label>
                       <label>
                         段落目的
-                        <AutoGrowTextarea
-                          value={section.purpose}
-                          onChange={(event) =>
-                            updateOutlineDraft(setSelectedBundle, {
+                        <InlineTextAreaEdit value={section.purpose} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                               ...selectedBundle.outlineDraft!,
                               sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, purpose: event.target.value } : entry,
+                                entryIndex === index ? { ...entry, purpose: val } : entry,
                               ),
                             })
-                          }
-                          rows={3}
-                        />
+                          } rows={3} />
+                      </label>
+                      <label>
+                        段落主判断
+                        <InlineTextAreaEdit value={section.sectionThesis} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, sectionThesis: val } : entry,
+                              ),
+                            })
+                          } rows={3} />
+                      </label>
+                      <label>
+                        唯一动作
+                        <InlineTextAreaEdit value={section.singlePurpose} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, singlePurpose: val } : entry,
+                              ),
+                            })
+                          } rows={2} />
+                      </label>
+                      <label>
+                        必须落地
+                        <InlineTextAreaEdit value={section.mustLandDetail} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, mustLandDetail: val } : entry,
+                              ),
+                            })
+                          } rows={3} />
+                      </label>
+                      <label>
+                        场景 / 代价
+                        <InlineTextAreaEdit value={section.sceneOrCost} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, sceneOrCost: val } : entry,
+                              ),
+                            })
+                          } rows={3} />
                       </label>
                       <label>
                         推进动作
-                        <AutoGrowTextarea
-                          value={section.move}
-                          onChange={(event) =>
-                            updateOutlineDraft(setSelectedBundle, {
+                        <InlineTextAreaEdit value={section.move} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                               ...selectedBundle.outlineDraft!,
                               sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, move: event.target.value } : entry,
+                                entryIndex === index ? { ...entry, move: val } : entry,
                               ),
                             })
-                          }
-                          rows={3}
-                        />
+                          } rows={3} />
+                      </label>
+                      <label>
+                        强约束证据 ID
+                        <InlineTextAreaEdit value={section.mustUseEvidenceIds.join("\n")} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, mustUseEvidenceIds: splitLines(val) } : entry,
+                              ),
+                            })
+                          } rows={4} />
                       </label>
                       <label>
                         证据 ID
-                        <AutoGrowTextarea
-                          value={section.evidenceIds.join("\n")}
-                          onChange={(event) =>
-                            updateOutlineDraft(setSelectedBundle, {
+                        <InlineTextAreaEdit value={section.evidenceIds.join("\n")} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                               ...selectedBundle.outlineDraft!,
                               sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, evidenceIds: splitLines(event.target.value) } : entry,
+                                entryIndex === index ? { ...entry, evidenceIds: splitLines(val) } : entry,
                               ),
                             })
-                          }
-                          rows={4}
-                        />
+                          } rows={4} />
                       </label>
                       <div className="two-column">
                         <label>
                           节奏
-                          <input
-                            value={section.tone}
-                            onChange={(event) =>
-                              updateOutlineDraft(setSelectedBundle, {
+                          <InlineTextEdit value={section.tone} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                                 ...selectedBundle.outlineDraft!,
                                 sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                  entryIndex === index ? { ...entry, tone: event.target.value } : entry,
+                                  entryIndex === index ? { ...entry, tone: val } : entry,
                                 ),
                               })
-                            }
-                          />
+                            } />
+                        </label>
+                        <label>
+                          承接目标
+                          <InlineTextEdit value={section.transitionTarget} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                                ...selectedBundle.outlineDraft!,
+                                sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                  entryIndex === index ? { ...entry, transitionTarget: val } : entry,
+                                ),
+                              })
+                            } />
                         </label>
                         <label>
                           打破
-                          <input
-                            value={section.break}
-                            onChange={(event) =>
-                              updateOutlineDraft(setSelectedBundle, {
+                          <InlineTextEdit value={section.break} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                                 ...selectedBundle.outlineDraft!,
                                 sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                  entryIndex === index ? { ...entry, break: event.target.value } : entry,
+                                  entryIndex === index ? { ...entry, break: val } : entry,
                                 ),
                               })
-                            }
-                          />
+                            } />
                         </label>
                       </div>
-                    </article>
+                      <label>
+                        反面理解 / 反证
+                        <InlineTextAreaEdit value={section.counterPoint} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, counterPoint: val } : entry,
+                              ),
+                            })
+                          } rows={3} />
+                      </label>
+                    </AccordionCard>
                   ))}
                     </ContainedScrollArea>
                   </ContainedScrollArea>
@@ -522,26 +510,34 @@ export function DraftsTab({
                 <div className="workspace-pane workspace-pane-hero stack">
                   <label>
                     人工改写版
-                    <AutoGrowTextarea
-                      value={selectedBundle.articleDraft.editedMarkdown || selectedBundle.articleDraft.narrativeMarkdown}
-                      onChange={(event) =>
-                        setSelectedBundle((current) =>
+                    <InlineTextAreaEdit value={selectedBundle.articleDraft.editedMarkdown || selectedBundle.articleDraft.narrativeMarkdown} onChange={(val: string) => setSelectedBundle((current) =>
                           current
                             ? {
                                 ...current,
                                 articleDraft: {
                                   ...current.articleDraft!,
-                                  editedMarkdown: event.target.value,
+                                  editedMarkdown: val,
                                 },
                               }
                             : current,
                         )
-                      }
-                      rows={18}
-                    />
+                      } rows={18} />
                   </label>
                   <button
-                    onClick={() => saveEditedDraft(selectedBundle.articleDraft?.editedMarkdown || selectedBundle.articleDraft?.narrativeMarkdown || "")}
+                    onClick={() => {
+                      const nextEditedMarkdown = selectedBundle.articleDraft?.editedMarkdown || selectedBundle.articleDraft?.narrativeMarkdown || "";
+                      const events = selectedBundle.articleDraft
+                        ? classifyEditorialFeedbackEvents({
+                            projectId: selectedProjectId,
+                            narrativeMarkdown: selectedBundle.articleDraft.narrativeMarkdown,
+                            editedMarkdown: nextEditedMarkdown,
+                          })
+                        : [];
+                      if (events.length > 0) {
+                        setDraftMessage(`检测到 ${events.length} 个编辑反馈事件，保存后可用于后续质量分析。`);
+                      }
+                      void saveEditedDraft(nextEditedMarkdown);
+                    }}
                     disabled={isPending}
                   >
                     保存人工改写稿
@@ -582,6 +578,51 @@ export function DraftsTab({
             {selectedBundle.publishPackage ? (
               <div className="stack">
                 <p className="subtle">你改完正文后，可以直接点上面的按钮重新生成这一整套发布整理结果。</p>
+                {selectedBundle.publishPackage.qualityGate ? (
+                  <article className="status-block">
+                    <h3>Writing Quality Gate</h3>
+                    <p className="subtle">当前模式：{selectedBundle.publishPackage.qualityGate.mode}，不会拦截发布前整理，但会明确提醒先修什么。</p>
+                    {selectedBundle.publishPackage.qualityGate.mustFix.length > 0 ? (
+                      <>
+                        <strong>Must Fix</strong>
+                        <ul className="compact-list">
+                          {selectedBundle.publishPackage.qualityGate.mustFix.map((item) => (
+                            <li key={item.code}>
+                              <span>{item.title}</span>
+                              <em>{item.detail}</em>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                    {selectedBundle.publishPackage.qualityGate.shouldFix.length > 0 ? (
+                      <>
+                        <strong>Should Fix</strong>
+                        <ul className="compact-list">
+                          {selectedBundle.publishPackage.qualityGate.shouldFix.map((item) => (
+                            <li key={item.code}>
+                              <span>{item.title}</span>
+                              <em>{item.detail}</em>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                    {selectedBundle.publishPackage.qualityGate.optionalPolish.length > 0 ? (
+                      <>
+                        <strong>Optional Polish</strong>
+                        <ul className="compact-list">
+                          {selectedBundle.publishPackage.qualityGate.optionalPolish.map((item) => (
+                            <li key={item.code}>
+                              <span>{item.title}</span>
+                              <em>{item.detail}</em>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                  </article>
+                ) : null}
                 <article className="status-block">
                   <h3>标题候选</h3>
                   <ul className="compact-list">
@@ -613,12 +654,23 @@ export function DraftsTab({
                     ))}
                   </ul>
                 </article>
+                <div className="action-row" style={{ marginTop: '24px', justifyContent: 'center' }}>
+                  <button
+                    className="primary-button"
+                    onClick={() => void runProjectStep("review", "已请求全面质量评审。")}
+                    disabled={isPending}
+                    style={{ padding: '12px 32px', fontSize: '15px' }}
+                  >
+                    请求人工质量评审
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="empty-state stack">
                 {canPublish ? (
                   <>
                     <p>已经可以进入发布前整理了。</p>
+                    <p className="subtle">当前不会因为写作质量 gate 被硬拦，但建议先看完 warn-only 提示再继续。</p>
                   </>
                 ) : (
                   <>

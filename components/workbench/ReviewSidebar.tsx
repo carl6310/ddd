@@ -61,20 +61,19 @@ export function ReviewSidebar({
   const primaryRisk = riskItems[0] ?? null;
 
   return (
-    <section className={`status-strip status-strip-${nextAction.tone}`}>
-      <div className="status-strip-summary">
-        <div className="status-strip-head">
-          <span className="status-strip-label">工作台状态</span>
-          <span className="status-strip-count">{completedCount}/7</span>
+    <section className={`status-bar status-bar-${nextAction.tone}`}>
+      <div className="status-bar-top">
+        <div className="status-bar-info">
+          <div className="status-bar-head">
+            <span className="status-bar-label">工作台状态</span>
+            <span className="status-bar-count">{completedCount}/7</span>
+          </div>
+          <p className="status-bar-title">{nextAction.title}</p>
+          <p className="status-bar-copy">{nextAction.reason}</p>
         </div>
-        <p className="status-strip-title">{nextAction.title}</p>
-        <p className="status-strip-copy">{nextAction.reason}</p>
-      </div>
-
-      <div className="status-strip-action">
         <button
           type="button"
-          className="primary-button status-strip-button"
+          className="primary-button status-bar-cta"
           onClick={() => {
             if (nextAction.executeStep) {
               void onExecute(nextAction.executeStep);
@@ -86,17 +85,19 @@ export function ReviewSidebar({
         >
           {nextAction.executeStep ? "立即生成" : "去处理"}
         </button>
-        <small>{nextAction.targetLabel}</small>
       </div>
-
-      <div className="status-strip-meta">
+      <div className="status-bar-bottom">
         <span className="status-chip">{selectedBundle.project.stage}</span>
         <span className="status-chip">{activeViewLabel}</span>
+        {selectedBundle.reviewReport?.rewriteIntents?.length ? (
+          <span className="status-chip status-chip-warn">待改段落：{selectedBundle.reviewReport.rewriteIntents.length}</span>
+        ) : null}
         {primaryRisk ? (
           <span className={`status-chip status-chip-${primaryRisk.status}`}>风险：{primaryRisk.title}</span>
         ) : (
           <span className="status-chip status-chip-pass">当前无硬阻塞</span>
         )}
+        <small className="status-bar-target">{nextAction.targetLabel}</small>
       </div>
     </section>
   );

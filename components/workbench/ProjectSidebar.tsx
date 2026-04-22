@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ArticleProject, TopicCoCreationCandidate, TopicCoCreationResponse } from "@/lib/types";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
+import { Modal } from "@/components/ui/modal";
 
 interface ProjectSidebarProps {
   projects: ArticleProject[];
@@ -43,7 +44,7 @@ export function ProjectSidebar({
   const [coCreationCandidates, setCoCreationCandidates] = useState<TopicCoCreationCandidate[]>([]);
   const [coCreationSourceDigests, setCoCreationSourceDigests] = useState<TopicCoCreationResponse["sourceDigests"]>([]);
   const [coCreationInsights, setCoCreationInsights] = useState<TopicCoCreationResponse["result"]["materialInsights"] | null>(null);
-  const [openPanel, setOpenPanel] = useState<"create" | "cocreate" | null>(projects.length === 0 ? "create" : null);
+  const [openModal, setOpenModal] = useState<"create" | "cocreate" | null>(projects.length === 0 ? "create" : null);
 
   async function runTopicCoCreation() {
     setIsPending(true);
@@ -61,7 +62,6 @@ export function ProjectSidebar({
       setCoCreationCandidates(payload.result.candidateAngles);
       setCoCreationSourceDigests(payload.sourceDigests || []);
       setCoCreationInsights(payload.result.materialInsights || null);
-      setOpenPanel("cocreate");
       setMessage("候选选题角度已生成。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选题共创失败。");
@@ -99,7 +99,7 @@ export function ProjectSidebar({
         throw new Error(payload.error || "根据候选角度创建项目失败。");
       }
       await refreshProjectsAndBundle(payload.project.id);
-      setOpenPanel(null);
+      setOpenModal(null);
       setProjectForm((current) => ({
         ...current,
         topic: candidate.title,
@@ -139,7 +139,7 @@ export function ProjectSidebar({
         notes: "",
       });
       await refreshProjectsAndBundle(payload.project.id);
-      setOpenPanel(null);
+      setOpenModal(null);
       setMessage("新项目已经创建并完成选题定义。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "创建项目失败。");
@@ -149,166 +149,37 @@ export function ProjectSidebar({
   }
 
   return (
-    <aside className="panel sidebar">
-      <section className="card stack">
-        <div className="card-header">
-          <h2>继续当前项目</h2>
-          <p className="subtle">默认优先回到最近在推进的项目，左侧只做切换和起新题。</p>
-        </div>
-        <div className="sidebar-toolbar">
-          <button
-            type="button"
-            className={`panel-toggle ${openPanel === "create" ? "is-active" : ""}`}
-            onClick={() => setOpenPanel((current) => (current === "create" ? null : "create"))}
-          >
-            新建空白项目
-          </button>
-          <button
-            type="button"
-            className={`panel-toggle ${openPanel === "cocreate" ? "is-active" : ""}`}
-            onClick={() => setOpenPanel((current) => (current === "cocreate" ? null : "cocreate"))}
-          >
-            选题共创
-          </button>
-        </div>
-        {openPanel === "create" ? (
-          <div className="inline-composer stack">
-            <div className="card-header">
-              <h2>新建空白项目</h2>
-              <p className="subtle">适合你已经有题目，只想快速立项进主流程。</p>
-            </div>
-            <div className="stack">
-              <label>
-                核心命题 / 抓眼球标题
-                <input value={projectForm.topic} onChange={(event) => setProjectForm({ ...projectForm, topic: event.target.value })} placeholder="例如：唐镇为什么总被高估" />
-              </label>
-              <label>
-                受众人群
-                <input value={projectForm.audience} onChange={(event) => setProjectForm({ ...projectForm, audience: event.target.value })} />
-              </label>
-              <label>
-                目标字数
-                <input value={projectForm.targetWords} onChange={(event) => setProjectForm({ ...projectForm, targetWords: event.target.value })} inputMode="numeric" />
-              </label>
-              <label>
-                前置直觉笔记
-                <AutoGrowTextarea value={projectForm.notes} onChange={(event) => setProjectForm({ ...projectForm, notes: event.target.value })} rows={3} placeholder="可留空，系统会补一段选题判断。" />
-              </label>
-              {!projectForm.topic.trim() ? <p className="subtle action-hint">先补一个标题，按钮就会解锁。</p> : null}
-              <button className="primary-button" onClick={createProject} disabled={isPending || !projectForm.topic.trim()}>
-                新建项目并自动写简报
-              </button>
-            </div>
+    <>
+      <aside className="panel sidebar">
+        <section className="card stack sidebar-card">
+          {/* Compact action bar */}
+          <div className="sidebar-action-bar">
+            <button
+              type="button"
+              className="sidebar-add-btn"
+              onClick={() => setOpenModal("create")}
+              title="新建空白项目"
+            >
+              ＋ 新建
+            </button>
+            <button
+              type="button"
+              className="sidebar-add-btn sidebar-add-btn-alt"
+              onClick={() => setOpenModal("cocreate")}
+              title="选题共创"
+            >
+              ✦ 共创
+            </button>
           </div>
-        ) : null}
-        {openPanel === "cocreate" ? (
-          <div className="inline-composer stack">
-            <div className="card-header">
-              <h2>选题共创</h2>
-              <p className="subtle">只填板块和几条零碎直觉，让系统先帮你打几个可立项角度。</p>
-            </div>
-            <div className="stack">
-              <label>
-                只讲哪个板块/片区？
-                <input value={coCreationForm.sector} onChange={(event) => setCoCreationForm({ ...coCreationForm, sector: event.target.value })} placeholder="例如：唐镇" />
-              </label>
-              <label>
-                你对它现有的碎片直觉？
-                <AutoGrowTextarea value={coCreationForm.currentIntuition} onChange={(event) => setCoCreationForm({ ...coCreationForm, currentIntuition: event.target.value })} placeholder="例如：感觉现在去接盘唐镇的都是冤大头，但新盘还在日光。" rows={2} />
-              </label>
-              <label>
-                要加入讨论的生肉材料？
-                <AutoGrowTextarea value={coCreationForm.rawMaterials} onChange={(event) => setCoCreationForm({ ...coCreationForm, rawMaterials: event.target.value })} placeholder="例如一段长长的中介带看反馈或专家言论..." rows={2} />
-              </label>
-              <label>
-                要避开什么烂大街角度？
-                <input value={coCreationForm.avoidAngles} onChange={(event) => setCoCreationForm({ ...coCreationForm, avoidAngles: event.target.value })} />
-              </label>
-              {!coCreationForm.sector.trim() ? <p className="subtle action-hint">先填板块或片区，才能生成候选角度。</p> : null}
-              <button className="primary-button" onClick={runTopicCoCreation} disabled={isPending || !coCreationForm.sector.trim()}>
-                生成选题候选池
-              </button>
-            </div>
 
-            {coCreationCandidates.length > 0 ? (
-              <div className="status-block stack">
-                {coCreationSourceDigests.length > 0 ? (
-                  <details>
-                    <summary>被萃取的有效材料点 ({coCreationSourceDigests.length})</summary>
-                    <ul className="compact-list">
-                      {coCreationSourceDigests.map((md, i) => (
-                        <li key={`${md.url}-${i}`}>
-                          <strong>{md.title || "未命名材料"}</strong>
-                          <span>{md.summary || md.note || (md.ok ? "已抓取材料。" : md.error || "抓取失败。")}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                ) : null}
-
-                {coCreationInsights ? (
-                  <details>
-                    <summary>材料升维洞察发现</summary>
-                    <p><strong>高频主题：</strong>{coCreationInsights.themes.join(" / ") || "暂无"}</p>
-                    <p><strong>主要张力：</strong>{coCreationInsights.tensions.join(" / ") || "暂无"}</p>
-                    <p><strong>盲区提醒：</strong>{coCreationInsights.blindSpots.join(" / ") || "暂无"}</p>
-                  </details>
-                ) : null}
-
-                <h3>可以直接立项的候选角度</h3>
-                {coCreationCandidates.map((cad, i) => (
-                  <article key={i} className="zone-card stack">
-                    <strong>{cad.title}</strong>
-                    <p className="subtle">{cad.whyItWorks}</p>
-                    <small>结构：{cad.articleType}</small>
-                    <details>
-                      <summary>展开查看详情预演</summary>
-                      <div className="stack subtle">
-                        <p><strong>论点：</strong>{cad.thesis}</p>
-                        <p><strong>钩子：</strong>{cad.hook} / <strong>锚点：</strong>{cad.anchor} / <strong>异质：</strong>{cad.different}</p>
-                        <p><strong>HKRR：</strong>{cad.hkrr.summary}</p>
-                      </div>
-                    </details>
-                    <button className="secondary-button" onClick={() => createProjectFromCandidate(cad)} disabled={isPending}>
-                      就用这个角度立项
-                    </button>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {selectedProjectId ? (
-          <p className="subtle sidebar-selected-note">选中项目后，主画布会尽量直接落到你上次推进到的阶段。</p>
-        ) : null}
-        <div className="project-list-section">
-          <div className="project-list-header">
-            <h3>最近项目</h3>
-            <small>{recentProjects.length} 个</small>
-          </div>
-          <div className="project-list">
-            {recentProjects.map((project) => (
-              <button
-                key={project.id}
-                className={`project-item ${project.id === selectedProjectId ? "selected" : ""}`}
-                onClick={() => setSelectedProjectId(project.id)}
-                title={project.topic}
-              >
-                <strong className="project-item-title">{project.topic}</strong>
-                <div className="project-item-meta">
-                  <small>{project.articleType}</small>
-                  <span className="project-stage-pill">{project.stage}</span>
-                </div>
-              </button>
-            ))}
-            {projects.length === 0 ? <p className="empty-inline">还没有项目，先点上面的按钮新建一个。</p> : null}
-          </div>
-        </div>
-        {historicalProjects.length > 0 ? (
-          <details className="project-history">
-            <summary>查看更多历史项目 ({historicalProjects.length})</summary>
-            <ContainedScrollArea className="project-list project-list-scroll">
-              {historicalProjects.map((project) => (
+          {/* Project list */}
+          <div className="project-list-section">
+            <div className="project-list-header">
+              <h3>最近项目</h3>
+              <small>{recentProjects.length} 个</small>
+            </div>
+            <div className="project-list">
+              {recentProjects.map((project) => (
                 <button
                   key={project.id}
                   className={`project-item ${project.id === selectedProjectId ? "selected" : ""}`}
@@ -322,10 +193,144 @@ export function ProjectSidebar({
                   </div>
                 </button>
               ))}
-            </ContainedScrollArea>
-          </details>
+              {projects.length === 0 ? <p className="empty-inline">还没有项目，点上面按钮新建。</p> : null}
+            </div>
+          </div>
+          {historicalProjects.length > 0 ? (
+            <details className="project-history">
+              <summary>查看更多历史项目 ({historicalProjects.length})</summary>
+              <ContainedScrollArea className="project-list project-list-scroll">
+                {historicalProjects.map((project) => (
+                  <button
+                    key={project.id}
+                    className={`project-item ${project.id === selectedProjectId ? "selected" : ""}`}
+                    onClick={() => setSelectedProjectId(project.id)}
+                    title={project.topic}
+                  >
+                    <strong className="project-item-title">{project.topic}</strong>
+                    <div className="project-item-meta">
+                      <small>{project.articleType}</small>
+                      <span className="project-stage-pill">{project.stage}</span>
+                    </div>
+                  </button>
+                ))}
+              </ContainedScrollArea>
+            </details>
+          ) : null}
+        </section>
+      </aside>
+
+      {/* ── Create Project Modal ── */}
+      <Modal
+        open={openModal === "create"}
+        onClose={() => setOpenModal(null)}
+        title="新建空白项目"
+        description="已有明确选题时，快速立项进入主流程。"
+      >
+        <div className="stack">
+          <label>
+            核心命题 / 抓眼球标题
+            <input value={projectForm.topic} onChange={(event) => setProjectForm({ ...projectForm, topic: event.target.value })} placeholder="例如：唐镇为什么总被高估" />
+          </label>
+          <label>
+            受众人群
+            <input value={projectForm.audience} onChange={(event) => setProjectForm({ ...projectForm, audience: event.target.value })} />
+          </label>
+          <label>
+            目标字数
+            <input value={projectForm.targetWords} onChange={(event) => setProjectForm({ ...projectForm, targetWords: event.target.value })} inputMode="numeric" />
+          </label>
+          <label>
+            前置直觉笔记
+            <AutoGrowTextarea value={projectForm.notes} onChange={(event) => setProjectForm({ ...projectForm, notes: event.target.value })} rows={3} placeholder="可留空，系统会补一段选题判断。" />
+          </label>
+          {!projectForm.topic.trim() ? <p className="subtle action-hint">先补一个标题，按钮就会解锁。</p> : null}
+          <button className="primary-button" onClick={createProject} disabled={isPending || !projectForm.topic.trim()}>
+            新建项目并自动写简报
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Co-creation Modal ── */}
+      <Modal
+        open={openModal === "cocreate"}
+        onClose={() => setOpenModal(null)}
+        title="选题共创"
+        description="只填板块和几条零碎直觉，让系统先帮你打几个可立项角度。"
+        wide={coCreationCandidates.length > 0}
+      >
+        <div className="stack">
+          <label>
+            只讲哪个板块/片区？
+            <input value={coCreationForm.sector} onChange={(event) => setCoCreationForm({ ...coCreationForm, sector: event.target.value })} placeholder="例如：唐镇" />
+          </label>
+          <label>
+            你对它现有的碎片直觉？
+            <AutoGrowTextarea value={coCreationForm.currentIntuition} onChange={(event) => setCoCreationForm({ ...coCreationForm, currentIntuition: event.target.value })} placeholder="例如：感觉现在去接盘唐镇的都是冤大头，但新盘还在日光。" rows={2} />
+          </label>
+          <label>
+            要加入讨论的生肉材料？
+            <AutoGrowTextarea value={coCreationForm.rawMaterials} onChange={(event) => setCoCreationForm({ ...coCreationForm, rawMaterials: event.target.value })} placeholder="例如一段长长的中介带看反馈或专家言论..." rows={2} />
+          </label>
+          <label>
+            要避开什么烂大街角度？
+            <input value={coCreationForm.avoidAngles} onChange={(event) => setCoCreationForm({ ...coCreationForm, avoidAngles: event.target.value })} />
+          </label>
+          {!coCreationForm.sector.trim() ? <p className="subtle action-hint">先填板块或片区，才能生成候选角度。</p> : null}
+          <button className="primary-button" onClick={runTopicCoCreation} disabled={isPending || !coCreationForm.sector.trim()}>
+            生成选题候选池
+          </button>
+        </div>
+
+        {coCreationCandidates.length > 0 ? (
+          <div className="modal-results stack">
+            {coCreationSourceDigests.length > 0 ? (
+              <details>
+                <summary>被萃取的有效材料点 ({coCreationSourceDigests.length})</summary>
+                <ul className="compact-list">
+                  {coCreationSourceDigests.map((md, i) => (
+                    <li key={`${md.url}-${i}`}>
+                      <strong>{md.title || "未命名材料"}</strong>
+                      <span>{md.summary || md.note || (md.ok ? "已抓取材料。" : md.error || "抓取失败。")}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+
+            {coCreationInsights ? (
+              <details>
+                <summary>材料升维洞察发现</summary>
+                <p><strong>高频主题：</strong>{coCreationInsights.themes.join(" / ") || "暂无"}</p>
+                <p><strong>主要张力：</strong>{coCreationInsights.tensions.join(" / ") || "暂无"}</p>
+                <p><strong>盲区提醒：</strong>{coCreationInsights.blindSpots.join(" / ") || "暂无"}</p>
+              </details>
+            ) : null}
+
+            <h3>可以直接立项的候选角度</h3>
+            <div className="cocreation-candidates-grid">
+              {coCreationCandidates.map((cad, i) => (
+                <article key={i} className="zone-card stack">
+                  <strong>{cad.title}</strong>
+                  <p className="subtle">{cad.whyItWorks}</p>
+                  <small>结构：{cad.articleType}</small>
+                  <details>
+                    <summary>展开查看详情预演</summary>
+                    <div className="stack subtle">
+                      <p><strong>论点：</strong>{cad.thesis}</p>
+                      <p><strong>钩子：</strong>{cad.hook} / <strong>锚点：</strong>{cad.anchor} / <strong>异质：</strong>{cad.different}</p>
+                      <p><strong>HKRR：</strong>{cad.hkrr.summary}</p>
+                    </div>
+                  </details>
+                  <button className="primary-button" onClick={() => createProjectFromCandidate(cad)} disabled={isPending}>
+                    就用这个角度立项
+                  </button>
+                </article>
+              ))}
+            </div>
+          </div>
         ) : null}
-      </section>
-    </aside>
+      </Modal>
+    </>
   );
 }

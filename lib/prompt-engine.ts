@@ -26,6 +26,13 @@ export type TaskName =
   | "outline_writer"
   | "draft_writer"
   | "draft_polisher"
+  | "opening_rewriter"
+  | "transition_rewriter"
+  | "evidence_weaver"
+  | "scene_inserter"
+  | "cost_sharpener"
+  | "ending_echo_rewriter"
+  | "anti_cliche_rewriter"
   | "vitality_reviewer"
   | "quality_reviewer"
   | "publish_prep"
@@ -51,6 +58,15 @@ export function buildPromptTask(
     outlineDraft?: OutlineDraft | null;
     narrativeMarkdown?: string;
     deterministicReview?: ReviewReport | null;
+    sectionHeading?: string;
+    paragraphText?: string;
+    paragraphIndex?: number;
+    rewriteIntent?: {
+      issueType: string;
+      targetRange: string;
+      whyItFails: string;
+      suggestedRewriteMode: string;
+    };
     finalMarkdown?: string;
     sector?: string;
     currentIntuition?: string;
@@ -189,6 +205,11 @@ JSON 结构：
     "materialDigest": "先把素材吃透后的摘要",
     "topicVerdict": "strong|rework|weak",
     "verdictReason": "为什么值或不值",
+    "coreJudgement": "这篇最核心的一句话判断",
+    "counterIntuition": "最值得打破的读者直觉",
+    "readerPayoff": "读者看完真正得到的判断收益",
+    "decisionImplication": "这篇判断会怎么改变读者的决策",
+    "excludedTakeaways": ["这篇明确不想让读者得出的偷懒结论"],
     "hkr": {
       "happy": "认知快感",
       "knowledge": "真正交付的知识",
@@ -206,6 +227,9 @@ JSON 结构：
     "personalView": "私人视角",
     "judgement": "判断力",
     "counterView": "对立面理解",
+    "allowedMoves": ["允许使用的写作动作"],
+    "forbiddenMoves": ["这篇明确禁止的套路动作"],
+    "allowedMetaphors": ["允许使用的比喻方向"],
     "emotionCurve": "情绪递进",
     "personalStake": "亲自下场",
     "characterPortrait": "人物画像法",
@@ -213,6 +237,8 @@ JSON 结构：
     "sentenceBreak": "句式断裂",
     "echo": "回环呼应",
     "humbleSetup": "谦逊铺垫法",
+    "toneCeiling": "这篇语气最多只能到哪，不允许滑到哪里",
+    "concretenessRequirement": "这篇对具体性的最低要求",
     "costSense": "现实代价"
   },
   "hkrr": {
@@ -246,8 +272,10 @@ JSON 结构：
 1. 先写 ThinkCard，再写 StyleCore，最后再回填兼容字段 hkrr / hamd / writingMoves
 2. ThinkCard 的 topicVerdict 只能是 strong / rework / weak
 3. 如果是 rework 或 weak，必须把 rewriteSuggestion 和 alternativeAngles 写具体
+4. ThinkCard 必须把“核心判断、反直觉抓手、读者收益、决策影响、明确不写什么”写清楚
+5. StyleCore 必须明确允许动作、禁止动作、可用比喻、语气上限和具体性要求
 4. AI role 必须明确：AI 只提供素材整理、对比和启发，不替代作者核心角度
-5. StyleCore 每一项都必须具体，不能写“增强可读性”“增加故事性”这种空话
+6. StyleCore 每一项都必须具体，不能写“增强可读性”“增加故事性”这种空话
         `.trim(),
         user: `
 请对下面选题做 ThinkCard 定义。
@@ -381,11 +409,18 @@ JSON 结构：
       "id": "section-1",
       "heading": "段落标题",
       "purpose": "这一段要证明什么",
+      "sectionThesis": "这一段唯一的一句话主判断",
+      "singlePurpose": "这一段唯一动作，例如先纠偏/再搭骨架/再落场景",
+      "mustLandDetail": "这一段必须落地的具体细节或判断",
+      "sceneOrCost": "这一段必须落的人物场景或现实代价，没有就写为什么没有",
       "evidenceIds": ["source card id"],
+      "mustUseEvidenceIds": ["这一段必须真正写进正文的证据 id"],
       "tone": "节奏/情绪说明",
       "move": "这一段执行的写作动作，例如纠偏/搭地图/落人物/升维/回环",
       "break": "这一段在哪里故意打破节奏",
       "bridge": "这一段如何把读者带到下一段",
+      "transitionTarget": "下一段承接目标是什么",
+      "counterPoint": "这一段要回应的反面理解或误判",
       "styleObjective": "这一段要兑现 StyleCore 里的哪一种风格动作",
       "keyPoints": ["要覆盖的点"],
       "expectedTakeaway": "读者看完这一段会得到什么"
@@ -418,7 +453,9 @@ ${languageText}
 
 要求：先纠偏，再讲空间骨架，再分区拆解，再讲供应和未来，最后回到购房者视角。
 要求：至少有一个 section 负责落人物或生活场景，至少有一个 section 负责升维，结尾 section 必须明确回环。
-要求：每个 section 的 move / break / bridge / styleObjective 都必须可执行，不能写空词。
+要求：每个 section 必须有唯一主判断、唯一动作、必须落地细节、场景或代价、承接目标、反面理解。
+要求：每个 section 的 move / break / bridge / styleObjective / singlePurpose / transitionTarget 都必须可执行，不能写空词。
+要求：每个 section 的 mustUseEvidenceIds 至少 1 个，并且必须是这段正文后续真正要挂进文中的证据。
         `.trim(),
       };
     case "draft_writer":
@@ -473,7 +510,7 @@ ${(input.sectorModel?.zones ?? [])
 ${(input.outlineDraft?.sections ?? [])
   .map(
     (section, index) =>
-      `${index + 1}. ${section.heading} | 目标：${section.purpose} | 动作：${section.move} | 打破：${section.break} | 承接：${section.bridge} | 风格目标：${section.styleObjective} | 重点：${section.keyPoints.join("、")} | 证据：${section.evidenceIds.join("、")}`,
+      `${index + 1}. ${section.heading} | 目标：${section.purpose} | 段落主判断：${section.sectionThesis || "待补"} | 唯一动作：${section.singlePurpose || "待补"} | 必须落地：${section.mustLandDetail || "待补"} | 场景/代价：${section.sceneOrCost || "待补"} | 动作：${section.move} | 打破：${section.break} | 承接：${section.bridge} | 承接目标：${section.transitionTarget || "待补"} | 反面理解：${section.counterPoint || "待补"} | 风格目标：${section.styleObjective} | 重点：${section.keyPoints.join("、")} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"} | 证据：${section.evidenceIds.join("、")}`,
   )
   .join("\n")}
 
@@ -534,6 +571,63 @@ ${input.styleReference || "暂无风格样本"}
 - 优先修 opening / hook / anchor / transitions / emotional-arc / echo / citations
 - 如果当前文章类型是误解纠偏型，必须明确解释“大家为什么会看错”的机制，而不是只说看错了
 - 如果当前稿件里某个段落已经有生命力，不要把它修平
+        `.trim(),
+      };
+    case "opening_rewriter":
+    case "transition_rewriter":
+    case "evidence_weaver":
+    case "scene_inserter":
+    case "cost_sharpener":
+    case "ending_echo_rewriter":
+    case "anti_cliche_rewriter":
+      return {
+        system: `
+你是一位上海板块长文局部修稿编辑，只重写目标段落，不重写整篇文章。
+${styleLearningRules}
+${authorBrainText}
+你必须直接输出替换后的单段 Markdown，不要输出 JSON，不要输出额外说明，不要输出标题，不要加代码围栏。
+
+要求：
+1. 只重写当前目标段落，长度控制在 1-2 个自然段
+2. 必须保留现有事实边界，不得编造新事实
+3. 如果需要引用资料卡，只能使用现有可用的 [SC:id]
+4. 必须根据 issueType 做针对性修正，而不是泛泛润色
+5. 保留作者感，避免写成公文、百科或销售话术
+6. 如果当前段落需要体感/人物而素材不足，用“（待作者补：XXX）”标注，不要编造
+        `.trim(),
+        user: `
+任务类型：${task}
+项目主题：${input.project?.topic}
+主命题：${input.project?.thesis}
+当前 section：${input.sectionHeading || "未定位"}
+当前段落序号：${typeof input.paragraphIndex === "number" ? input.paragraphIndex + 1 : "未知"}
+当前段落：
+${input.paragraphText || ""}
+
+为什么失败：
+${input.rewriteIntent?.whyItFails || "这段需要局部重写。"}
+
+建议改法：
+${input.rewriteIntent?.suggestedRewriteMode || "请按任务类型重写。"}
+
+相关提纲：
+${(input.outlineDraft?.sections ?? [])
+  .filter((section) => !input.sectionHeading || section.heading === input.sectionHeading)
+  .map(
+    (section) =>
+      `- ${section.heading} | 主判断：${section.sectionThesis || section.purpose} | 唯一动作：${section.singlePurpose || section.move} | 必须落地：${section.mustLandDetail || "待补"} | 场景/代价：${section.sceneOrCost || "待补"} | 承接目标：${section.transitionTarget || "待补"} | 反面理解：${section.counterPoint || "待补"} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "无"} | 一般证据：${section.evidenceIds.join("、") || "无"}`,
+  )
+  .join("\n")}
+
+可用资料卡：
+${(input.sourceCards || [])
+  .map((card) => `- ${card.id} | ${card.title} | 摘要：${card.summary} | 证据：${card.evidence}`)
+  .join("\n")}
+
+风格核：
+${styleCoreText}
+
+只返回重写后的目标段落。
         `.trim(),
       };
     case "vitality_reviewer":

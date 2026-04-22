@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
-
 export function createId(prefix: string): string {
-  return `${prefix}_${randomUUID().slice(0, 8)}`;
+  return `${prefix}_${generateIdSeed()}`;
 }
 
 export function nowIso(): string {
@@ -81,4 +79,19 @@ function cleanJsonCandidate(value: string): string {
 export function extractUrls(value: string): string[] {
   const matches = value.match(/https?:\/\/[^\s)]+/g) ?? [];
   return Array.from(new Set(matches.map((item) => item.trim())));
+}
+
+function generateIdSeed() {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.randomUUID) {
+    return cryptoApi.randomUUID().slice(0, 8);
+  }
+
+  if (cryptoApi?.getRandomValues) {
+    const bytes = new Uint8Array(8);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("").slice(0, 8);
+  }
+
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`.slice(0, 8);
 }

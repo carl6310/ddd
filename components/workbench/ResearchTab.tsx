@@ -6,6 +6,7 @@ import { getResearchGaps } from "@/lib/workflow";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { useJobAction } from "@/hooks/use-job-action";
+import { analyzeEvidenceCoverage } from "@/lib/evidence/coverage";
 
 type ResearchSection = "research-brief" | "source-form" | "source-library";
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
@@ -16,7 +17,13 @@ type SourceCardFormState = {
   note: string;
   publishedAt: string;
   credibility: SourceCard["credibility"];
+  sourceType: SourceCard["sourceType"];
+  supportLevel: SourceCard["supportLevel"];
+  claimType: SourceCard["claimType"];
+  timeSensitivity: SourceCard["timeSensitivity"];
   zone: string;
+  intendedSection: string;
+  reliabilityNote: string;
   tagsText: string;
   summary: string;
   evidence: string;
@@ -29,7 +36,13 @@ const emptySourceCardForm: SourceCardFormState = {
   note: "",
   publishedAt: "",
   credibility: "中",
+  sourceType: "media",
+  supportLevel: "medium",
+  claimType: "fact",
+  timeSensitivity: "timely",
   zone: "",
+  intendedSection: "",
+  reliabilityNote: "",
   tagsText: "",
   summary: "",
   evidence: "",
@@ -93,6 +106,7 @@ export function ResearchTab({
     () => (selectedBundle ? getResearchGaps(selectedBundle.researchBrief, selectedBundle.sourceCards) : []),
     [selectedBundle]
   );
+  const evidenceAnalysis = useMemo(() => analyzeEvidenceCoverage(selectedBundle), [selectedBundle]);
 
   useEffect(() => {
     if (focusSection === "research-brief" || focusSection === "source-form" || focusSection === "source-library") {
@@ -493,10 +507,74 @@ export function ResearchTab({
                     </select>
                   </label>
                   <label>
+                    来源类型
+                    <select
+                      value={sourceCardForm.sourceType}
+                      onChange={(event) => setSourceCardForm({ ...sourceCardForm, sourceType: event.target.value as SourceCard["sourceType"] })}
+                    >
+                      <option value="official">官方</option>
+                      <option value="media">媒体</option>
+                      <option value="commentary">评论</option>
+                      <option value="interview">访谈</option>
+                      <option value="observation">观察</option>
+                    </select>
+                  </label>
+                  <label>
+                    支撑强度
+                    <select
+                      value={sourceCardForm.supportLevel}
+                      onChange={(event) => setSourceCardForm({ ...sourceCardForm, supportLevel: event.target.value as SourceCard["supportLevel"] })}
+                    >
+                      <option value="high">高</option>
+                      <option value="medium">中</option>
+                      <option value="low">低</option>
+                    </select>
+                  </label>
+                  <label>
+                    论断类型
+                    <select
+                      value={sourceCardForm.claimType}
+                      onChange={(event) => setSourceCardForm({ ...sourceCardForm, claimType: event.target.value as SourceCard["claimType"] })}
+                    >
+                      <option value="fact">事实</option>
+                      <option value="observation">观察</option>
+                      <option value="judgement">判断</option>
+                      <option value="counterevidence">反证</option>
+                      <option value="quote">引语</option>
+                    </select>
+                  </label>
+                  <label>
+                    时效性
+                    <select
+                      value={sourceCardForm.timeSensitivity}
+                      onChange={(event) => setSourceCardForm({ ...sourceCardForm, timeSensitivity: event.target.value as SourceCard["timeSensitivity"] })}
+                    >
+                      <option value="evergreen">长期有效</option>
+                      <option value="timely">阶段有效</option>
+                      <option value="volatile">高时效</option>
+                    </select>
+                  </label>
+                  <label>
                     片区标签
                     <input value={sourceCardForm.zone} onChange={(event) => setSourceCardForm({ ...sourceCardForm, zone: event.target.value })} placeholder="如：核心承接区" />
                   </label>
                 </div>
+                <label>
+                  预期落段
+                  <input
+                    value={sourceCardForm.intendedSection}
+                    onChange={(event) => setSourceCardForm({ ...sourceCardForm, intendedSection: event.target.value })}
+                    placeholder="如：开头主判断 / 第二段结构拆解"
+                  />
+                </label>
+                <label>
+                  可靠性备注
+                  <AutoGrowTextarea
+                    value={sourceCardForm.reliabilityNote}
+                    onChange={(event) => setSourceCardForm({ ...sourceCardForm, reliabilityNote: event.target.value })}
+                    rows={3}
+                  />
+                </label>
                 <label>
                   标签
                   <input value={sourceCardForm.tagsText} onChange={(event) => setSourceCardForm({ ...sourceCardForm, tagsText: event.target.value })} placeholder="规划, 供地, 地铁" />
@@ -534,6 +612,50 @@ export function ResearchTab({
               <h3>资料索引</h3>
               <span className="badge">{selectedBundle.sourceCards.length} 张</span>
             </div>
+            <div className="two-column">
+              <article className="status-block">
+                <h3>Evidence Summary</h3>
+                <ul className="compact-list">
+                  <li>
+                    <strong>引用覆盖率</strong>
+                    <span>{Math.round(evidenceAnalysis.summary.citationCoverage * 100)}%</span>
+                  </li>
+                  <li>
+                    <strong>分段证据覆盖</strong>
+                    <span>{Math.round(evidenceAnalysis.summary.sectionEvidenceCoverage * 100)}%</span>
+                  </li>
+                  <li>
+                    <strong>关键点覆盖</strong>
+                    <span>{Math.round(evidenceAnalysis.summary.keyPointCoverage * 100)}%</span>
+                  </li>
+                  <li>
+                    <strong>无效引用</strong>
+                    <span>{evidenceAnalysis.summary.brokenCitationCount}</span>
+                  </li>
+                  <li>
+                    <strong>孤立资料卡</strong>
+                    <span>{evidenceAnalysis.summary.orphanSourceCardCount}</span>
+                  </li>
+                </ul>
+              </article>
+              <article className="status-block">
+                <h3>待补证据</h3>
+                <ul className="compact-list">
+                  {evidenceAnalysis.criticalJudgementAlerts.length > 0 ? (
+                    evidenceAnalysis.criticalJudgementAlerts.map((alert) => (
+                      <li key={`${alert.target}-${alert.label}`}>
+                        <strong>{alert.label}</strong>
+                        <span>{alert.detail}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <li>
+                      <span>当前没有检测到明确的关键证据缺口。</span>
+                    </li>
+                  )}
+                </ul>
+              </article>
+            </div>
             <ContainedScrollArea className="source-card-list editor-scroll-stack">
               {selectedBundle.sourceCards.map((card) => (
                 <article className="source-card" key={card.id}>
@@ -545,8 +667,10 @@ export function ResearchTab({
                   </div>
                   <p>{card.summary}</p>
                   <small>
-                    {card.zone || "未分区"} · {card.credibility} · {card.tags.join(" / ")}
+                    {card.zone || "未分区"} · {card.credibility} · {card.sourceType} · {card.supportLevel} · {card.claimType}
                   </small>
+                  {card.intendedSection ? <small>预期落段：{card.intendedSection}</small> : null}
+                  {card.reliabilityNote ? <small>可靠性备注：{card.reliabilityNote}</small> : null}
                   <code>{card.id}</code>
                 </article>
               ))}

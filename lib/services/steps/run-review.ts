@@ -92,7 +92,11 @@ function mergeReviews(base: ReviewReport, extra: ReviewReport): ReviewReport {
   return {
     overallVerdict: extra.overallVerdict || base.overallVerdict,
     completionScore: Math.round((base.completionScore + extra.completionScore) / 2),
+    globalScore: Math.round(((base.globalScore ?? base.completionScore) + (extra.globalScore ?? extra.completionScore)) / 2),
     checks: mergedChecks,
+    sectionScores: extra.sectionScores?.length ? extra.sectionScores : base.sectionScores,
+    paragraphFlags: extra.paragraphFlags?.length ? extra.paragraphFlags : base.paragraphFlags,
+    rewriteIntents: extra.rewriteIntents?.length ? extra.rewriteIntents : base.rewriteIntents,
     revisionSuggestions: Array.from(new Set([...base.revisionSuggestions, ...extra.revisionSuggestions])),
     preservedPatterns: Array.from(new Set([...base.preservedPatterns, ...extra.preservedPatterns])),
     missingPatterns: Array.from(new Set([...base.missingPatterns, ...extra.missingPatterns])),

@@ -3,8 +3,12 @@ import type {
   ArticleType,
   HAMDFrame,
   HKRRFrame,
+  OutlineDraft,
+  ReviewParagraphFlag,
   ReviewCheck,
   ReviewReport,
+  ReviewSectionScore,
+  RewriteIntent,
   SectorModel,
   SourceCard,
   VitalityCheck,
@@ -26,11 +30,12 @@ export function runDeterministicReview(input: {
   hkrr?: HKRRFrame;
   hamd?: HAMDFrame;
   writingMoves?: WritingMovesFrame;
+  outlineDraft?: OutlineDraft | null;
   sectorModel: SectorModel | null;
   articleDraft: ArticleDraft | null;
   sourceCards: SourceCard[];
 }): ReviewReport {
-  const { articleType, thesis, hkrr, hamd, writingMoves, sectorModel, articleDraft, sourceCards } = input;
+  const { articleType, thesis, hkrr, hamd, writingMoves, outlineDraft, sectorModel, articleDraft, sourceCards } = input;
   const draft = articleDraft?.editedMarkdown || articleDraft?.narrativeMarkdown || "";
   const checks: ReviewCheck[] = [];
   const paragraphs = extractParagraphs(draft);
@@ -405,12 +410,31 @@ export function runDeterministicReview(input: {
   const failed = checks.filter((item) => item.status === "fail").length;
   const warned = checks.filter((item) => item.status === "warn").length;
   const completionScore = Math.max(0, 100 - failed * 25 - warned * 8);
+  const sectionScores = buildSectionScores({
+    draft,
+    outlineDraft,
+    checks,
+    sourceCards,
+  });
+  const paragraphFlags = buildParagraphFlags({
+    draft,
+    paragraphs,
+    sourceCards,
+    openingWindow,
+    lastParagraph,
+    sectionScores,
+  });
+  const rewriteIntents = buildRewriteIntents(paragraphFlags);
 
   return {
     overallVerdict:
       failed > 0 ? "当前稿件仍需返工，先补齐硬伤再做风格微调。" : warned > 0 ? "主流程已跑通，但还需要做一轮针对性修稿。" : "结构、证据和风格检查都已过线，可以进入人工精修。",
     completionScore,
+    globalScore: completionScore,
     checks,
+    sectionScores,
+    paragraphFlags,
+    rewriteIntents,
     revisionSuggestions: buildRevisionSuggestions(checks),
     preservedPatterns: [
       contrarianSignal ? "反常识开头" : null,
@@ -431,6 +455,235 @@ export function runDeterministicReview(input: {
       hasBodyMemory ? null : "体感记忆",
     ].filter((item): item is string => Boolean(item)),
   };
+}
+
+function buildSectionScores(input: {
+  draft: string;
+  outlineDraft?: OutlineDraft | null;
+  checks: ReviewCheck[];
+  sourceCards: SourceCard[];
+}): ReviewSectionScore[] {
+  const headings =
+    input.outlineDraft?.sections.map((section) => ({
+      heading: section.heading,
+      evidenceIds: section.mustUseEvidenceIds?.length ? section.mustUseEvidenceIds : section.evidenceIds,
+    })) ??
+    extractMarkdownHeadings(input.draft).map((heading) => ({ heading, evidenceIds: [] }));
+
+  const citedIds = Array.from(new Set(input.draft.match(/\[SC:([a-zA-Z0-9_-]+)\]/g)?.map((token) => token.slice(4, -1)) ?? []));
+
+  return headings.map((section) => {
+    const sectionText = extractSectionBody(input.draft, section.heading);
+    const issues: string[] = [];
+    const sectionCitations = Array.from(new Set(sectionText.match(/\[SC:([a-zA-Z0-9_-]+)\]/g)?.map((token) => token.slice(4, -1)) ?? []));
+
+    if (!sectionText.trim()) {
+      issues.push("正文里没有找到这一段对应内容。");
+    }
+    if (section.evidenceIds.length > 0 && section.evidenceIds.every((id) => !sectionCitations.includes(id))) {
+      issues.push("这一段的强约束证据没有真正写进正文。");
+    }
+    if (!hasTransitionSignal(sectionText)) {
+      issues.push("这一段缺少明确的推进或承接信号。");
+    }
+    if (!hasParagraphJudgement(sectionText)) {
+      issues.push("这一段还没有立住一句明确判断。");
+    }
+    if (sectionText.length > 550) {
+      issues.push("这一段明显过重，建议拆短。");
+    }
+
+    const score = Math.max(0, 100 - issues.length * 20);
+    return {
+      heading: section.heading,
+      score,
+      status: score >= 80 ? "pass" : score >= 60 ? "warn" : "fail",
+      issues,
+      evidenceIds: section.evidenceIds.filter((id) => citedIds.includes(id)),
+    };
+  });
+}
+
+function buildParagraphFlags(input: {
+  draft: string;
+  paragraphs: string[];
+  sourceCards: SourceCard[];
+  openingWindow: string;
+  lastParagraph: string;
+  sectionScores: ReviewSectionScore[];
+}): ReviewParagraphFlag[] {
+  const sourceIds = new Set(input.sourceCards.map((card) => card.id));
+
+  return input.paragraphs
+    .map((paragraph, index) => {
+      const preview = paragraph.slice(0, 40);
+      const issueTypes: string[] = [];
+      const sectionHeading = findSectionHeadingForParagraph(input.draft, paragraph);
+
+      if (index === 0 && !["不是", "真正", "误解", "高估", "低估", "问题在于"].some((token) => paragraph.includes(token))) {
+        issueTypes.push("weak_opening");
+      }
+      if (paragraph.length > 220) {
+        issueTypes.push("generic_language");
+      }
+      if (index > 0 && !hasTransitionSignal(paragraph)) {
+        issueTypes.push("weak_transition");
+      }
+      const citations = Array.from(new Set(paragraph.match(/\[SC:([a-zA-Z0-9_-]+)\]/g)?.map((token) => token.slice(4, -1)) ?? []));
+      if (citations.some((id) => !sourceIds.has(id)) || (paragraph.includes("判断") && citations.length === 0)) {
+        issueTypes.push("evidence_not_integrated");
+      }
+      if (!hasSceneSignal(paragraph) && index > 1 && index < input.paragraphs.length - 1) {
+        issueTypes.push("missing_scene");
+      }
+      if (!["代价", "门槛", "问题", "风险", "短板"].some((token) => paragraph.includes(token)) && index >= input.paragraphs.length - 2) {
+        issueTypes.push("missing_cost");
+      }
+      if (index === input.paragraphs.length - 1 && !hasEchoSignal(input.openingWindow, input.lastParagraph)) {
+        issueTypes.push("weak_ending_echo");
+      }
+      if (paragraph.includes("赋能") || paragraph.includes("多维度") || paragraph.includes("全方位") || paragraph.includes("高质量发展")) {
+        issueTypes.push("generic_language");
+      }
+      if (index <= 2 && !paragraph.includes("anchor") && paragraph.length > 120 && !paragraph.includes("不是一个")) {
+        issueTypes.push("missing_anchor");
+      }
+
+      if (issueTypes.length === 0) {
+        return null;
+      }
+
+      const dedupedIssues = Array.from(new Set(issueTypes));
+      return {
+        paragraphIndex: index,
+        sectionHeading,
+        preview,
+        issueTypes: dedupedIssues,
+        detail: describeParagraphIssues(dedupedIssues),
+        suggestedAction: chooseSuggestedAction(dedupedIssues),
+      };
+    })
+    .filter((item): item is ReviewParagraphFlag => Boolean(item))
+    .slice(0, 8);
+}
+
+function buildRewriteIntents(flags: ReviewParagraphFlag[]): RewriteIntent[] {
+  const intentPriority: RewriteIntent["issueType"][] = [
+    "weak_opening",
+    "missing_anchor",
+    "weak_transition",
+    "evidence_not_integrated",
+    "generic_language",
+    "missing_scene",
+    "missing_cost",
+    "weak_ending_echo",
+  ];
+
+  return flags
+    .flatMap((flag) =>
+      flag.issueTypes
+        .filter((issueType): issueType is RewriteIntent["issueType"] => intentPriority.includes(issueType as RewriteIntent["issueType"]))
+        .map((issueType) => ({
+          targetRange: flag.sectionHeading ? `section:${flag.sectionHeading}#paragraph:${flag.paragraphIndex + 1}` : `paragraph:${flag.paragraphIndex + 1}`,
+          issueType,
+          whyItFails: flag.detail,
+          suggestedRewriteMode: mapRewriteMode(issueType),
+        })),
+    )
+    .slice(0, 8);
+}
+
+function mapRewriteMode(issueType: RewriteIntent["issueType"]) {
+  switch (issueType) {
+    case "weak_opening":
+      return "重写开头前三句，把反常识判断往前提。";
+    case "missing_anchor":
+      return "补一个更可记忆的判断锚点。";
+    case "weak_transition":
+      return "补过渡句，把上一段和下一段串起来。";
+    case "evidence_not_integrated":
+      return "把证据直接织入论证，而不是只在句末挂引用。";
+    case "generic_language":
+      return "删空话、拆长段，换成更具体的判断。";
+    case "missing_scene":
+      return "补人物或生活场景，让判断落地。";
+    case "missing_cost":
+      return "补门槛、代价或不成立条件。";
+    case "weak_ending_echo":
+      return "重写结尾，让它回扣开头判断。";
+  }
+}
+
+function chooseSuggestedAction(issueTypes: string[]): ReviewParagraphFlag["suggestedAction"] {
+  if (issueTypes.includes("weak_transition")) {
+    return "move";
+  }
+  if (issueTypes.includes("generic_language")) {
+    return "split";
+  }
+  if (issueTypes.includes("evidence_not_integrated")) {
+    return "trim";
+  }
+  return "rewrite";
+}
+
+function describeParagraphIssues(issueTypes: string[]) {
+  return issueTypes
+    .map((issueType) => {
+      switch (issueType) {
+        case "weak_opening":
+          return "开头没把反常识判断立住";
+        case "missing_anchor":
+          return "缺少可记忆的锚点";
+        case "weak_transition":
+          return "上下文承接偏硬";
+        case "evidence_not_integrated":
+          return "判断和证据没有真正缝合";
+        case "generic_language":
+          return "这段太泛、太长或太像资料堆叠";
+        case "missing_scene":
+          return "缺少人物或生活场景";
+        case "missing_cost":
+          return "缺少现实代价或门槛";
+        case "weak_ending_echo":
+          return "结尾没有回扣开头";
+        default:
+          return issueType;
+      }
+    })
+    .join("；");
+}
+
+function extractMarkdownHeadings(markdown: string) {
+  return markdown
+    .split("\n")
+    .filter((line) => line.startsWith("## "))
+    .map((line) => line.replace(/^##\s+/, "").trim());
+}
+
+function extractSectionBody(markdown: string, heading: string) {
+  const startMarker = `## ${heading}`;
+  const startIndex = markdown.indexOf(startMarker);
+  if (startIndex < 0) {
+    return "";
+  }
+  const contentStart = startIndex + startMarker.length;
+  const rest = markdown.slice(contentStart);
+  const nextIndex = rest.indexOf("\n## ");
+  return rest.slice(0, nextIndex >= 0 ? nextIndex : undefined).trim();
+}
+
+function findSectionHeadingForParagraph(markdown: string, paragraph: string) {
+  const sections = extractMarkdownHeadings(markdown);
+  return sections.find((heading) => extractSectionBody(markdown, heading).includes(paragraph.slice(0, Math.min(20, paragraph.length)))) ?? null;
+}
+
+function hasParagraphJudgement(paragraph: string) {
+  return ["不是", "真正", "问题在于", "更准确地说", "其实", "关键是"].some((token) => paragraph.includes(token));
+}
+
+function hasTransitionSignal(paragraph: string) {
+  return TRANSITION_TOKENS.some((token) => paragraph.includes(token));
 }
 
 function buildRevisionSuggestions(checks: ReviewCheck[]): string[] {

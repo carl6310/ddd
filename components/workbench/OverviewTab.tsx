@@ -4,7 +4,10 @@ import { useState } from "react";
 import type { ProjectBundle } from "@/lib/types";
 import { canPreparePublish } from "@/lib/workflow";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
+import { InlineTextEdit, InlineTextAreaEdit } from "@/components/ui/inline-edit";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
+import { AccordionCard } from "@/components/ui/accordion-card";
+import { buildWritingQualitySnapshot } from "@/lib/writing-quality/summary";
 
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
 type ActiveTab = "overview" | "research" | "drafts";
@@ -191,6 +194,11 @@ export function OverviewTab({
     selectedBundle.project.coreQuestion,
     selectedBundle.project.thinkCard.materialDigest,
     selectedBundle.project.thinkCard.verdictReason,
+    selectedBundle.project.thinkCard.coreJudgement,
+    selectedBundle.project.thinkCard.counterIntuition,
+    selectedBundle.project.thinkCard.readerPayoff,
+    selectedBundle.project.thinkCard.decisionImplication,
+    selectedBundle.project.thinkCard.excludedTakeaways.join(" "),
     selectedBundle.project.thinkCard.hkr.happy,
     selectedBundle.project.thinkCard.hkr.knowledge,
     selectedBundle.project.thinkCard.hkr.resonance,
@@ -204,6 +212,9 @@ export function OverviewTab({
     selectedBundle.project.styleCore.personalView,
     selectedBundle.project.styleCore.judgement,
     selectedBundle.project.styleCore.counterView,
+    selectedBundle.project.styleCore.allowedMoves.join(" "),
+    selectedBundle.project.styleCore.forbiddenMoves.join(" "),
+    selectedBundle.project.styleCore.allowedMetaphors.join(" "),
     selectedBundle.project.styleCore.emotionCurve,
     selectedBundle.project.styleCore.personalStake,
     selectedBundle.project.styleCore.characterPortrait,
@@ -211,6 +222,8 @@ export function OverviewTab({
     selectedBundle.project.styleCore.sentenceBreak,
     selectedBundle.project.styleCore.echo,
     selectedBundle.project.styleCore.humbleSetup,
+    selectedBundle.project.styleCore.toneCeiling,
+    selectedBundle.project.styleCore.concretenessRequirement,
     selectedBundle.project.styleCore.costSense,
   ]);
   const vitalityIssueCount = selectedBundle.project.vitalityCheck.entries.filter((entry) => entry.status !== "pass").length;
@@ -219,6 +232,7 @@ export function OverviewTab({
   );
   const vitalityPassed = selectedBundle.project.vitalityCheck.entries.filter((entry) => entry.status === "pass");
   const vitalityGuidance = buildVitalityGuidance(vitalityIssues, selectedBundle.reviewReport);
+  const writingQuality = buildWritingQualitySnapshot(selectedBundle);
 
   return (
     <>
@@ -296,9 +310,10 @@ export function OverviewTab({
         {surface === "dashboard" ? (
           <section className="stack section-panel">
             <div className="editor-overview-grid">
-              <EditorStatCard label="ThinkCard" value={`${thinkCardCompletion}/9`} note="主判断、题值理由和 HKR 已填字段。" />
-              <EditorStatCard label="StyleCore" value={`${styleCoreCompletion}/14`} note="风格动作目前已填字段。" />
+              <EditorStatCard label="ThinkCard" value={`${thinkCardCompletion}/14`} note="主判断、反直觉抓手、读者收益和 HKR 已填字段。" />
+              <EditorStatCard label="StyleCore" value={`${styleCoreCompletion}/19`} note="风格动作、限制条件和具体性要求目前已填字段。" />
               <EditorStatCard label="VitalityCheck" value={`${vitalityIssueCount}`} note="当前未通过的检查项数量。" />
+              <EditorStatCard label="Writing Quality" value={writingQuality.overallScore !== null ? String(writingQuality.overallScore) : "n/a"} note="当前项目的写作质量基线分数。" />
             </div>
             <div className="overview-quick-grid">
               <OverviewQuickCard
@@ -338,6 +353,40 @@ export function OverviewTab({
                 }}
               />
             </div>
+            <article className="status-block">
+              <h3>Writing Quality</h3>
+              <ul className="compact-list">
+                <li>
+                  <strong>总体质量分</strong>
+                  <span>{writingQuality.overallScore ?? "n/a"}</span>
+                </li>
+                <li>
+                  <strong>引用覆盖率</strong>
+                  <span>{writingQuality.citationCoverage !== null ? `${Math.round(writingQuality.citationCoverage * 100)}%` : "n/a"}</span>
+                </li>
+                <li>
+                  <strong>分段证据覆盖</strong>
+                  <span>{writingQuality.sectionEvidenceCoverage !== null ? `${Math.round(writingQuality.sectionEvidenceCoverage * 100)}%` : "n/a"}</span>
+                </li>
+                <li>
+                  <strong>编辑反馈事件</strong>
+                  <span>{writingQuality.editorialEventCount}</span>
+                </li>
+                <li>
+                  <strong>质量门槛</strong>
+                  <span>{writingQuality.qualityGate.overallStatus} / {writingQuality.qualityGate.mode}</span>
+                </li>
+              </ul>
+              {writingQuality.notes.length ? (
+                <ul className="compact-list compact-inline-list">
+                  {writingQuality.notes.slice(0, 6).map((note) => (
+                    <li key={note}>
+                      <span>{note}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </article>
           </section>
         ) : null}
 
@@ -365,28 +414,32 @@ export function OverviewTab({
               <span className="badge">{selectedBundle.project.thinkCard.topicVerdict}</span>
             </div>
             <div className="editor-overview-grid">
-              <EditorStatCard label="完成度" value={`${thinkCardCompletion}/9`} note="先把主判断、题值理由和 HKR 补完整。" />
+              <EditorStatCard label="完成度" value={`${thinkCardCompletion}/14`} note="先把主判断、反直觉抓手、读者收益和 HKR 补完整。" />
               <EditorStatCard label="当前题值" value={selectedBundle.project.thinkCard.topicVerdict} note="`strong / rework / weak` 决定后面是否值得继续往下推。" />
               <EditorStatCard label="替代角度" value={String(selectedBundle.project.thinkCard.alternativeAngles.length)} note="保留备选角度，避免正文写到一半才发现命题不成立。" />
             </div>
             <div className="editor-group-grid">
-              <EditorGroupCard title="立论基础" description="先把这篇文章到底在回答什么讲清楚。">
+              <AccordionCard title="立论基础" description="先把这篇文章到底在回答什么讲清楚。" defaultOpen>
                 <TextAreaField label="一句话主判断" value={selectedBundle.project.thesis} rows={3} onChange={(value) => updateProjectField(setSelectedBundle, { thesis: value })} />
                 <TextAreaField label="核心问题" value={selectedBundle.project.coreQuestion} rows={3} onChange={(value) => updateProjectField(setSelectedBundle, { coreQuestion: value })} />
                 <TextAreaField label="素材吃透摘要" value={selectedBundle.project.thinkCard.materialDigest} rows={4} onChange={(value) => updateThinkCardField(setSelectedBundle, { materialDigest: value })} />
-              </EditorGroupCard>
-              <EditorGroupCard title="题值判断" description="这里决定这题值不值得继续投入。">
+                <TextAreaField label="核心判断" value={selectedBundle.project.thinkCard.coreJudgement} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { coreJudgement: value })} />
+                <TextAreaField label="反直觉抓手" value={selectedBundle.project.thinkCard.counterIntuition} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { counterIntuition: value })} />
+              </AccordionCard>
+              <AccordionCard title="题值判断" description="这里决定这题值不值得继续投入。">
                 <SelectField label="选题值判断" value={selectedBundle.project.thinkCard.topicVerdict} onChange={(value) => updateThinkCardField(setSelectedBundle, { topicVerdict: value as typeof selectedBundle.project.thinkCard.topicVerdict })} options={["strong", "rework", "weak"]} />
                 <TextAreaField label="值得写 / 不够好的原因" value={selectedBundle.project.thinkCard.verdictReason} rows={4} onChange={(value) => updateThinkCardField(setSelectedBundle, { verdictReason: value })} />
                 <TextAreaField label="改方向建议" value={selectedBundle.project.thinkCard.rewriteSuggestion} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { rewriteSuggestion: value })} />
-              </EditorGroupCard>
-              <EditorGroupCard title="HKR 交付" description="把读者的快乐、知识和共鸣拆开写。">
+                <TextAreaField label="读者收益" value={selectedBundle.project.thinkCard.readerPayoff} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { readerPayoff: value })} />
+                <TextAreaField label="决策影响" value={selectedBundle.project.thinkCard.decisionImplication} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { decisionImplication: value })} />
+              </AccordionCard>
+              <AccordionCard title="HKR 交付" description="把读者的快乐、知识和共鸣拆开写。">
                 <TextAreaField label="HKR - Happy" value={selectedBundle.project.thinkCard.hkr.happy} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { happy: value })} />
                 <TextAreaField label="HKR - Knowledge" value={selectedBundle.project.thinkCard.hkr.knowledge} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { knowledge: value })} />
                 <TextAreaField label="HKR - Resonance" value={selectedBundle.project.thinkCard.hkr.resonance} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { resonance: value })} />
                 <TextAreaField label="HKR 总结" value={selectedBundle.project.thinkCard.hkr.summary} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { summary: value })} />
-              </EditorGroupCard>
-              <EditorGroupCard title="备选路线" description="保留可切换方向，避免命题一条路走死。">
+              </AccordionCard>
+              <AccordionCard title="备选路线" description="保留可切换方向，避免命题一条路走死。">
                 <TextAreaField
                   label="替代角度"
                   value={selectedBundle.project.thinkCard.alternativeAngles.join("\n")}
@@ -401,7 +454,20 @@ export function OverviewTab({
                   }
                 />
                 <TextAreaField label="AI 角色说明" value={selectedBundle.project.thinkCard.aiRole} rows={4} onChange={(value) => updateThinkCardField(setSelectedBundle, { aiRole: value })} />
-              </EditorGroupCard>
+                <TextAreaField
+                  label="明确不写什么"
+                  value={selectedBundle.project.thinkCard.excludedTakeaways.join("\n")}
+                  rows={4}
+                  onChange={(value) =>
+                    updateThinkCardField(setSelectedBundle, {
+                      excludedTakeaways: value
+                        .split(/\n|,/)
+                        .map((item) => item.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+              </AccordionCard>
             </div>
             <button onClick={saveProjectFrame} disabled={isPending}>
               保存 ThinkCard
@@ -416,33 +482,81 @@ export function OverviewTab({
               <span className="badge">风格动作编辑</span>
             </div>
             <div className="editor-overview-grid">
-              <EditorStatCard label="完成度" value={`${styleCoreCompletion}/14`} note="先补齐推进、判断、作者站位这三组动作。" />
+              <EditorStatCard label="完成度" value={`${styleCoreCompletion}/19`} note="先补齐推进、判断、作者站位和限制条件这几组动作。" />
               <EditorStatCard label="核心动作" value="节奏 + 判断" note="这两组字段最直接决定正文是不是只是资料堆叠。" />
               <EditorStatCard label="作者像" value="私人视角" note="没有作者站位时，整篇会更像结构化报告而不是文章。" />
             </div>
             <div className="editor-group-grid">
-              <EditorGroupCard title="推进与判断" description="决定文章往前走的主驱动力。">
+              <AccordionCard title="推进与判断" description="决定文章往前走的主驱动力。" defaultOpen>
                 <TextAreaField label="节奏推进" value={selectedBundle.project.styleCore.rhythm} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { rhythm: value })} />
                 <TextAreaField label="故意打破" value={selectedBundle.project.styleCore.breakPattern} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { breakPattern: value })} />
                 <TextAreaField label="判断力" value={selectedBundle.project.styleCore.judgement} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { judgement: value })} />
                 <TextAreaField label="对立面理解" value={selectedBundle.project.styleCore.counterView} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { counterView: value })} />
-              </EditorGroupCard>
-              <EditorGroupCard title="作者站位" description="让这篇东西更像你写的，而不是系统写的。">
+              </AccordionCard>
+              <AccordionCard title="动作边界" description="明确这篇允许什么动作，禁止什么套路。">
+                <TextAreaField
+                  label="允许动作"
+                  value={selectedBundle.project.styleCore.allowedMoves.join("\n")}
+                  rows={4}
+                  onChange={(value) =>
+                    updateStyleCoreField(setSelectedBundle, {
+                      allowedMoves: value
+                        .split(/\n|,/)
+                        .map((item) => item.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+                <TextAreaField
+                  label="禁止动作"
+                  value={selectedBundle.project.styleCore.forbiddenMoves.join("\n")}
+                  rows={4}
+                  onChange={(value) =>
+                    updateStyleCoreField(setSelectedBundle, {
+                      forbiddenMoves: value
+                        .split(/\n|,/)
+                        .map((item) => item.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+                <TextAreaField
+                  label="允许比喻"
+                  value={selectedBundle.project.styleCore.allowedMetaphors.join("\n")}
+                  rows={4}
+                  onChange={(value) =>
+                    updateStyleCoreField(setSelectedBundle, {
+                      allowedMetaphors: value
+                        .split(/\n|,/)
+                        .map((item) => item.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+              </AccordionCard>
+              <AccordionCard title="作者站位" description="让这篇东西更像你写的，而不是系统写的。">
                 <TextAreaField label="私人视角" value={selectedBundle.project.styleCore.personalView} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { personalView: value })} />
                 <TextAreaField label="亲自下场" value={selectedBundle.project.styleCore.personalStake} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { personalStake: value })} />
                 <TextAreaField label="人物画像法" value={selectedBundle.project.styleCore.characterPortrait} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { characterPortrait: value })} />
                 <TextAreaField label="情绪递进" value={selectedBundle.project.styleCore.emotionCurve} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { emotionCurve: value })} />
-              </EditorGroupCard>
-              <EditorGroupCard title="表达动作" description="让知识不是生硬掉落，而是顺着叙事滑进去。">
+              </AccordionCard>
+              <AccordionCard title="表达动作" description="让知识不是生硬掉落，而是顺着叙事滑进去。">
                 <TextAreaField label="知识顺手掏出来的方式" value={selectedBundle.project.styleCore.knowledgeDrop} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { knowledgeDrop: value })} />
                 <TextAreaField label="文化升维" value={selectedBundle.project.styleCore.culturalLift} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { culturalLift: value })} />
                 <TextAreaField label="句式断裂" value={selectedBundle.project.styleCore.sentenceBreak} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { sentenceBreak: value })} />
                 <TextAreaField label="谦逊铺垫法" value={selectedBundle.project.styleCore.humbleSetup} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { humbleSetup: value })} />
-              </EditorGroupCard>
-              <EditorGroupCard title="回收与代价" description="结尾有没有回环，判断有没有现实重量。">
+                <TextAreaField label="语气上限" value={selectedBundle.project.styleCore.toneCeiling} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { toneCeiling: value })} />
+                <TextAreaField
+                  label="具体性要求"
+                  value={selectedBundle.project.styleCore.concretenessRequirement}
+                  rows={3}
+                  onChange={(value) => updateStyleCoreField(setSelectedBundle, { concretenessRequirement: value })}
+                />
+              </AccordionCard>
+              <AccordionCard title="回收与代价" description="结尾有没有回环，判断有没有现实重量。">
                 <TextAreaField label="回环呼应" value={selectedBundle.project.styleCore.echo} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { echo: value })} />
                 <TextAreaField label="现实代价" value={selectedBundle.project.styleCore.costSense} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { costSense: value })} />
-              </EditorGroupCard>
+              </AccordionCard>
             </div>
             <button onClick={saveProjectFrame} disabled={isPending}>
               保存 StyleCore
@@ -579,6 +693,37 @@ export function OverviewTab({
                 </article>
               ) : null}
 
+              {selectedBundle.reviewReport?.rewriteIntents?.length ? (
+                <article className="status-block compact-status-block">
+                  <h3>定位式返工建议</h3>
+                  <ul className="compact-list compact-inline-list">
+                    {selectedBundle.reviewReport.rewriteIntents.slice(0, 6).map((intent) => (
+                      <li key={`${intent.targetRange}-${intent.issueType}`}>
+                        <strong>{intent.targetRange}</strong>
+                        <span>{intent.issueType}</span>
+                        <span>{intent.whyItFails}</span>
+                        <span>{intent.suggestedRewriteMode}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ) : null}
+
+              {selectedBundle.reviewReport?.paragraphFlags?.length ? (
+                <article className="status-block compact-status-block">
+                  <h3>最卡的段落</h3>
+                  <ul className="compact-list compact-inline-list">
+                    {selectedBundle.reviewReport.paragraphFlags.slice(0, 4).map((flag) => (
+                      <li key={`${flag.paragraphIndex}-${flag.preview}`}>
+                        <strong>{flag.sectionHeading || `段落 ${flag.paragraphIndex + 1}`}</strong>
+                        <span>{flag.preview}</span>
+                        <span>{flag.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ) : null}
+
               {vitalityPassed.length ? (
                 <details className="status-block">
                   <summary>已达标项（{vitalityPassed.length}）</summary>
@@ -694,7 +839,7 @@ function TextAreaField({
   return (
     <label>
       {label}
-      <AutoGrowTextarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} />
+      <InlineTextAreaEdit value={value} onChange={(val: string) => onChange(val)} rows={rows} />
     </label>
   );
 }
@@ -724,25 +869,7 @@ function SelectField({
   );
 }
 
-function EditorGroupCard({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <article className="editor-group-card stack">
-      <div className="editor-group-head">
-        <h4>{title}</h4>
-        <p className="subtle">{description}</p>
-      </div>
-      <div className="stack">{children}</div>
-    </article>
-  );
-}
+
 
 function EditorStatCard({
   label,

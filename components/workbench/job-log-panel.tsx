@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { JobLog } from "@/lib/jobs/types";
 import type { ProjectJobSummary } from "@/hooks/use-job-polling";
 import { JobStatusChip } from "./job-status-chip";
@@ -15,42 +16,67 @@ export function JobLogPanel({
   onRetry: (() => void) | null;
   isRetrying: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (!job) {
     return null;
   }
 
+  const statusTone =
+    job.status === "failed"
+      ? "error"
+      : job.status === "succeeded"
+        ? "success"
+        : job.status === "running"
+          ? "running"
+          : "info";
+
   return (
-    <section className="card stack">
-      <div className="card-header">
-        <div>
-          <h2>后台任务</h2>
-          <p className="subtle">
-            {getStepLabel(job.step)} · {job.progressMessage || getStatusCopy(job.status)}
-          </p>
+    <section className={`job-toast job-toast-${statusTone}`}>
+      <div className="job-toast-bar" onClick={() => setExpanded((v) => !v)} role="button" tabIndex={0}>
+        <div className="job-toast-icon">
+          {statusTone === "error" ? "✕" : statusTone === "success" ? "✓" : statusTone === "running" ? "⟳" : "◷"}
         </div>
-        <JobStatusChip status={job.status} />
+        <div className="job-toast-summary">
+          <span className="job-toast-step">{getStepLabel(job.step)}</span>
+          <span className="job-toast-msg">{job.progressMessage || getStatusCopy(job.status)}</span>
+        </div>
+        <div className="job-toast-actions">
+          <JobStatusChip status={job.status} />
+          {onRetry ? (
+            <button
+              type="button"
+              className="job-toast-retry-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRetry();
+              }}
+              disabled={isRetrying}
+            >
+              {isRetrying ? "重试中…" : "重试"}
+            </button>
+          ) : null}
+          <button type="button" className="job-toast-expand-btn" aria-label={expanded ? "收起" : "展开"}>
+            {expanded ? "▴" : "▾"}
+          </button>
+        </div>
       </div>
 
-      {job.errorMessage ? <p className="subtle">{job.errorMessage}</p> : null}
-
-      {logs.length > 0 ? (
-        <ul className="compact-list">
-          {logs.map((log) => (
-            <li key={log.id}>
-              <strong>[{log.level}] {log.code}</strong>
-              <span>{log.message}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="subtle">任务日志会随着运行逐步出现。</p>
-      )}
-
-      {onRetry ? (
-        <div className="action-row">
-          <button type="button" className="secondary-button" onClick={onRetry} disabled={isRetrying}>
-            {isRetrying ? "正在重试..." : "重试任务"}
-          </button>
+      {expanded ? (
+        <div className="job-toast-detail">
+          {job.errorMessage ? <p className="job-toast-error">{job.errorMessage}</p> : null}
+          {logs.length > 0 ? (
+            <ul className="job-toast-log-list">
+              {logs.map((log) => (
+                <li key={log.id} className={`job-toast-log-item job-toast-log-${log.level}`}>
+                  <span className="job-toast-log-tag">[{log.level}] {log.code}</span>
+                  <span className="job-toast-log-text">{log.message}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="job-toast-empty">任务日志会随着运行逐步出现。</p>
+          )}
         </div>
       ) : null}
     </section>

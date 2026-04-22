@@ -1,4 +1,6 @@
+import { buildEvidenceSummaryLines } from "@/lib/evidence/analyzer";
 import type { ArticleProject, OutlineDraft, ProjectBundle, PublishPackage, SectorModel, SourceCard } from "@/lib/types";
+import { buildWritingQualitySummaryLines } from "@/lib/writing-quality/summary";
 
 export function buildProjectMarkdown(bundle: ProjectBundle): string {
   const { project, researchBrief, sectorModel, outlineDraft, articleDraft, sourceCards, reviewReport } = bundle;
@@ -63,7 +65,7 @@ export function buildProjectMarkdown(bundle: ProjectBundle): string {
           "## 提纲",
           ...outlineDraft.sections.map(
             (section, index) =>
-              `${index + 1}. ${section.heading}\n   - 目标：${section.purpose}\n   - 动作：${section.move}\n   - 打破：${section.break}\n   - 承接：${section.bridge}\n   - 风格目标：${section.styleObjective}\n   - 证据：${section.evidenceIds.join(", ") || "待补"}\n   - 节奏：${section.tone}`,
+              `${index + 1}. ${section.heading}\n   - 目标：${section.purpose}\n   - 段落主判断：${section.sectionThesis || "待补"}\n   - 唯一动作：${section.singlePurpose || "待补"}\n   - 必须落地：${section.mustLandDetail || "待补"}\n   - 场景/代价：${section.sceneOrCost || "待补"}\n   - 动作：${section.move}\n   - 打破：${section.break}\n   - 承接：${section.bridge}\n   - 承接目标：${section.transitionTarget || "待补"}\n   - 反面/反证：${section.counterPoint || "待补"}\n   - 风格目标：${section.styleObjective}\n   - 强约束证据：${section.mustUseEvidenceIds?.join(", ") || "待补"}\n   - 证据：${section.evidenceIds.join(", ") || "待补"}\n   - 节奏：${section.tone}`,
           ),
           "",
         ].join("\n")
@@ -74,6 +76,20 @@ export function buildProjectMarkdown(bundle: ProjectBundle): string {
     "## 资料卡索引",
     ...sourceCards.map((card) => formatSourceCard(card)),
     "",
+    sourceCards.length > 0
+      ? [
+          "## Evidence Summary",
+          ...buildEvidenceSummaryLines(bundle),
+          "",
+        ].join("\n")
+      : "",
+    bundle.articleDraft || bundle.reviewReport
+      ? [
+          "## Writing Quality Summary",
+          ...buildWritingQualitySummaryLines(bundle),
+          "",
+        ].join("\n")
+      : "",
     reviewReport
       ? [
           "## 质检报告",
@@ -99,7 +115,7 @@ export function buildProjectMarkdown(bundle: ProjectBundle): string {
 
 function formatSourceCard(card: SourceCard): string {
   const locator = card.url || card.note || "无外部链接";
-  return `- [SC:${card.id}] ${card.title} | ${locator} | 可信度：${card.credibility}`;
+  return `- [SC:${card.id}] ${card.title} | ${locator} | 可信度：${card.credibility} | 来源：${card.sourceType} | 支撑：${card.supportLevel} | 论断：${card.claimType}${card.intendedSection ? ` | 预期落段：${card.intendedSection}` : ""}`;
 }
 
 export function buildCitationCoverageText(project: ArticleProject, sourceCards: SourceCard[]): string {
@@ -124,7 +140,7 @@ export function buildAnalysisDraft(input: {
 
   const outlineLines = outlineDraft.sections.map(
     (section) =>
-      `- ${section.heading}：${section.keyPoints.slice(0, 3).join("、")}。动作：${section.move}。打破：${section.break}。承接：${section.bridge}。风格目标：${section.styleObjective}。证据：${section.evidenceIds.join("、") || "待补"}`,
+      `- ${section.heading}：主判断：${section.sectionThesis || "待补"}。唯一动作：${section.singlePurpose || "待补"}。必须落地：${section.mustLandDetail || "待补"}。场景/代价：${section.sceneOrCost || "待补"}。动作：${section.move}。打破：${section.break}。承接：${section.bridge}。承接目标：${section.transitionTarget || "待补"}。反面/反证：${section.counterPoint || "待补"}。风格目标：${section.styleObjective}。强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"}。一般证据：${section.evidenceIds.join("、") || "待补"}`,
   );
 
   return [

@@ -5,6 +5,8 @@ import { runDeterministicReview } from "@/lib/review";
 import { canGenerateDraft } from "@/lib/workflow";
 import type { JobExecutionContext } from "@/lib/jobs/types";
 import { JobError } from "@/lib/jobs/types";
+import type { RewriteIntent } from "@/lib/types";
+import type { TaskName } from "@/lib/prompt-engine";
 
 export async function generateDraftStep(input: { projectId: string; forceProceed?: boolean; context: JobExecutionContext }) {
   const { projectId, forceProceed = false, context } = input;
@@ -62,12 +64,13 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
   );
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const review = runDeterministicReview({
+    let review = runDeterministicReview({
       articleType: project.articleType,
       thesis: project.thesis,
       hkrr: project.hkrr,
       hamd: project.hamd,
       writingMoves: project.writingMoves,
+      outlineDraft,
       sectorModel,
       articleDraft: {
         analysisMarkdown: "",
@@ -76,6 +79,36 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
       },
       sourceCards,
     });
+
+    const rewriteCandidates = review.rewriteIntents.slice(0, 4);
+    if (rewriteCandidates.length > 0) {
+      context.setProgress("calling_llm", `正在定点修段，第 ${attempt + 1} 轮。`);
+      finalNarrativeMarkdown = await applyRewriteIntentPipeline({
+        markdown: finalNarrativeMarkdown,
+        intents: rewriteCandidates,
+        project,
+        sourceCards,
+        sectorModel,
+        outlineDraft,
+        review,
+        context,
+      });
+      review = runDeterministicReview({
+        articleType: project.articleType,
+        thesis: project.thesis,
+        hkrr: project.hkrr,
+        hamd: project.hamd,
+        writingMoves: project.writingMoves,
+        outlineDraft,
+        sectorModel,
+        articleDraft: {
+          analysisMarkdown: "",
+          narrativeMarkdown: finalNarrativeMarkdown,
+          editedMarkdown: "",
+        },
+        sourceCards,
+      });
+    }
 
     const shouldPolish = review.checks.some(
       (check) =>
@@ -146,6 +179,112 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
   context.log("info", "result_saved", "正文结果已保存。");
 }
 
+async function applyRewriteIntentPipeline(input: {
+  markdown: string;
+  intents: RewriteIntent[];
+  project: NonNullable<ReturnType<typeof getProject>>;
+  sourceCards: ReturnType<typeof listSourceCards>;
+  sectorModel: NonNullable<ReturnType<typeof getSectorModel>>;
+  outlineDraft: NonNullable<ReturnType<typeof getOutlineDraft>>;
+  review: ReturnType<typeof runDeterministicReview>;
+  context: JobExecutionContext;
+}) {
+  let nextMarkdown = input.markdown;
+
+  for (const intent of input.intents) {
+    const target = resolveRewriteTarget(nextMarkdown, intent);
+    if (!target) {
+      input.context.log("warn", "rewrite_target_missing", "未找到可重写的目标段落。", { targetRange: intent.targetRange });
+      continue;
+    }
+
+    const task = mapRewriteTask(intent.issueType);
+    const rewritten = await runStructuredTask<{ narrativeMarkdown: string }>(
+      task,
+      {
+        project: input.project,
+        sourceCards: input.sourceCards,
+        sectorModel: input.sectorModel,
+        outlineDraft: input.outlineDraft,
+        narrativeMarkdown: nextMarkdown,
+        deterministicReview: input.review,
+        styleReference: buildStyleReference(input.project.topic, input.project.articleType),
+        sectionHeading: target.sectionHeading ?? undefined,
+        paragraphIndex: target.paragraphIndex,
+        paragraphText: target.paragraphText,
+        rewriteIntent: intent,
+      },
+      {
+        audit: {
+          jobId: input.context.job.id,
+          projectId: input.project.id,
+          promptVersion: `${task}:v1`,
+        },
+      },
+    );
+
+    nextMarkdown = replaceParagraphAt(nextMarkdown, target.paragraphIndex, rewritten.narrativeMarkdown.trim());
+    input.context.log("info", "llm_call_finished", "定点修段完成。", {
+      task,
+      targetRange: intent.targetRange,
+      issueType: intent.issueType,
+    });
+  }
+
+  return stitchNarrativeFlow(
+    normalizeCitationIds(nextMarkdown, input.sourceCards),
+    input.outlineDraft,
+    input.project.thesis,
+    input.project.hamd.anchor,
+  );
+}
+
+function mapRewriteTask(issueType: RewriteIntent["issueType"]): TaskName {
+  switch (issueType) {
+    case "weak_opening":
+      return "opening_rewriter";
+    case "missing_anchor":
+      return "opening_rewriter";
+    case "weak_transition":
+      return "transition_rewriter";
+    case "evidence_not_integrated":
+      return "evidence_weaver";
+    case "generic_language":
+      return "anti_cliche_rewriter";
+    case "missing_scene":
+      return "scene_inserter";
+    case "missing_cost":
+      return "cost_sharpener";
+    case "weak_ending_echo":
+      return "ending_echo_rewriter";
+  }
+}
+
+function resolveRewriteTarget(markdown: string, intent: RewriteIntent) {
+  const paragraphMatch = intent.targetRange.match(/paragraph:(\d+)/);
+  const paragraphIndex = paragraphMatch ? Math.max(0, Number(paragraphMatch[1]) - 1) : 0;
+  const paragraphs = extractParagraphs(markdown);
+  const paragraphText = paragraphs[paragraphIndex];
+  if (!paragraphText) {
+    return null;
+  }
+  const sectionMatch = intent.targetRange.match(/section:([^#]+)/);
+  return {
+    paragraphIndex,
+    paragraphText,
+    sectionHeading: sectionMatch?.[1] ?? null,
+  };
+}
+
+function replaceParagraphAt(markdown: string, paragraphIndex: number, replacement: string) {
+  const paragraphs = extractParagraphs(markdown);
+  if (!paragraphs[paragraphIndex]) {
+    return markdown;
+  }
+  paragraphs[paragraphIndex] = replacement;
+  return paragraphs.join("\n\n");
+}
+
 function normalizeCitationIds(markdown: string, sourceCards: Array<{ id: string }>) {
   if (!markdown.trim()) {
     return markdown;
@@ -169,6 +308,14 @@ function normalizeCitationIds(markdown: string, sourceCards: Array<{ id: string 
     const resolved = suffixToId.get(normalized);
     return resolved ? `[SC:${resolved}]` : `[SC:${rawId}]`;
   });
+}
+
+function extractParagraphs(markdown: string): string[] {
+  return markdown
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .filter((paragraph) => !paragraph.startsWith("#"));
 }
 
 function stitchNarrativeFlow(markdown: string, outlineDraft: { sections: Array<{ heading: string; bridge: string }>; closing: string }, thesis: string, anchor: string) {

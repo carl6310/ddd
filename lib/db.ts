@@ -28,6 +28,28 @@ function initialise(db: DatabaseSync) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS sample_action_assets (
+      id TEXT PRIMARY KEY,
+      sample_id TEXT NOT NULL REFERENCES sample_articles(id) ON DELETE CASCADE,
+      action_type TEXT NOT NULL,
+      asset_text TEXT NOT NULL,
+      rationale TEXT NOT NULL,
+      weight INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS editorial_feedback_events (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES article_projects(id) ON DELETE CASCADE,
+      draft_revision_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      section_heading TEXT NOT NULL,
+      before_text TEXT NOT NULL,
+      after_text TEXT NOT NULL,
+      detail_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS article_projects (
       id TEXT PRIMARY KEY,
       topic TEXT NOT NULL,
@@ -65,6 +87,12 @@ function initialise(db: DatabaseSync) {
       summary TEXT NOT NULL,
       evidence TEXT NOT NULL,
       credibility TEXT NOT NULL,
+      source_type TEXT NOT NULL DEFAULT 'media',
+      support_level TEXT NOT NULL DEFAULT 'medium',
+      claim_type TEXT NOT NULL DEFAULT 'fact',
+      time_sensitivity TEXT NOT NULL DEFAULT 'timely',
+      intended_section TEXT NOT NULL DEFAULT '',
+      reliability_note TEXT NOT NULL DEFAULT '',
       tags_json TEXT NOT NULL,
       zone TEXT NOT NULL,
       raw_text TEXT NOT NULL,
@@ -179,6 +207,18 @@ function initialise(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_llm_calls_project_id_created_at
     ON llm_calls(project_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_sample_action_assets_sample_id
+    ON sample_action_assets(sample_id, action_type);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_sample_action_asset
+    ON sample_action_assets(sample_id, action_type, asset_text);
+
+    CREATE INDEX IF NOT EXISTS idx_editorial_feedback_project_created_at
+    ON editorial_feedback_events(project_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_editorial_feedback_revision
+    ON editorial_feedback_events(draft_revision_id, created_at ASC);
   `);
 
   ensureColumn(db, "article_projects", "hkrr_json", "TEXT NOT NULL DEFAULT '{}'");
@@ -188,6 +228,12 @@ function initialise(db: DatabaseSync) {
   ensureColumn(db, "article_projects", "style_core_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "article_projects", "vitality_check_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "job_runs", "result_json", "TEXT");
+  ensureColumn(db, "source_cards", "source_type", "TEXT NOT NULL DEFAULT 'media'");
+  ensureColumn(db, "source_cards", "support_level", "TEXT NOT NULL DEFAULT 'medium'");
+  ensureColumn(db, "source_cards", "claim_type", "TEXT NOT NULL DEFAULT 'fact'");
+  ensureColumn(db, "source_cards", "time_sensitivity", "TEXT NOT NULL DEFAULT 'timely'");
+  ensureColumn(db, "source_cards", "intended_section", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "source_cards", "reliability_note", "TEXT NOT NULL DEFAULT ''");
 }
 
 function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {

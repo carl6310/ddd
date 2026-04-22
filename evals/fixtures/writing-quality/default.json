@@ -1,0 +1,25 @@
+{
+  "fixtures": [
+    {
+      "id": "standard-flow-complete",
+      "label": "标准流程完成稿",
+      "projectId": "proj_3bc0cead",
+      "expectation": "standard_flow",
+      "note": "完整跑到发布前整理，用来观察完整链路下的证据、结构和返工情况。"
+    },
+    {
+      "id": "forced-continue-incomplete",
+      "label": "资料不足或流程未完成稿",
+      "projectId": "proj_5973481b",
+      "expectation": "forced_continue",
+      "note": "当前只到研究清单，用来暴露缺稿、缺 review、缺证据时的基线行为。"
+    },
+    {
+      "id": "rewrite-heavy-draft",
+      "label": "有人工回修的重写稿",
+      "projectId": "proj_1e39682a",
+      "expectation": "rewrite_heavy",
+      "note": "叙事稿与人工编辑稿同时存在，用来衡量返工幅度。"
+    }
+  ]
+}

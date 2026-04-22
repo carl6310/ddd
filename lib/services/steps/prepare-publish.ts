@@ -1,9 +1,10 @@
-import { buildStyleReference, getArticleDraft, getOutlineDraft, getProject, getReviewReport, getSectorModel, savePublishPackage, updateProject } from "@/lib/repository";
+import { buildStyleReference, getArticleDraft, getOutlineDraft, getProject, getResearchBrief, getReviewReport, getSectorModel, listSourceCards, savePublishPackage, updateProject } from "@/lib/repository";
 import { runStructuredTask } from "@/lib/llm";
 import { canPreparePublish } from "@/lib/workflow";
 import type { PublishPackage } from "@/lib/types";
 import type { JobExecutionContext } from "@/lib/jobs/types";
 import { JobError } from "@/lib/jobs/types";
+import { buildWritingQualityGate } from "@/lib/writing-quality/gate";
 
 export async function preparePublishStep(input: { projectId: string; context: JobExecutionContext }) {
   const { projectId, context } = input;
@@ -22,6 +23,8 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
   const articleDraft = getArticleDraft(projectId);
   const sectorModel = getSectorModel(projectId);
   const outlineDraft = getOutlineDraft(projectId);
+  const researchBrief = getResearchBrief(projectId);
+  const sourceCards = listSourceCards(projectId);
   if (!articleDraft) {
     throw new JobError("missing_draft", "请先生成正文。");
   }
@@ -31,6 +34,21 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
   });
 
   const finalMarkdown = articleDraft.editedMarkdown || articleDraft.narrativeMarkdown;
+  const qualityGate = buildWritingQualityGate({
+    project,
+    researchBrief,
+    sourceCards,
+    sectorModel,
+    outlineDraft,
+    articleDraft,
+    reviewReport,
+    publishPackage: null,
+  });
+  context.log("info", "gate_checked", "写作质量门槛已计算（warn-only）。", {
+    mustFix: qualityGate.mustFix.length,
+    shouldFix: qualityGate.shouldFix.length,
+    optionalPolish: qualityGate.optionalPolish.length,
+  });
 
   context.setProgress("calling_llm", "正在生成发布前整理。");
   const publishPackage = await runStructuredTask<PublishPackage>(
@@ -78,6 +96,7 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
     }
   }
 
+  publishPackage.qualityGate = qualityGate;
   context.setProgress("saving_result", "正在保存发布前整理结果。");
   savePublishPackage(projectId, publishPackage);
   updateProject(projectId, { stage: "发布前整理" });

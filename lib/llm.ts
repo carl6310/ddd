@@ -103,7 +103,17 @@ export async function runStructuredTask<T>(
     lastLatencyMs = latencyMs;
     lastFinishReason = finishReason;
 
-    if (task === "draft_writer" || task === "draft_polisher") {
+    if (
+      task === "draft_writer" ||
+      task === "draft_polisher" ||
+      task === "opening_rewriter" ||
+      task === "transition_rewriter" ||
+      task === "evidence_weaver" ||
+      task === "scene_inserter" ||
+      task === "cost_sharpener" ||
+      task === "ending_echo_rewriter" ||
+      task === "anti_cliche_rewriter"
+    ) {
       maybeRecordAudit({
         task,
         prompt,
@@ -275,6 +285,14 @@ function getTaskTuning(task: TaskName): TaskTuning {
       return { timeoutMs: 90000, maxTokens: 2200, retryMaxTokens: 3200, useJsonMode: true };
     case "draft_polisher":
       return { timeoutMs: 90000, maxTokens: 2400, useJsonMode: false };
+    case "opening_rewriter":
+    case "transition_rewriter":
+    case "evidence_weaver":
+    case "scene_inserter":
+    case "cost_sharpener":
+    case "ending_echo_rewriter":
+    case "anti_cliche_rewriter":
+      return { timeoutMs: 60000, maxTokens: 900, retryMaxTokens: 1400, useJsonMode: false };
     case "vitality_reviewer":
     case "quality_reviewer":
       return { timeoutMs: 120000, maxTokens: 2400, retryMaxTokens: 3200, useJsonMode: true };
@@ -400,6 +418,14 @@ function buildMockResponse(task: TaskName, input: Parameters<typeof buildPromptT
       return mockArticleDraft(input.project, input.outlineDraft, input.sourceCards ?? []);
     case "draft_polisher":
       return { narrativeMarkdown: input.narrativeMarkdown ?? "" };
+    case "opening_rewriter":
+    case "transition_rewriter":
+    case "evidence_weaver":
+    case "scene_inserter":
+    case "cost_sharpener":
+    case "ending_echo_rewriter":
+    case "anti_cliche_rewriter":
+      return { narrativeMarkdown: mockRewriteParagraph(task, input.paragraphText ?? "", input.rewriteIntent?.whyItFails ?? "", input.sourceCards ?? []) };
     case "vitality_reviewer":
     case "quality_reviewer":
       return mockQualityReviewer(input.deterministicReview);
@@ -407,6 +433,30 @@ function buildMockResponse(task: TaskName, input: Parameters<typeof buildPromptT
       return mockPublishPrep(input.project?.topic ?? "", input.finalMarkdown ?? "");
     case "publish_summary_refiner":
       return { summary: mockPublishSummary(input.project?.topic ?? "", input.narrativeMarkdown ?? "") };
+  }
+}
+
+function mockRewriteParagraph(task: TaskName, paragraphText: string, whyItFails: string, sourceCards: SourceCard[]) {
+  const citations = sourceCards.slice(0, 1).map((card) => `[SC:${card.id}]`).join(" ");
+  const base = paragraphText.trim() || "这一段需要重写。";
+
+  switch (task) {
+    case "opening_rewriter":
+      return `说真的，问题不在表面位置，而在结构。${citations} ${base}`;
+    case "transition_rewriter":
+      return `问题在于，前面那层标签只是入口，真正要看的，是它怎么一步步落到结构和生活路径上。${citations}`;
+    case "evidence_weaver":
+      return `${base} 更关键的是，这个判断不能只停在感觉上，得拿现成证据压实。${citations}`;
+    case "scene_inserter":
+      return `${base} 你把一个早高峰通勤、接娃买菜都压在这里的人放进去，就会明白这不是地图上两厘米的事。${citations}`;
+    case "cost_sharpener":
+      return `${base} 但代价也摆在这里：时间成本、生活便利度和兑现节奏，没有一个是能跳过去不看的。${citations}`;
+    case "ending_echo_rewriter":
+      return `${base} 回到开头，真正决定它成立与否的，始终不是标签，而是结构。${citations}`;
+    case "anti_cliche_rewriter":
+      return `${base.replace(/赋能|多维度|全方位|高质量发展/g, "更具体地说")} ${citations}`.trim();
+    default:
+      return `${base} ${whyItFails}`.trim();
   }
 }
 
@@ -570,11 +620,18 @@ function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorMode
         id: "section-1",
         heading: "先把误解拨开",
         purpose: "先纠正市场对板块的典型误判",
+        sectionThesis: `${topic} 真正的问题不是表面标签，而是结构。`,
+        singlePurpose: "先纠偏",
+        mustLandDetail: "一句话把主判断立住",
+        sceneOrCost: "先落一个读者最容易误判的现实感受",
         evidenceIds: sectorModel?.evidenceIds.slice(0, 1) ?? [],
+        mustUseEvidenceIds: sectorModel?.evidenceIds.slice(0, 1) ?? [],
         tone: "反常识、拉住读者",
         move: "先纠偏，把旧标签撕开",
         break: "在板块标签快被接受时，用一句反常识短句切断惯性。",
         bridge: "把误解撕开之后，立刻转去解释它为什么会被看错。",
+        transitionTarget: "把读者带到空间骨架",
+        counterPoint: "回应“离核心近就该涨”的误判",
         styleObjective: "兑现判断力和句式断裂",
         keyPoints: [thesis, sectorModel?.misconception ?? "市场误解"],
         expectedTakeaway: "读者知道这篇不是在复述销售话术。",
@@ -583,11 +640,18 @@ function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorMode
         id: "section-2",
         heading: "真正的空间骨架是什么",
         purpose: "解释板块内部真实边界",
+        sectionThesis: sectorModel?.spatialBackbone ?? `${topic} 不是一个整体空间，而是被切开的几个生活路径。`,
+        singlePurpose: "搭骨架",
+        mustLandDetail: "讲清切割线和空间骨架",
+        sceneOrCost: "落到通勤或生活路径上的实际差别",
         evidenceIds: sectorModel?.evidenceIds.slice(0, 2) ?? [],
+        mustUseEvidenceIds: sectorModel?.evidenceIds.slice(0, 1) ?? [],
         tone: "拆结构、做地图感",
         move: "搭地图，让读者脑子里出现空间骨架",
         break: "从抽象误解切到具体地图感，让文章落地。",
         bridge: "地图搭出来以后，再顺着骨架把片区一个个拆开。",
+        transitionTarget: "把整体骨架带进分区拆解",
+        counterPoint: "回应“一个板块就该一个价格带”的误判",
         styleObjective: "兑现知识顺手掏出来和节奏推进",
         keyPoints: [sectorModel?.spatialBackbone ?? "空间骨架", ...(sectorModel?.cutLines ?? [])],
         expectedTakeaway: "读者开始明白板块不是一个整体。",
@@ -596,11 +660,18 @@ function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorMode
         id: `zone-section-${index + 1}`,
         heading: `${zone.name}，${zone.label}`,
         purpose: `拆解 ${zone.name} 的真实定位`,
+        sectionThesis: `${zone.name} 的成立逻辑和风险，不是外界以为的那一套。`,
+        singlePurpose: index === 0 ? "落人物场景" : "拆片区差异",
+        mustLandDetail: `让读者记住 ${zone.name} 的一句话画像`,
+        sceneOrCost: index === 0 ? "落一个具体生活场景" : "写清现实代价或门槛",
         evidenceIds: zone.evidenceIds,
+        mustUseEvidenceIds: zone.evidenceIds.slice(0, Math.max(1, Math.min(2, zone.evidenceIds.length))),
         tone: "分区拆解、给抓手",
         move: index === 0 ? "先给片区画像，再把人物或生活场景落进去" : "继续拆片区差异，同时补代价和不成立条件",
         break: index === 0 ? "用一个人物或生活场景把地图翻成体感。" : "在优势之后立刻补短板，避免滑成顺推。",
         bridge: index === zones.length - 1 ? "片区拆完以后，把视角收回到供地和未来走势。" : "从这一块的优劣顺势转到下一块为什么完全不是同一种生活。",
+        transitionTarget: index === zones.length - 1 ? "收回整体判断" : "继续拆下一个片区",
+        counterPoint: zone.risks[0] ?? "回应市场对这一区的惯性想象",
         styleObjective: index === 0 ? "兑现人物画像法和亲自下场" : "兑现对立面理解和现实代价",
         keyPoints: [zone.description, ...zone.strengths, ...zone.risks],
         expectedTakeaway: `读者能记住 ${zone.name} 的一句话画像。`,
@@ -609,11 +680,18 @@ function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorMode
         id: "section-final",
         heading: "供应和下半场怎么走",
         purpose: "回到供地和未来走势",
+        sectionThesis: `${topic} 是否成立，最后还是取决于具体片区、具体门槛和具体代价。`,
+        singlePurpose: "回环收束",
+        mustLandDetail: "明确对谁成立、对谁不成立",
+        sceneOrCost: "落一个最真实的门槛或代价",
         evidenceIds: sectorModel?.evidenceIds.slice(-2) ?? [],
+        mustUseEvidenceIds: sectorModel?.evidenceIds.slice(-1) ?? [],
         tone: "收束、落到购房者判断",
         move: "把前文判断升维，再回到具体买房代价和适配人群",
         break: "在要下结论前，先把代价说透，压住软文感。",
         bridge: "用开头那句判断收住，不要平着结束。",
+        transitionTarget: "把读者带回开头的主判断",
+        counterPoint: "回应“只看标签就能下结论”的偷懒判断",
         styleObjective: "兑现文化升维、回环呼应和现实代价",
         keyPoints: [sectorModel?.supplyObservation ?? "供应判断", ...(sectorModel?.futureWatchpoints ?? [])],
         expectedTakeaway: "读者知道这个板块对谁成立，对谁不成立。",
@@ -650,8 +728,9 @@ function mockArticleDraft(
     `先把场景放进来。${writingMoves?.characterScene ?? `你可以想象一个首改家庭，早高峰从地铁口出来，第一眼看到的不是宣传图里的界面，而是真正的通勤和生活顺手度。`} ${citations}`,
     "",
     ...sections.map((section) => {
-      const citationSuffix = section.evidenceIds.map((id) => `[SC:${id}]`).join(" ") || citations;
-      return `## ${section.heading}\n${section.keyPoints.join("，")}。动作：${section.move}。打破：${section.break}。承接：${section.bridge}。风格目标：${section.styleObjective}。${section.expectedTakeaway} ${citationSuffix}`;
+      const preferredEvidenceIds = section.mustUseEvidenceIds?.length ? section.mustUseEvidenceIds : section.evidenceIds;
+      const citationSuffix = preferredEvidenceIds.map((id) => `[SC:${id}]`).join(" ") || citations;
+      return `## ${section.heading}\n主判断：${section.sectionThesis || section.purpose}。唯一动作：${section.singlePurpose || section.move}。必须落地：${section.mustLandDetail || section.expectedTakeaway}。场景/代价：${section.sceneOrCost || "待作者补"}。动作：${section.move}。打破：${section.break}。承接：${section.bridge}。承接目标：${section.transitionTarget || "待补"}。反面理解：${section.counterPoint || "待补"}。风格目标：${section.styleObjective}。重点：${section.keyPoints.join("，")}。${section.expectedTakeaway} ${citationSuffix}`;
     }),
     "",
     `${writingMoves?.culturalLift ?? `把 ${topic} 放到更大的上海结构里看，它成立与否从来不只是一个板块自己的事。`} ${citations}`,
@@ -671,7 +750,11 @@ function mockQualityReviewer(deterministicReview: ReviewReport | null | undefine
     return {
       overallVerdict: "缺少基础质检结果，暂时无法形成完整判断。",
       completionScore: 40,
+      globalScore: 40,
       checks: [],
+      sectionScores: [],
+      paragraphFlags: [],
+      rewriteIntents: [],
       revisionSuggestions: ["先运行确定性质检。"],
       preservedPatterns: [],
       missingPatterns: ["反常识开头", "抓手式命名"],

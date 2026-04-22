@@ -10,8 +10,13 @@ import type {
   ResearchBrief,
   ReviewReport,
   SampleArticle,
+  EditorialFeedbackEvent,
+  SourceClaimType,
   SectorModel,
   SourceCard,
+  SourceSupportLevel,
+  SourceTimeSensitivity,
+  SourceType,
   ThinkCard,
   StyleCore,
   VitalityCheck,
@@ -20,6 +25,7 @@ import { getDb } from "@/lib/db";
 import { nowIso, parseJson, stringifyJson, toNumber } from "@/lib/utils";
 import { buildDefaultWritingMoves } from "@/lib/writing-moves";
 import { buildCardsFromLegacy, defaultVitalityCheck, deriveLegacyFrames } from "@/lib/author-cards";
+import { buildSampleActionAssets, buildStyleActionReference, type SampleActionAssetRecord } from "@/lib/style-assets/registry";
 
 function defaultHKRR(): HKRRFrame {
   return {
@@ -37,6 +43,33 @@ function defaultHAMD(): HAMDFrame {
     anchor: "",
     mindMap: [],
     different: "",
+  };
+}
+
+function normalizeOutlineDraft(outline: OutlineDraft): OutlineDraft {
+  return {
+    hook: outline.hook ?? "",
+    closing: outline.closing ?? "",
+    sections: (outline.sections ?? []).map((section, index) => ({
+      id: section.id || `section-${index + 1}`,
+      heading: section.heading ?? "",
+      purpose: section.purpose ?? "",
+      sectionThesis: section.sectionThesis ?? "",
+      singlePurpose: section.singlePurpose ?? "",
+      mustLandDetail: section.mustLandDetail ?? "",
+      sceneOrCost: section.sceneOrCost ?? "",
+      evidenceIds: section.evidenceIds ?? [],
+      mustUseEvidenceIds: section.mustUseEvidenceIds ?? [],
+      tone: section.tone ?? "",
+      move: section.move ?? "",
+      break: section.break ?? "",
+      bridge: section.bridge ?? "",
+      transitionTarget: section.transitionTarget ?? "",
+      counterPoint: section.counterPoint ?? "",
+      styleObjective: section.styleObjective ?? "",
+      keyPoints: section.keyPoints ?? [],
+      expectedTakeaway: section.expectedTakeaway ?? "",
+    })),
   };
 }
 
@@ -113,6 +146,12 @@ function mapSourceCard(row: Record<string, unknown>): SourceCard {
     summary: String(row.summary),
     evidence: String(row.evidence),
     credibility: String(row.credibility) as SourceCard["credibility"],
+    sourceType: String(row.source_type ?? "media") as SourceType,
+    supportLevel: String(row.support_level ?? "medium") as SourceSupportLevel,
+    claimType: String(row.claim_type ?? "fact") as SourceClaimType,
+    timeSensitivity: String(row.time_sensitivity ?? "timely") as SourceTimeSensitivity,
+    intendedSection: String(row.intended_section ?? ""),
+    reliabilityNote: String(row.reliability_note ?? ""),
     tags: parseJson<string[]>(String(row.tags_json), []),
     zone: String(row.zone),
     rawText: String(row.raw_text),
@@ -269,8 +308,10 @@ export function createSourceCard(card: SourceCard): SourceCard {
   db.prepare(
     `
       INSERT INTO source_cards (
-        id, project_id, title, url, note, published_at, summary, evidence, credibility, tags_json, zone, raw_text, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, title, url, note, published_at, summary, evidence, credibility,
+        source_type, support_level, claim_type, time_sensitivity, intended_section, reliability_note,
+        tags_json, zone, raw_text, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
   ).run(
     card.id,
@@ -282,6 +323,12 @@ export function createSourceCard(card: SourceCard): SourceCard {
     card.summary,
     card.evidence,
     card.credibility,
+    card.sourceType,
+    card.supportLevel,
+    card.claimType,
+    card.timeSensitivity,
+    card.intendedSection,
+    card.reliabilityNote,
     stringifyJson(card.tags),
     card.zone,
     card.rawText,
@@ -304,11 +351,12 @@ export function saveSectorModel(projectId: string, model: SectorModel): SectorMo
 }
 
 export function getOutlineDraft(projectId: string): OutlineDraft | null {
-  return getJsonEntity<OutlineDraft>("outline_drafts", projectId);
+  const outline = getJsonEntity<OutlineDraft>("outline_drafts", projectId);
+  return outline ? normalizeOutlineDraft(outline) : null;
 }
 
 export function saveOutlineDraft(projectId: string, outline: OutlineDraft): OutlineDraft {
-  return upsertJsonEntity("outline_drafts", projectId, outline);
+  return upsertJsonEntity("outline_drafts", projectId, normalizeOutlineDraft(outline));
 }
 
 export function getArticleDraft(projectId: string): ArticleDraft | null {
@@ -344,6 +392,40 @@ export function saveArticleDraft(projectId: string, draft: ArticleDraft): Articl
     `,
   ).run(projectId, draft.analysisMarkdown, draft.narrativeMarkdown, draft.editedMarkdown, now, now);
   return draft;
+}
+
+export function listEditorialFeedbackEvents(projectId: string): EditorialFeedbackEvent[] {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM editorial_feedback_events WHERE project_id = ? ORDER BY created_at DESC")
+    .all(projectId)
+    .map((row) => mapEditorialFeedbackEvent(row as Record<string, unknown>));
+}
+
+export function replaceEditorialFeedbackEvents(projectId: string, events: EditorialFeedbackEvent[]) {
+  const db = getDb();
+  db.prepare("DELETE FROM editorial_feedback_events WHERE project_id = ?").run(projectId);
+  const statement = db.prepare(
+    `
+      INSERT INTO editorial_feedback_events (
+        id, project_id, draft_revision_id, event_type, section_heading,
+        before_text, after_text, detail_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  );
+  for (const event of events) {
+    statement.run(
+      event.id,
+      event.projectId,
+      event.draftRevisionId,
+      event.eventType,
+      event.sectionHeading,
+      event.beforeText,
+      event.afterText,
+      stringifyJson(event.detail),
+      event.createdAt,
+    );
+  }
 }
 
 export function getReviewReport(projectId: string): ReviewReport | null {
@@ -397,12 +479,84 @@ function mapSampleArticle(row: Record<string, unknown>): SampleArticle {
   };
 }
 
+function mapSampleActionAsset(row: Record<string, unknown>): SampleActionAssetRecord {
+  return {
+    id: String(row.id),
+    sampleId: String(row.sample_id),
+    actionType: String(row.action_type) as SampleActionAssetRecord["actionType"],
+    assetText: String(row.asset_text),
+    rationale: String(row.rationale),
+    weight: toNumber(row.weight, 1),
+    createdAt: String(row.created_at),
+  };
+}
+
+function mapEditorialFeedbackEvent(row: Record<string, unknown>): EditorialFeedbackEvent {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    draftRevisionId: String(row.draft_revision_id),
+    eventType: String(row.event_type) as EditorialFeedbackEvent["eventType"],
+    sectionHeading: String(row.section_heading),
+    beforeText: String(row.before_text),
+    afterText: String(row.after_text),
+    detail: parseJson<Record<string, unknown>>(String(row.detail_json ?? "{}"), {}),
+    createdAt: String(row.created_at),
+  };
+}
+
 export function listSampleArticles(): SampleArticle[] {
   const db = getDb();
   return db
     .prepare("SELECT * FROM sample_articles ORDER BY created_at DESC, title ASC")
     .all()
     .map((row) => mapSampleArticle(row as Record<string, unknown>));
+}
+
+function listSampleActionAssets(sampleIds: string[]): SampleActionAssetRecord[] {
+  if (sampleIds.length === 0) {
+    return [];
+  }
+  const db = getDb();
+  const placeholders = sampleIds.map(() => "?").join(", ");
+  return db
+    .prepare(`SELECT * FROM sample_action_assets WHERE sample_id IN (${placeholders}) ORDER BY weight DESC, created_at DESC`)
+    .all(...sampleIds)
+    .map((row) => mapSampleActionAsset(row as Record<string, unknown>));
+}
+
+function replaceSampleActionAssets(sampleId: string, assets: SampleActionAssetRecord[]) {
+  const db = getDb();
+  db.prepare("DELETE FROM sample_action_assets WHERE sample_id = ?").run(sampleId);
+  const statement = db.prepare(
+    `
+      INSERT INTO sample_action_assets (id, sample_id, action_type, asset_text, rationale, weight, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+  );
+  for (const asset of assets) {
+    statement.run(asset.id, asset.sampleId, asset.actionType, asset.assetText, asset.rationale, asset.weight, asset.createdAt);
+  }
+}
+
+function ensureSampleActionAssets(samples: SampleArticle[]) {
+  const existing = listSampleActionAssets(samples.map((sample) => sample.id));
+  const existingIds = new Set(existing.map((asset) => asset.sampleId));
+
+  for (const sample of samples) {
+    if (existingIds.has(sample.id)) {
+      continue;
+    }
+    replaceSampleActionAssets(sample.id, buildSampleActionAssets(sample));
+  }
+}
+
+export function rebuildAllSampleActionAssets() {
+  const samples = listSampleArticles();
+  for (const sample of samples) {
+    replaceSampleActionAssets(sample.id, buildSampleActionAssets(sample));
+  }
+  return samples.length;
 }
 
 export function getSampleDigest(limit = 5): string {
@@ -471,6 +625,21 @@ export function buildStyleReference(topic: string, articleType?: ArticleType | n
   const samples = getRelevantSamples({ topic, articleType, limit: 3 });
   if (samples.length === 0) {
     return "暂无风格样本。";
+  }
+
+  ensureSampleActionAssets(samples);
+  const actionAssets = listSampleActionAssets(samples.map((sample) => sample.id));
+  const actionReference = buildStyleActionReference(actionAssets);
+  if (actionReference.trim()) {
+    return [
+      "动作资产（只借动作，不借原句）：",
+      actionReference,
+      "",
+      "样本提醒：",
+      ...samples.map((sample, index) => `${index + 1}. ${sample.title} | 类型：${sample.articleType} | 结构：${sample.structureSummary}`),
+      "",
+      "禁止复用样本里的标题词、比喻、金句和命名抓手。",
+    ].join("\n");
   }
 
   return samples

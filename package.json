@@ -12,6 +12,10 @@
     "worker:once": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/worker.ts --once",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
+    "eval:writing-quality": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/evals/run-writing-quality.ts",
+    "eval:writing-quality:report": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/evals/report-writing-quality.ts",
+    "rebuild:sample-action-assets": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/rebuild-sample-action-assets.ts",
+    "analyze:edit-diffs": "node --experimental-strip-types --import ./scripts/register-alias.mjs scripts/analyze-edit-diffs.ts",
     "import-samples": "python3 scripts/import_wz_samples.py --source-dir wz --db-path data/workbench.db",
     "backfill-project-frames": "python3 scripts/backfill_project_frames.py --db-path data/workbench.db"
   },

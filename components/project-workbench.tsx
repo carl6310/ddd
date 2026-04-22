@@ -11,6 +11,7 @@ import { JobLogPanel } from "./workbench/job-log-panel";
 import { useJobPolling, type JobDetail, type ProjectJobSummary } from "@/hooks/use-job-polling";
 import { useJobAction } from "@/hooks/use-job-action";
 import type { JobStatus, JobStep } from "@/lib/jobs/types";
+import { Toast } from "./ui/toast";
 
 type ActiveTab = "overview" | "research" | "drafts";
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
@@ -324,26 +325,14 @@ export function ProjectWorkbench({
 
   return (
     <main className="page-shell">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Shanghai Writing Workbench</p>
-          <h1>上海板块写作工作台</h1>
-          <p className="subtle">
-            把选题、资料卡、板块拆解、提纲、初稿和质检串成一条稳定的协作流水线。
-          </p>
+      <header className="page-topbar">
+        <div className="topbar-left">
+          <h1 className="topbar-title">上海板块写作工作台</h1>
         </div>
-        <div className="mode-chip">{process.env.NEXT_PUBLIC_MODEL_MODE ? `模型模式：${process.env.NEXT_PUBLIC_MODEL_MODE}` : "本地服务已连接"}</div>
+        <div className="topbar-right">
+          <div className="mode-chip">{process.env.NEXT_PUBLIC_MODEL_MODE ? `模型模式：${process.env.NEXT_PUBLIC_MODEL_MODE}` : "本地服务已连接"}</div>
+        </div>
       </header>
-
-      {feedback?.text ? (
-        <p
-          className={`message-bar message-bar-${feedback.kind}`}
-          role={feedback.kind === "error" ? "alert" : "status"}
-          aria-live={feedback.kind === "error" ? "assertive" : "polite"}
-        >
-          {feedback.text}
-        </p>
-      ) : null}
 
       <JobLogPanel
         job={visibleJob}
@@ -351,6 +340,14 @@ export function ProjectWorkbench({
         onRetry={visibleJob?.status === "failed" ? () => void retryFailedJob(visibleJob.id) : null}
         isRetrying={isRetryingJob}
       />
+
+      {feedback?.text ? (
+        <Toast 
+          message={feedback.text} 
+          kind={feedback.kind} 
+          onClose={() => setFeedback(null)} 
+        />
+      ) : null}
 
       <section className="workspace-grid">
         <ProjectSidebar 
@@ -386,18 +383,21 @@ export function ProjectWorkbench({
                 <button
                   className={`tab-button ${activeTab === "overview" ? "active" : ""}`}
                   onClick={() => setActiveTab("overview")}
+                  data-tab="overview"
                 >
                   选题与检查
                 </button>
                 <button
                   className={`tab-button ${activeTab === "research" ? "active" : ""}`}
                   onClick={() => setActiveTab("research")}
+                  data-tab="research"
                 >
                   资料准备
                 </button>
                 <button
                   className={`tab-button ${activeTab === "drafts" ? "active" : ""}`}
                   onClick={() => setActiveTab("drafts")}
+                  data-tab="drafts"
                 >
                   写作推进
                 </button>

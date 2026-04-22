@@ -42,6 +42,11 @@ export function defaultThinkCard(input: {
     materialDigest: withFallback(notes, `${topic} 这篇先从现有素材里找最硬的冲突，再决定值不值得写。`),
     topicVerdict: thesis?.trim() ? "strong" : "rework",
     verdictReason: withFallback(thesis, `${topic} 目前最值得写的是“市场标签和真实结构的错位”。`),
+    coreJudgement: withFallback(thesis, `${topic} 真正决定价值的不是热度，而是结构。`),
+    counterIntuition: withFallback(hamd?.different, `${topic} 最容易被看错的，不是表面位置，而是内部错位。`),
+    readerPayoff: withFallback(hkrr?.knowledge, `读者会更清楚 ${topic} 为什么会被误判，以及应该怎么判断它。`),
+    decisionImplication: `看完 ${topic} 这篇，读者应该知道什么人适合继续看、什么人应该谨慎绕开。`,
+    excludedTakeaways: ["不要把它简单归类为“靠核心区近就天然成立”", "不要把这篇写成泛板块介绍或销售话术"],
     hkr: {
       happy: withFallback(hkrr?.happy, `让读者先感到“原来 ${topic} 真正该看的不是表面那层”。`),
       knowledge: withFallback(hkrr?.knowledge, `把 ${topic} 的空间结构、切割线和适配人群讲清楚。`),
@@ -80,6 +85,9 @@ export function defaultStyleCore(input: {
     personalView: withFallback(moves.personalPosition, `我对 ${input.topic} 的判断来自长期观察，不来自销售想象。`),
     judgement: withFallback(input.thesis, `${input.topic} 真正决定价值的不是热度，而是结构。`),
     counterView: withFallback(input.hamd?.different, `要把 ${input.topic} 的对立面也讲出来，不能只站一边。`),
+    allowedMoves: ["先纠偏", "再搭骨架", "再拆片区", "落人物场景", "补代价", "结尾回环"],
+    forbiddenMoves: ["先讲配套再找判断", "平铺资料卡", "只写单边好处", "直接喊口号"],
+    allowedMetaphors: ["几种生活路径", "被切开的拼图", "错位承接", "纸面核心"],
     emotionCurve: withFallback(input.hkrr?.resonance, "开头拉住，中段压实，结尾收出代价和余味。"),
     personalStake: withFallback(moves.personalPosition, `作者必须亲自下场说清楚 ${input.topic} 为什么值得这样判断。`),
     characterPortrait: withFallback(moves.characterScene, `至少写一个真实人物或生活场景，让 ${input.topic} 从地图变成生活。`),
@@ -87,6 +95,8 @@ export function defaultStyleCore(input: {
     sentenceBreak: withFallback(moves.signatureLine, `${input.topic} 不是一个板块，而是几种生活路径挤在一起。`),
     echo: withFallback(moves.echoLine, `结尾回扣 ${input.topic} 开头那一下判断。`),
     humbleSetup: withFallback(moves.personalPosition, "先承认判断带体感，再把证据和结构铺出来。"),
+    toneCeiling: "像长期观察者，不像老师批卷，也不像中介卖房。",
+    concretenessRequirement: "每一段都要有具体判断、具体场景或具体代价，不能只写抽象词。",
     costSense: withFallback(moves.costSense, `把 ${input.topic} 的门槛、等待和代价写透。`),
   };
 }
@@ -189,10 +199,14 @@ export function buildCardsFromLegacy(input: {
         ...(input.thinkCard?.hkr ?? {}),
       },
       alternativeAngles: input.thinkCard?.alternativeAngles ?? thinkBase.alternativeAngles,
+      excludedTakeaways: input.thinkCard?.excludedTakeaways ?? thinkBase.excludedTakeaways,
     },
     styleCore: {
       ...styleBase,
       ...(input.styleCore ?? {}),
+      allowedMoves: input.styleCore?.allowedMoves ?? styleBase.allowedMoves,
+      forbiddenMoves: input.styleCore?.forbiddenMoves ?? styleBase.forbiddenMoves,
+      allowedMetaphors: input.styleCore?.allowedMetaphors ?? styleBase.allowedMetaphors,
     },
     vitalityCheck: input.vitalityCheck
       ? {
@@ -209,6 +223,11 @@ export function isThinkCardComplete(card: ThinkCard): boolean {
     card.materialDigest.trim() &&
       card.topicVerdict &&
       card.verdictReason.trim() &&
+      card.coreJudgement.trim() &&
+      card.counterIntuition.trim() &&
+      card.readerPayoff.trim() &&
+      card.decisionImplication.trim() &&
+      card.excludedTakeaways.length > 0 &&
       card.hkr.happy.trim() &&
       card.hkr.knowledge.trim() &&
       card.hkr.resonance.trim() &&
@@ -218,11 +237,51 @@ export function isThinkCardComplete(card: ThinkCard): boolean {
 }
 
 export function isStyleCoreComplete(core: StyleCore): boolean {
-  return Object.values(core).every((value) => value.trim().length > 0);
+  return (
+    core.rhythm.trim().length > 0 &&
+    core.breakPattern.trim().length > 0 &&
+    core.knowledgeDrop.trim().length > 0 &&
+    core.personalView.trim().length > 0 &&
+    core.judgement.trim().length > 0 &&
+    core.counterView.trim().length > 0 &&
+    core.allowedMoves.length > 0 &&
+    core.forbiddenMoves.length > 0 &&
+    core.allowedMetaphors.length > 0 &&
+    core.emotionCurve.trim().length > 0 &&
+    core.personalStake.trim().length > 0 &&
+    core.characterPortrait.trim().length > 0 &&
+    core.culturalLift.trim().length > 0 &&
+    core.sentenceBreak.trim().length > 0 &&
+    core.echo.trim().length > 0 &&
+    core.humbleSetup.trim().length > 0 &&
+    core.toneCeiling.trim().length > 0 &&
+    core.concretenessRequirement.trim().length > 0 &&
+    core.costSense.trim().length > 0
+  );
 }
 
 export function countStyleCoreMissing(core: StyleCore) {
-  const entries = Object.entries(core).filter(([, value]) => !value.trim());
+  const entries = [
+    ["rhythm", core.rhythm],
+    ["breakPattern", core.breakPattern],
+    ["knowledgeDrop", core.knowledgeDrop],
+    ["personalView", core.personalView],
+    ["judgement", core.judgement],
+    ["counterView", core.counterView],
+    ["allowedMoves", core.allowedMoves.join(" ")],
+    ["forbiddenMoves", core.forbiddenMoves.join(" ")],
+    ["allowedMetaphors", core.allowedMetaphors.join(" ")],
+    ["emotionCurve", core.emotionCurve],
+    ["personalStake", core.personalStake],
+    ["characterPortrait", core.characterPortrait],
+    ["culturalLift", core.culturalLift],
+    ["sentenceBreak", core.sentenceBreak],
+    ["echo", core.echo],
+    ["humbleSetup", core.humbleSetup],
+    ["toneCeiling", core.toneCeiling],
+    ["concretenessRequirement", core.concretenessRequirement],
+    ["costSense", core.costSense],
+  ].filter(([, value]) => !value.trim());
   const keyFields: Array<keyof StyleCore> = ["rhythm", "characterPortrait", "culturalLift", "echo", "costSense"];
   const missingKeyFields = entries.filter(([key]) => keyFields.includes(key as keyof StyleCore)).map(([key]) => key);
   return {
@@ -285,6 +344,11 @@ export function formatThinkCard(card: ThinkCard): string {
     `- 素材吃透：${card.materialDigest}`,
     `- 选题值：${card.topicVerdict}`,
     `- 判断原因：${card.verdictReason}`,
+    `- 核心判断：${card.coreJudgement}`,
+    `- 反直觉抓手：${card.counterIntuition}`,
+    `- 读者收益：${card.readerPayoff}`,
+    `- 决策影响：${card.decisionImplication}`,
+    `- 明确不写：${card.excludedTakeaways.join(" / ") || "暂无"}`,
     `- HKR-Happy：${card.hkr.happy}`,
     `- HKR-Knowledge：${card.hkr.knowledge}`,
     `- HKR-Resonance：${card.hkr.resonance}`,
@@ -303,6 +367,9 @@ export function formatStyleCore(core: StyleCore): string {
     `- 私人视角：${core.personalView}`,
     `- 判断力：${core.judgement}`,
     `- 对立面理解：${core.counterView}`,
+    `- 允许动作：${core.allowedMoves.join(" / ") || "暂无"}`,
+    `- 禁止动作：${core.forbiddenMoves.join(" / ") || "暂无"}`,
+    `- 可用比喻：${core.allowedMetaphors.join(" / ") || "暂无"}`,
     `- 情绪递进：${core.emotionCurve}`,
     `- 亲自下场：${core.personalStake}`,
     `- 人物画像法：${core.characterPortrait}`,
@@ -310,6 +377,8 @@ export function formatStyleCore(core: StyleCore): string {
     `- 句式断裂：${core.sentenceBreak}`,
     `- 回环呼应：${core.echo}`,
     `- 谦逊铺垫法：${core.humbleSetup}`,
+    `- 语气上限：${core.toneCeiling}`,
+    `- 具体性要求：${core.concretenessRequirement}`,
     `- 现实代价：${core.costSense}`,
   ].join("\n");
 }
