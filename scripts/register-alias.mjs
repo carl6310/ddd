@@ -1,11 +1,15 @@
 import { pathToFileURL } from "node:url";
 import { resolve as resolvePath } from "node:path";
 import { registerHooks } from "node:module";
+import nextEnv from "@next/env";
 
 const projectRoot = process.cwd();
 const projectRootUrl = pathToFileURL(`${projectRoot}/`).href;
 const nodeModulesSegment = "/node_modules/";
 const extensionPattern = /\.[a-zA-Z0-9]+$/;
+
+const { loadEnvConfig } = nextEnv;
+loadEnvConfig(projectRoot);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {

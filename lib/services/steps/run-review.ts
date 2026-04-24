@@ -94,6 +94,7 @@ function mergeReviews(base: ReviewReport, extra: ReviewReport): ReviewReport {
     completionScore: Math.round((base.completionScore + extra.completionScore) / 2),
     globalScore: Math.round(((base.globalScore ?? base.completionScore) + (extra.globalScore ?? extra.completionScore)) / 2),
     checks: mergedChecks,
+    qualityPyramid: extra.qualityPyramid?.length ? extra.qualityPyramid : base.qualityPyramid,
     sectionScores: extra.sectionScores?.length ? extra.sectionScores : base.sectionScores,
     paragraphFlags: extra.paragraphFlags?.length ? extra.paragraphFlags : base.paragraphFlags,
     rewriteIntents: extra.rewriteIntents?.length ? extra.rewriteIntents : base.rewriteIntents,

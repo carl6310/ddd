@@ -227,6 +227,24 @@ export function runDeterministicReview(input: {
     evidenceIds: [],
   });
 
+  const unsupportedSceneCount = paragraphs.filter(
+    (paragraph) =>
+      hasSceneSignal(paragraph) &&
+      !/\[SC:[a-zA-Z0-9_-]+\]/.test(paragraph) &&
+      !paragraph.includes("待作者补") &&
+      !paragraph.includes("待作者确认"),
+  ).length;
+  checks.push({
+    key: "unsupported-scene",
+    title: "Unsupported Scene",
+    status: unsupportedSceneCount === 0 ? "pass" : "fail",
+    detail:
+      unsupportedSceneCount === 0
+        ? "未发现像亲历但无证据支撑的场景段落。"
+        : `检测到 ${unsupportedSceneCount} 段场景像亲历但没有证据或待作者确认标记，必须改写。`,
+    evidenceIds: [],
+  });
+
   const culturalLiftSignal = hasCulturalLiftSignal(draft);
   checks.push({
     key: "cultural-lift",
@@ -407,6 +425,18 @@ export function runDeterministicReview(input: {
     evidenceIds: [],
   });
 
+  const genericLanguageHits = [...AI_CLICHES, ...aiSmellTokens].filter((token) => draft.includes(token));
+  checks.push({
+    key: "generic-language",
+    title: "泛化表达黑名单",
+    status: genericLanguageHits.length === 0 ? "pass" : genericLanguageHits.length <= 2 ? "warn" : "fail",
+    detail:
+      genericLanguageHits.length === 0
+        ? "没有命中明显的泛化黑名单表达。"
+        : `命中泛化/套话表达：${Array.from(new Set(genericLanguageHits)).join("、")}`,
+    evidenceIds: [],
+  });
+
   const failed = checks.filter((item) => item.status === "fail").length;
   const warned = checks.filter((item) => item.status === "warn").length;
   const completionScore = Math.max(0, 100 - failed * 25 - warned * 8);
@@ -425,6 +455,7 @@ export function runDeterministicReview(input: {
     sectionScores,
   });
   const rewriteIntents = buildRewriteIntents(paragraphFlags);
+  const qualityPyramid = buildQualityPyramid(checks);
 
   return {
     overallVerdict:
@@ -432,6 +463,7 @@ export function runDeterministicReview(input: {
     completionScore,
     globalScore: completionScore,
     checks,
+    qualityPyramid,
     sectionScores,
     paragraphFlags,
     rewriteIntents,
@@ -897,6 +929,68 @@ export function buildVitalityCheck(input: {
   ];
 
   return vitalityStatusFromEntries(entries);
+}
+
+function buildQualityPyramid(checks: ReviewCheck[]) {
+  const keySet = new Map(checks.map((check) => [check.key, check]));
+  return [
+    buildQualityLayer("L1", "WritingLint", [
+      keySet.get("ai-tone"),
+      keySet.get("ai-smell"),
+      keySet.get("generic-language"),
+      keySet.get("unsupported-scene"),
+      keySet.get("citations"),
+    ]),
+    buildQualityLayer("L2", "StructureFlow", [
+      keySet.get("opening"),
+      keySet.get("hook"),
+      keySet.get("anchor"),
+      keySet.get("echo"),
+      keySet.get("transitions"),
+      keySet.get("emotional-arc"),
+      keySet.get("sentence-break"),
+      keySet.get("question-rhythm"),
+    ]),
+    buildQualityLayer("L3", "ContentDepth", [
+      keySet.get("citations"),
+      keySet.get("fresh-observation"),
+      keySet.get("cost-sense"),
+      keySet.get("cultural-lift"),
+      keySet.get("article-type-specialized"),
+      keySet.get("zones"),
+      keySet.get("spatial"),
+    ]),
+    buildQualityLayer("L4", "HumanFeel", [
+      keySet.get("personal-position"),
+      keySet.get("character-scene"),
+      keySet.get("body-memory"),
+      keySet.get("humble-setup"),
+      keySet.get("oral-coverage"),
+    ]),
+  ];
+}
+
+function buildQualityLayer(level: "L1" | "L2" | "L3" | "L4", title: string, checks: Array<ReviewCheck | undefined>) {
+  const activeChecks = checks.filter((check): check is ReviewCheck => Boolean(check));
+  const mustFix = activeChecks.filter((check) => check.status === "fail").map((check) => `${check.title}：${check.detail}`);
+  const shouldFix = activeChecks.filter((check) => check.status === "warn").map((check) => `${check.title}：${check.detail}`);
+  const passCount = activeChecks.filter((check) => check.status === "pass").length;
+  const status: ReviewCheck["status"] = mustFix.length > 0 ? "fail" : shouldFix.length > 0 ? "warn" : "pass";
+
+  return {
+    level,
+    title,
+    status,
+    summary:
+      status === "pass"
+        ? `${title} 已过线（${passCount}/${activeChecks.length}）。`
+        : status === "warn"
+          ? `${title} 还有 ${shouldFix.length} 个建议优化点。`
+          : `${title} 还有 ${mustFix.length} 个必须先修的问题。`,
+    mustFix,
+    shouldFix,
+    optionalPolish: status === "pass" ? activeChecks.map((check) => check.title).slice(0, 3) : [],
+  };
 }
 
 function runSpecializedCheck(articleType: ArticleType, draft: string) {

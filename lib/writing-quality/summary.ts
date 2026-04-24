@@ -15,6 +15,7 @@ export interface WritingQualitySummarySnapshot {
   editorialEventCount: number;
   editorialEventTypes: Record<string, number>;
   qualityGate: ReturnType<typeof buildWritingQualityGate>;
+  qualityPyramid: Array<{ level: string; status: string; title: string }>;
   notes: string[];
 }
 
@@ -59,8 +60,14 @@ export function buildWritingQualitySnapshot(bundle: ProjectBundle): WritingQuali
       return acc;
     }, {}),
     qualityGate: buildWritingQualityGate(bundle),
+    qualityPyramid: (bundle.reviewReport?.qualityPyramid ?? []).map((layer) => ({
+      level: layer.level,
+      status: layer.status,
+      title: layer.title,
+    })),
     notes: [
       ...scorecard.notes.slice(0, 6),
+      ...(bundle.reviewReport?.qualityPyramid ?? []).map((layer) => `${layer.level} ${layer.title}：${layer.status}`),
       evidence.criticalJudgementAlerts.length > 0 ? `关键证据缺口：${evidence.criticalJudgementAlerts.length}` : "",
     ].filter(Boolean),
   };
@@ -79,6 +86,7 @@ export function buildWritingQualitySummaryLines(bundle: ProjectBundle): string[]
     `- Vitality pass rate：${toPercent(summary.vitalityPassRate)}`,
     `- 编辑反馈事件数：${summary.editorialEventCount}`,
     `- Quality gate：${summary.qualityGate.overallStatus} (${summary.qualityGate.mode})`,
+    ...summary.qualityPyramid.map((layer) => `- ${layer.level} ${layer.title}：${layer.status}`),
     ...summary.notes.map((note) => `- ${note}`),
   ];
 }

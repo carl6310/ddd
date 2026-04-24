@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api";
-import { listProjectJobs } from "@/lib/jobs/repository";
+import { listActiveJobs, listProjectJobs } from "@/lib/jobs/repository";
+import { buildActiveQueueSummary, buildJobQueueMetrics } from "@/lib/jobs/queue-summary";
 import { getProject } from "@/lib/repository";
 
 interface RouteContext {
@@ -13,19 +14,30 @@ export async function GET(_request: Request, context: RouteContext) {
     return fail("项目不存在。", 404);
   }
 
-  const jobs = listProjectJobs(id).map((job) => ({
-    id: job.id,
-    projectId: job.projectId,
-    step: job.step,
-    status: job.status,
-    progressStage: job.progressStage,
-    progressMessage: job.progressMessage,
-    errorCode: job.errorCode,
-    errorMessage: job.errorMessage,
-    createdAt: job.createdAt,
-    startedAt: job.startedAt,
-    finishedAt: job.finishedAt,
-  }));
+  const activeJobs = listActiveJobs();
+  const queueSummary = buildActiveQueueSummary(activeJobs);
+  const jobs = listProjectJobs(id).map((job) => {
+    const metrics = buildJobQueueMetrics(activeJobs, job.id);
+    return {
+      id: job.id,
+      projectId: job.projectId,
+      step: job.step,
+      status: job.status,
+      progressStage: job.progressStage,
+      progressMessage: job.progressMessage,
+      result: job.result,
+      errorCode: job.errorCode,
+      errorMessage: job.errorMessage,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      queuePosition: metrics.position,
+      queueAheadCount: metrics.position ? metrics.aheadCount : null,
+      queueActiveCount: metrics.activeCount,
+      queueRunningCount: metrics.runningCount,
+      queueQueuedCount: metrics.queuedCount,
+    };
+  });
 
-  return ok({ items: jobs });
+  return ok({ items: jobs, queueSummary });
 }

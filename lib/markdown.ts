@@ -3,7 +3,7 @@ import type { ArticleProject, OutlineDraft, ProjectBundle, PublishPackage, Secto
 import { buildWritingQualitySummaryLines } from "@/lib/writing-quality/summary";
 
 export function buildProjectMarkdown(bundle: ProjectBundle): string {
-  const { project, researchBrief, sectorModel, outlineDraft, articleDraft, sourceCards, reviewReport } = bundle;
+  const { project, researchBrief, sectorModel, outlineDraft, articleDraft, sourceCards, reviewReport, editorialFeedbackEvents } = bundle;
   const publishPackage = bundle.publishPackage;
   const draft = publishPackage?.finalMarkdown || articleDraft?.editedMarkdown || articleDraft?.narrativeMarkdown || articleDraft?.analysisMarkdown || "";
 
@@ -11,11 +11,39 @@ export function buildProjectMarkdown(bundle: ProjectBundle): string {
     `# ${project.topic}`,
     `> 文章类型：${project.articleType} | 目标读者：${project.audience} | 当前阶段：${project.stage}`,
     `> 主命题：${project.thesis}`,
+    project.topicMeta.topicScorecard ? `> 开题建议：${project.topicMeta.topicScorecard.status} | HKR：${project.topicMeta.topicScorecard.hkr.h}/${project.topicMeta.topicScorecard.hkr.k}/${project.topicMeta.topicScorecard.hkr.r}` : "",
     "",
+    project.topicMeta.signalBrief
+      ? [
+          "## Signal Summary",
+          `- 模式：${project.topicMeta.signalMode || "未记录"}`,
+          `- 新鲜度：${project.topicMeta.signalBrief.freshnessNote}`,
+          ...project.topicMeta.signalBrief.signals.map(
+            (signal) => `- [${signal.signalType}] ${signal.title} | ${[signal.source, signal.publishedAt].filter(Boolean).join(" / ")} | ${signal.summary}`,
+          ),
+          `- 缺口：${project.topicMeta.signalBrief.gaps.join(" / ") || "暂无"}`,
+          "",
+        ].join("\n")
+      : "",
+    project.topicMeta.topicScorecard
+      ? [
+          "## Topic Scorecard",
+          `- 状态：${project.topicMeta.topicScorecard.status}`,
+          `- HKR：${project.topicMeta.topicScorecard.hkr.h} / ${project.topicMeta.topicScorecard.hkr.k} / ${project.topicMeta.topicScorecard.hkr.r}（总分 ${project.topicMeta.topicScorecard.hkr.total}）`,
+          `- 读者价值：${project.topicMeta.topicScorecard.readerValueSummary}`,
+          `- 信号覆盖：${project.topicMeta.topicScorecard.signalCoverageSummary}`,
+          `- 风险：${project.topicMeta.topicScorecard.evidenceRisk}`,
+          `- 建议：${project.topicMeta.topicScorecard.recommendation}`,
+          "",
+        ].join("\n")
+      : "",
     "## ThinkCard",
     `- 素材吃透：${project.thinkCard.materialDigest || "待补"}`,
     `- 选题值：${project.thinkCard.topicVerdict || "待补"}`,
     `- 判断原因：${project.thinkCard.verdictReason || "待补"}`,
+    `- 文章原型：${project.thinkCard.articlePrototype || "待补"}`,
+    `- 目标读者画像：${project.thinkCard.targetReaderPersona || "待补"}`,
+    `- 创作锚点：${project.thinkCard.creativeAnchor || "待补"}`,
     `- HKR：${project.thinkCard.hkr.happy || "待补"} / ${project.thinkCard.hkr.knowledge || "待补"} / ${project.thinkCard.hkr.resonance || "待补"}`,
     `- 改方向建议：${project.thinkCard.rewriteSuggestion || "待补"}`,
     `- 替代角度：${project.thinkCard.alternativeAngles.join(" / ") || "暂无"}`,
@@ -24,6 +52,9 @@ export function buildProjectMarkdown(bundle: ProjectBundle): string {
     "## StyleCore",
     `- 节奏推进：${project.styleCore.rhythm || "待补"}`,
     `- 故意打破：${project.styleCore.breakPattern || "待补"}`,
+    `- 开头动作：${project.styleCore.openingMoves.join(" / ") || "待补"}`,
+    `- 转场动作：${project.styleCore.transitionMoves.join(" / ") || "待补"}`,
+    `- 结尾回环动作：${project.styleCore.endingEchoMoves.join(" / ") || "待补"}`,
     `- 知识顺手掏出来：${project.styleCore.knowledgeDrop || "待补"}`,
     `- 私人视角：${project.styleCore.personalView || "待补"}`,
     `- 判断力：${project.styleCore.judgement || "待补"}`,
@@ -36,6 +67,9 @@ export function buildProjectMarkdown(bundle: ProjectBundle): string {
     `- 回环呼应：${project.styleCore.echo || "待补"}`,
     `- 谦逊铺垫法：${project.styleCore.humbleSetup || "待补"}`,
     `- 现实代价：${project.styleCore.costSense || "待补"}`,
+    `- 禁止编造：${project.styleCore.forbiddenFabrications.join(" / ") || "待补"}`,
+    `- 泛化黑名单：${project.styleCore.genericLanguageBlackList.join(" / ") || "待补"}`,
+    `- unsupported scene 检测：${project.styleCore.unsupportedSceneDetector || "待补"}`,
     "",
     "## 核心问题",
     project.coreQuestion || "暂未生成",
@@ -65,7 +99,7 @@ export function buildProjectMarkdown(bundle: ProjectBundle): string {
           "## 提纲",
           ...outlineDraft.sections.map(
             (section, index) =>
-              `${index + 1}. ${section.heading}\n   - 目标：${section.purpose}\n   - 段落主判断：${section.sectionThesis || "待补"}\n   - 唯一动作：${section.singlePurpose || "待补"}\n   - 必须落地：${section.mustLandDetail || "待补"}\n   - 场景/代价：${section.sceneOrCost || "待补"}\n   - 动作：${section.move}\n   - 打破：${section.break}\n   - 承接：${section.bridge}\n   - 承接目标：${section.transitionTarget || "待补"}\n   - 反面/反证：${section.counterPoint || "待补"}\n   - 风格目标：${section.styleObjective}\n   - 强约束证据：${section.mustUseEvidenceIds?.join(", ") || "待补"}\n   - 证据：${section.evidenceIds.join(", ") || "待补"}\n   - 节奏：${section.tone}`,
+              `${index + 1}. ${section.heading}\n   - 目标：${section.purpose}\n   - 段落主判断：${section.sectionThesis || "待补"}\n   - 唯一动作：${section.singlePurpose || "待补"}\n   - 主线句：${section.mainlineSentence || "待补"}\n   - 回环目标：${section.callbackTarget || "待补"}\n   - 微型故事：${section.microStoryNeed || "待补"}\n   - 发现转折：${section.discoveryTurn || "待补"}\n   - 必须落地：${section.mustLandDetail || "待补"}\n   - 场景/代价：${section.sceneOrCost || "待补"}\n   - 对立观点：${section.opposingView || "待补"}\n   - 读者用途：${section.readerUsefulness || "待补"}\n   - 动作：${section.move}\n   - 打破：${section.break}\n   - 承接：${section.bridge}\n   - 承接目标：${section.transitionTarget || "待补"}\n   - 反面/反证：${section.counterPoint || "待补"}\n   - 风格目标：${section.styleObjective}\n   - 强约束证据：${section.mustUseEvidenceIds?.join(", ") || "待补"}\n   - 证据：${section.evidenceIds.join(", ") || "待补"}\n   - 节奏：${section.tone}`,
           ),
           "",
         ].join("\n")
@@ -96,6 +130,18 @@ export function buildProjectMarkdown(bundle: ProjectBundle): string {
           `- 总结：${reviewReport.overallVerdict}`,
           `- 完成度：${reviewReport.completionScore}`,
           ...reviewReport.checks.map((check) => `- [${check.status}] ${check.title}：${check.detail}`),
+          "",
+          "## Quality Pyramid",
+          ...reviewReport.qualityPyramid.map(
+            (layer) =>
+              `- ${layer.level} ${layer.title} [${layer.status}]：${layer.summary}${layer.mustFix.length ? ` | must_fix: ${layer.mustFix.join("；")}` : ""}${layer.shouldFix.length ? ` | should_fix: ${layer.shouldFix.join("；")}` : ""}`,
+          ),
+        ].join("\n")
+      : "",
+    editorialFeedbackEvents.length > 0
+      ? [
+          "## Editorial Feedback",
+          ...editorialFeedbackEvents.map((event) => `- ${event.eventType} | ${event.sectionHeading} | before=${event.beforeText.slice(0, 24)} | after=${event.afterText.slice(0, 24)}`),
         ].join("\n")
       : "",
     project.vitalityCheck
@@ -140,7 +186,7 @@ export function buildAnalysisDraft(input: {
 
   const outlineLines = outlineDraft.sections.map(
     (section) =>
-      `- ${section.heading}：主判断：${section.sectionThesis || "待补"}。唯一动作：${section.singlePurpose || "待补"}。必须落地：${section.mustLandDetail || "待补"}。场景/代价：${section.sceneOrCost || "待补"}。动作：${section.move}。打破：${section.break}。承接：${section.bridge}。承接目标：${section.transitionTarget || "待补"}。反面/反证：${section.counterPoint || "待补"}。风格目标：${section.styleObjective}。强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"}。一般证据：${section.evidenceIds.join("、") || "待补"}`,
+      `- ${section.heading}：主判断：${section.sectionThesis || "待补"}。唯一动作：${section.singlePurpose || "待补"}。主线句：${section.mainlineSentence || "待补"}。回环目标：${section.callbackTarget || "待补"}。微型故事：${section.microStoryNeed || "待补"}。发现转折：${section.discoveryTurn || "待补"}。必须落地：${section.mustLandDetail || "待补"}。场景/代价：${section.sceneOrCost || "待补"}。动作：${section.move}。打破：${section.break}。承接：${section.bridge}。承接目标：${section.transitionTarget || "待补"}。反面/反证：${section.opposingView || section.counterPoint || "待补"}。读者用途：${section.readerUsefulness || "待补"}。风格目标：${section.styleObjective}。强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"}。一般证据：${section.evidenceIds.join("、") || "待补"}`,
   );
 
   return [
@@ -153,6 +199,9 @@ export function buildAnalysisDraft(input: {
     "",
     "## ThinkCard",
     `- 素材吃透：${project.thinkCard.materialDigest || "待补"}`,
+    `- 文章原型：${project.thinkCard.articlePrototype || "待补"}`,
+    `- 目标读者画像：${project.thinkCard.targetReaderPersona || "待补"}`,
+    `- 创作锚点：${project.thinkCard.creativeAnchor || "待补"}`,
     `- HKR-Happy：${project.thinkCard.hkr.happy || "待补"}`,
     `- HKR-Knowledge：${project.thinkCard.hkr.knowledge || "待补"}`,
     `- HKR-Resonance：${project.thinkCard.hkr.resonance || "待补"}`,
@@ -161,6 +210,8 @@ export function buildAnalysisDraft(input: {
     "## StyleCore",
     `- 节奏推进：${project.styleCore.rhythm || "待补"}`,
     `- 故意打破：${project.styleCore.breakPattern || "待补"}`,
+    `- 开头动作：${project.styleCore.openingMoves.join(" / ") || "待补"}`,
+    `- 转场动作：${project.styleCore.transitionMoves.join(" / ") || "待补"}`,
     `- 人物画像法：${project.styleCore.characterPortrait || "待补"}`,
     `- 文化升维：${project.styleCore.culturalLift || "待补"}`,
     `- 句式断裂：${project.styleCore.sentenceBreak || "待补"}`,

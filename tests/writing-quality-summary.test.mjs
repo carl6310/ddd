@@ -37,6 +37,9 @@ test("writing quality summary builds exportable lines and dashboard snapshot", (
       editedMarkdown: "## 第一段\n判断。[SC:sc_a] 但代价也摆在这里。",
     },
     reviewReport: {
+      qualityPyramid: [
+        { level: "L1", title: "WritingLint", status: "pass", summary: "ok", mustFix: [], shouldFix: [], optionalPolish: [] },
+      ],
       checks: [],
       paragraphFlags: [],
       rewriteIntents: [],
@@ -48,6 +51,7 @@ test("writing quality summary builds exportable lines and dashboard snapshot", (
   const lines = buildWritingQualitySummaryLines(bundle);
 
   assert.ok(typeof snapshot.editorialEventCount === "number");
+  assert.ok(Array.isArray(snapshot.qualityPyramid));
   assert.ok(lines.some((line) => line.includes("总体质量分")));
   assert.ok(lines.some((line) => line.includes("Quality gate")));
 });

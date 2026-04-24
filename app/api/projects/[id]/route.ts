@@ -1,6 +1,6 @@
 import { fail, ok } from "@/lib/api";
 import { getProjectBundle, saveOutlineDraft, saveResearchBrief, saveSectorModel, updateProject } from "@/lib/repository";
-import type { HAMDFrame, HKRRFrame, OutlineDraft, ResearchBrief, SectorModel, ThinkCard, StyleCore, VitalityCheck, WritingMovesFrame } from "@/lib/types";
+import type { HAMDFrame, HKRRFrame, OutlineDraft, ResearchBrief, SectorModel, ThinkCard, StyleCore, TopicMeta, VitalityCheck, WritingMovesFrame } from "@/lib/types";
 import { isProjectFrameComplete } from "@/lib/workflow";
 import { isStyleCoreComplete, isThinkCardComplete } from "@/lib/author-cards";
 
@@ -32,6 +32,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       thesis?: string;
       coreQuestion?: string;
       notes?: string;
+      topicMeta?: Partial<TopicMeta>;
       thinkCard?: Partial<ThinkCard>;
       styleCore?: Partial<StyleCore>;
       vitalityCheck?: VitalityCheck;
@@ -65,6 +66,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       thesis: body.thesis ?? bundle.project.thesis,
       coreQuestion: body.coreQuestion ?? bundle.project.coreQuestion,
       notes: body.notes ?? bundle.project.notes,
+      topicMeta: body.topicMeta ? { ...bundle.project.topicMeta, ...body.topicMeta } : bundle.project.topicMeta,
       thinkCard: nextThinkCard,
       styleCore: nextStyleCore,
       vitalityCheck: body.vitalityCheck ?? bundle.project.vitalityCheck,
@@ -104,6 +106,6 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return ok({ project: nextProject, bundle: getProjectBundle(id), frameComplete: isProjectFrameComplete(nextProject) });
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "保存 ThinkCard / StyleCore 失败。", 500);
+    return fail(error instanceof Error ? error.message : "保存选题判断 / 表达策略失败。", 500);
   }
 }

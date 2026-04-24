@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { ProjectBundle } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import type { ProjectBundle, SourceCard } from "@/lib/types";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
 import { InlineTextEdit, InlineTextAreaEdit } from "@/components/ui/inline-edit";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
@@ -11,6 +11,7 @@ import { classifyEditorialFeedbackEvents } from "@/lib/editorial-feedback/classi
 
 type DraftsSection = "sector-model" | "outline" | "drafts" | "publish-prep";
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
+type StaleArtifact = "research-brief" | "sector-model" | "outline" | "drafts" | "review" | "publish-prep";
 
 interface DraftsTabProps {
   selectedBundle: ProjectBundle;
@@ -20,8 +21,10 @@ interface DraftsTabProps {
   isPending: boolean;
   setIsPending: (pending: boolean) => void;
   setMessage: (msg: string) => void;
+  markArtifactsStale: (artifacts: StaleArtifact[]) => void;
   runProjectStep: (step: WorkbenchStepPath, successMessage: string) => Promise<void>;
   generatePublishPrep: () => Promise<void>;
+  surfaceTitle?: string;
   onOpenVitalityCheck: () => void;
   focusSection: "research-brief" | "source-form" | "source-library" | "sector-model" | "outline" | "drafts" | "publish-prep" | null;
 }
@@ -34,17 +37,26 @@ export function DraftsTab({
   isPending,
   setIsPending,
   setMessage,
+  markArtifactsStale,
   runProjectStep,
   generatePublishPrep,
+  surfaceTitle = "写作",
   onOpenVitalityCheck,
   focusSection,
 }: DraftsTabProps) {
   const [draftMessage, setDraftMessage] = useState("");
   const [activeSection, setActiveSection] = useState<DraftsSection>("sector-model");
+  const [draftPreviewMode, setDraftPreviewMode] = useState<"analysis" | "narrative">("narrative");
   const hasPublishPackage = Boolean(selectedBundle.publishPackage);
   const hasArticleDraft = Boolean(selectedBundle.articleDraft);
   const hasOutlineDraft = Boolean(selectedBundle.outlineDraft);
   const canPublish = canPreparePublish(selectedBundle.reviewReport, selectedBundle.project.vitalityCheck);
+  const exportHref = `/api/projects/${selectedProjectId}/export/markdown`;
+  const sourceCards = selectedBundle.sourceCards;
+  const sourceCardMap = useMemo(
+    () => new Map(sourceCards.map((card) => [card.id, card])),
+    [sourceCards],
+  );
 
   useEffect(() => {
     if (focusSection === "sector-model" || focusSection === "outline" || focusSection === "drafts" || focusSection === "publish-prep") {
@@ -78,7 +90,8 @@ export function DraftsTab({
         throw new Error(payload.error || "保存人工改写稿失败。");
       }
       await refreshProjectsAndBundle(selectedProjectId);
-      setDraftMessage("人工改写稿已保存。");
+      markArtifactsStale(["review", "publish-prep"]);
+      setDraftMessage("人工改写稿已保存。VitalityCheck 和发布整理可能需要重生成。");
     } catch (error) {
       setDraftMessage(error instanceof Error ? error.message : "保存人工改写稿失败。");
     } finally {
@@ -103,7 +116,8 @@ export function DraftsTab({
         throw new Error(payload.error || "保存板块建模失败。");
       }
       await refreshProjectsAndBundle(selectedProjectId);
-      setDraftMessage("板块建模已保存。");
+      markArtifactsStale(["outline", "drafts", "review", "publish-prep"]);
+      setDraftMessage("板块建模已保存。提纲、正文、检查和发布整理可能需要重生成。");
     } catch (error) {
       setDraftMessage(error instanceof Error ? error.message : "保存板块建模失败。");
     } finally {
@@ -128,7 +142,8 @@ export function DraftsTab({
         throw new Error(payload.error || "保存提纲失败。");
       }
       await refreshProjectsAndBundle(selectedProjectId);
-      setDraftMessage("段落提纲已保存。");
+      markArtifactsStale(["drafts", "review", "publish-prep"]);
+      setDraftMessage("段落提纲已保存。正文、检查和发布整理可能需要重生成。");
     } catch (error) {
       setDraftMessage(error instanceof Error ? error.message : "保存提纲失败。");
     } finally {
@@ -139,29 +154,26 @@ export function DraftsTab({
   return (
     <>
       <section className="card stack section-shell">
-        <div className="card-header">
-          <div>
-            <h2>流转工作区</h2>
-            <p className="subtle">把建模、提纲、双稿和发布整理拆成二级菜单，切换更直接。</p>
+        <div className="section-shell-compact-head">
+          <h2>{surfaceTitle}</h2>
+          <div className="section-subnav">
+            <button className={`section-subnav-button ${activeSection === "sector-model" ? "active" : ""}`} onClick={() => setActiveSection("sector-model")}>
+              板块建模
+            </button>
+            <button className={`section-subnav-button ${activeSection === "outline" ? "active" : ""}`} onClick={() => setActiveSection("outline")}>
+              段落提纲
+            </button>
+            <button className={`section-subnav-button ${activeSection === "drafts" ? "active" : ""}`} onClick={() => setActiveSection("drafts")}>
+              双稿编辑
+            </button>
+            <button className={`section-subnav-button ${activeSection === "publish-prep" ? "active" : ""}`} onClick={() => setActiveSection("publish-prep")}>
+              发布整理
+            </button>
           </div>
-        </div>
-        <div className="section-subnav">
-          <button className={`section-subnav-button ${activeSection === "sector-model" ? "active" : ""}`} onClick={() => setActiveSection("sector-model")}>
-            板块建模
-          </button>
-          <button className={`section-subnav-button ${activeSection === "outline" ? "active" : ""}`} onClick={() => setActiveSection("outline")}>
-            段落提纲
-          </button>
-          <button className={`section-subnav-button ${activeSection === "drafts" ? "active" : ""}`} onClick={() => setActiveSection("drafts")}>
-            双稿编辑
-          </button>
-          <button className={`section-subnav-button ${activeSection === "publish-prep" ? "active" : ""}`} onClick={() => setActiveSection("publish-prep")}>
-            发布整理
-          </button>
         </div>
 
         {activeSection === "sector-model" ? (
-          <section className="stack section-panel">
+          <section className="stack section-panel writing-form-stage sector-model-stage">
             <div className="section-panel-header">
               <h3>板块建模</h3>
               {selectedBundle.sectorModel ? <span className="badge">{selectedBundle.sectorModel.zones.length} 个片区</span> : null}
@@ -169,6 +181,11 @@ export function DraftsTab({
             {selectedBundle.sectorModel ? (
               <div className="stack">
                 {draftMessage ? <p className="subtle">{draftMessage}</p> : null}
+                <article className="writing-hero-panel">
+                  <span>板块主判断</span>
+                  <strong>{selectedBundle.sectorModel.summaryJudgement || "还没有总判断"}</strong>
+                  <p>{selectedBundle.sectorModel.spatialBackbone || "补齐空间骨架后，这里会成为写作阶段的主画布摘要。"}</p>
+                </article>
                 <div className="workspace-pane-grid">
                   <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
                     <label>
@@ -264,14 +281,21 @@ export function DraftsTab({
                           } rows={5} />
                       </label>
                       <label>
-                        证据 ID
-                        <InlineTextAreaEdit value={zone.evidenceIds.join("\n")} onChange={(val: string) => updateSectorModel(setSelectedBundle, {
+                        证据资料卡
+                        <EvidenceSelector
+                          selectedIds={zone.evidenceIds}
+                          sourceCards={sourceCards}
+                          sourceCardMap={sourceCardMap}
+                          helperText="给这个片区挑几张最能支撑判断的资料卡。"
+                          onChange={(nextIds) =>
+                            updateSectorModel(setSelectedBundle, {
                               ...selectedBundle.sectorModel!,
                               zones: selectedBundle.sectorModel!.zones.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, evidenceIds: splitLines(val) } : entry,
+                                entryIndex === index ? { ...entry, evidenceIds: nextIds } : entry,
                               ),
                             })
-                          } rows={4} />
+                          }
+                        />
                       </label>
                     </AccordionCard>
                   ))}
@@ -295,7 +319,7 @@ export function DraftsTab({
         ) : null}
 
         {activeSection === "outline" ? (
-          <section className="stack section-panel">
+          <section className="stack section-panel writing-form-stage outline-stage">
             <div className="section-panel-header">
               <h3>段落级提纲</h3>
               {selectedBundle.outlineDraft ? <span className="badge">{selectedBundle.outlineDraft.sections.length} 段</span> : null}
@@ -303,6 +327,11 @@ export function DraftsTab({
             {selectedBundle.outlineDraft ? (
               <div className="stack">
                 {draftMessage ? <p className="subtle">{draftMessage}</p> : null}
+                <article className="writing-hero-panel">
+                  <span>段落任务书</span>
+                  <strong>{selectedBundle.outlineDraft.hook || "还没有开头钩子"}</strong>
+                  <p>{selectedBundle.outlineDraft.closing || "结尾收束会决定整篇文章最后落在判断、行动还是情绪回收上。"}</p>
+                </article>
                 <div className="workspace-pane-grid">
                   <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
                     <label>
@@ -332,7 +361,13 @@ export function DraftsTab({
                     </div>
                     <ContainedScrollArea className="outline-list editor-scroll-stack">
                   {selectedBundle.outlineDraft.sections.map((section, index) => (
-                    <AccordionCard title={`段落 ${index + 1}: ${section.heading || "未命名段落"}`} description={section.purpose} className="outline-item" key={section.id}>
+                    <AccordionCard
+                      title={`段落 ${index + 1}: ${section.heading || "未命名段落"}`}
+                      description={buildOutlineSectionDescription(section)}
+                      className="outline-item"
+                      defaultOpen={index === 0}
+                      key={section.id}
+                    >
                       <label>
                         段落标题
                         <InlineTextEdit value={section.heading} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
@@ -383,6 +418,9 @@ export function DraftsTab({
                             })
                           } rows={3} />
                       </label>
+                      <details className="outline-advanced-fields">
+                        <summary>叙事与转折约束</summary>
+                        <div className="outline-advanced-grid">
                       <label>
                         场景 / 代价
                         <InlineTextAreaEdit value={section.sceneOrCost} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
@@ -394,6 +432,46 @@ export function DraftsTab({
                           } rows={3} />
                       </label>
                       <label>
+                        主线句
+                        <InlineTextAreaEdit value={section.mainlineSentence} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, mainlineSentence: val } : entry,
+                              ),
+                            })
+                          } rows={3} />
+                      </label>
+                      <label>
+                        回环目标
+                        <InlineTextAreaEdit value={section.callbackTarget} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, callbackTarget: val } : entry,
+                              ),
+                            })
+                          } rows={2} />
+                      </label>
+                      <label>
+                        微型故事需求
+                        <InlineTextAreaEdit value={section.microStoryNeed} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, microStoryNeed: val } : entry,
+                              ),
+                            })
+                          } rows={2} />
+                      </label>
+                      <label>
+                        发现转折
+                        <InlineTextAreaEdit value={section.discoveryTurn} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, discoveryTurn: val } : entry,
+                              ),
+                            })
+                          } rows={2} />
+                      </label>
+                      <label>
                         推进动作
                         <InlineTextAreaEdit value={section.move} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                               ...selectedBundle.outlineDraft!,
@@ -403,26 +481,45 @@ export function DraftsTab({
                             })
                           } rows={3} />
                       </label>
+                        </div>
+                      </details>
                       <label>
-                        强约束证据 ID
-                        <InlineTextAreaEdit value={section.mustUseEvidenceIds.join("\n")} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                        强约束证据
+                        <EvidenceSelector
+                          selectedIds={section.mustUseEvidenceIds}
+                          sourceCards={sourceCards}
+                          sourceCardMap={sourceCardMap}
+                          helperText="这几张资料卡必须真的写进正文，不只是备选。"
+                          onChange={(nextIds) =>
+                            updateOutlineDraft(setSelectedBundle, {
                               ...selectedBundle.outlineDraft!,
                               sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, mustUseEvidenceIds: splitLines(val) } : entry,
+                                entryIndex === index ? { ...entry, mustUseEvidenceIds: nextIds } : entry,
                               ),
                             })
-                          } rows={4} />
+                          }
+                        />
                       </label>
                       <label>
-                        证据 ID
-                        <InlineTextAreaEdit value={section.evidenceIds.join("\n")} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                        参考证据
+                        <EvidenceSelector
+                          selectedIds={section.evidenceIds}
+                          sourceCards={sourceCards}
+                          sourceCardMap={sourceCardMap}
+                          helperText="这些资料卡会参与这段的论证，不一定每张都强制落笔。"
+                          onChange={(nextIds) =>
+                            updateOutlineDraft(setSelectedBundle, {
                               ...selectedBundle.outlineDraft!,
                               sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, evidenceIds: splitLines(val) } : entry,
+                                entryIndex === index ? { ...entry, evidenceIds: nextIds } : entry,
                               ),
                             })
-                          } rows={4} />
+                          }
+                        />
                       </label>
+                      <details className="outline-advanced-fields">
+                        <summary>节奏、反证与读者用途</summary>
+                        <div className="outline-advanced-grid">
                       <div className="two-column">
                         <label>
                           节奏
@@ -465,6 +562,28 @@ export function DraftsTab({
                             })
                           } rows={3} />
                       </label>
+                      <label>
+                        对立观点
+                        <InlineTextAreaEdit value={section.opposingView} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, opposingView: val } : entry,
+                              ),
+                            })
+                          } rows={3} />
+                      </label>
+                      <label>
+                        读者用途
+                        <InlineTextAreaEdit value={section.readerUsefulness} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
+                              ...selectedBundle.outlineDraft!,
+                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, readerUsefulness: val } : entry,
+                              ),
+                            })
+                          } rows={3} />
+                      </label>
+                        </div>
+                      </details>
                     </AccordionCard>
                   ))}
                     </ContainedScrollArea>
@@ -487,30 +606,18 @@ export function DraftsTab({
         ) : null}
 
         {activeSection === "drafts" ? (
-          <section className="stack section-panel">
+          <section className="stack section-panel draft-editor-stage">
             <div className="section-panel-header">
               <h3>初稿与人工改写</h3>
               {selectedBundle.articleDraft ? <span className="badge">双稿已就绪</span> : null}
             </div>
             {draftMessage ? <p className="subtle">{draftMessage}</p> : null}
             {selectedBundle.articleDraft ? (
-              <div className="workspace-pane-grid">
-                <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
-                  <div className="draft-grid">
-                    <label>
-                      分析版
-                      <AutoGrowTextarea value={selectedBundle.articleDraft.analysisMarkdown} readOnly rows={10} />
-                    </label>
-                    <label>
-                      成文版
-                      <AutoGrowTextarea value={selectedBundle.articleDraft.narrativeMarkdown} readOnly rows={10} />
-                    </label>
-                  </div>
-                </ContainedScrollArea>
-                <div className="workspace-pane workspace-pane-hero stack">
-                  <label>
+              <div className="draft-workspace-grid">
+                <div className="workspace-pane draft-editor-pane">
+                  <label className="draft-editor-field">
                     人工改写版
-                    <InlineTextAreaEdit value={selectedBundle.articleDraft.editedMarkdown || selectedBundle.articleDraft.narrativeMarkdown} onChange={(val: string) => setSelectedBundle((current) =>
+                    <InlineTextAreaEdit className="draft-editor-surface" value={selectedBundle.articleDraft.editedMarkdown || selectedBundle.articleDraft.narrativeMarkdown} onChange={(val: string) => setSelectedBundle((current) =>
                           current
                             ? {
                                 ...current,
@@ -524,6 +631,7 @@ export function DraftsTab({
                       } rows={18} />
                   </label>
                   <button
+                    className="draft-save-button"
                     onClick={() => {
                       const nextEditedMarkdown = selectedBundle.articleDraft?.editedMarkdown || selectedBundle.articleDraft?.narrativeMarkdown || "";
                       const events = selectedBundle.articleDraft
@@ -542,7 +650,49 @@ export function DraftsTab({
                   >
                     保存人工改写稿
                   </button>
+                  {selectedBundle.editorialFeedbackEvents.length > 0 ? (
+                    <article className="status-block draft-feedback-panel">
+                      <h3>编辑反馈回路</h3>
+                      <ul className="compact-list">
+                        {selectedBundle.editorialFeedbackEvents.slice(0, 6).map((event) => (
+                          <li key={event.id}>
+                            <strong>{event.eventType}</strong>
+                            <span>{event.sectionHeading}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  ) : null}
                 </div>
+                <section className="workspace-pane draft-preview-pane">
+                  <div className="draft-pane-head">
+                    <div>
+                      <h4>{draftPreviewMode === "analysis" ? "分析版预览" : "成文版预览"}</h4>
+                      <p className="subtle">只读参考区，避免多个长文本框并排滚动。</p>
+                    </div>
+                    <div className="draft-preview-tabs" role="tablist" aria-label="初稿预览版本">
+                      <button
+                        type="button"
+                        className={draftPreviewMode === "narrative" ? "active" : ""}
+                        onClick={() => setDraftPreviewMode("narrative")}
+                      >
+                        成文版
+                      </button>
+                      <button
+                        type="button"
+                        className={draftPreviewMode === "analysis" ? "active" : ""}
+                        onClick={() => setDraftPreviewMode("analysis")}
+                      >
+                        分析版
+                      </button>
+                    </div>
+                  </div>
+                  <ContainedScrollArea className="draft-preview-reader">
+                    <pre className="draft-preview-content">{draftPreviewMode === "analysis"
+                        ? selectedBundle.articleDraft.analysisMarkdown
+                        : selectedBundle.articleDraft.narrativeMarkdown}</pre>
+                  </ContainedScrollArea>
+                </section>
               </div>
             ) : (
               <div className="empty-state stack">
@@ -560,10 +710,15 @@ export function DraftsTab({
         ) : null}
 
         {activeSection === "publish-prep" ? (
-          <section className="stack section-panel">
+          <section className="stack section-panel publish-prep-stage">
             <div className="section-panel-header">
               <h3>发布前整理</h3>
-              <div className="action-row">
+              <div className="action-row publish-action-row">
+                {selectedBundle.articleDraft ? (
+                  <a className="primary-button publish-export-button" href={exportHref} target="_blank" rel="noreferrer">
+                    {selectedBundle.publishPackage ? "导出 Markdown" : "导出当前 Markdown"}
+                  </a>
+                ) : null}
                 {selectedBundle.publishPackage ? <span className="badge">{selectedBundle.publishPackage.titleOptions.length} 个标题候选</span> : null}
                 <button
                   className="secondary-button"
@@ -577,14 +732,34 @@ export function DraftsTab({
             </div>
             {selectedBundle.publishPackage ? (
               <div className="stack">
-                <p className="subtle">你改完正文后，可以直接点上面的按钮重新生成这一整套发布整理结果。</p>
+                <article className="publish-command-strip">
+                  <div>
+                    <strong>发布包已就绪</strong>
+                    <p>这里集中处理标题、摘要、配图位和 Markdown 导出；正文改过后先重跑检查，再重新生成发布整理。</p>
+                  </div>
+                  <div className="action-row">
+                    <button
+                      className="secondary-button"
+                      onClick={() => void runProjectStep("review", "质检报告已更新。")}
+                      disabled={isPending || !selectedBundle.articleDraft}
+                    >
+                      重新检查
+                    </button>
+                    <button className="secondary-button" onClick={() => void generatePublishPrep()} disabled={isPending || !canPublish} type="button">
+                      重新整理
+                    </button>
+                    <a className="primary-button publish-export-button" href={exportHref} target="_blank" rel="noreferrer">
+                      导出 Markdown
+                    </a>
+                  </div>
+                </article>
                 {selectedBundle.publishPackage.qualityGate ? (
                   <article className="status-block">
-                    <h3>Writing Quality Gate</h3>
-                    <p className="subtle">当前模式：{selectedBundle.publishPackage.qualityGate.mode}，不会拦截发布前整理，但会明确提醒先修什么。</p>
+                    <h3>写作质量门槛</h3>
+                    <p className="subtle">当前模式：{selectedBundle.publishPackage.qualityGate.mode}，会明确提醒哪一层必须先修。</p>
                     {selectedBundle.publishPackage.qualityGate.mustFix.length > 0 ? (
                       <>
-                        <strong>Must Fix</strong>
+                        <strong>必须先修</strong>
                         <ul className="compact-list">
                           {selectedBundle.publishPackage.qualityGate.mustFix.map((item) => (
                             <li key={item.code}>
@@ -597,7 +772,7 @@ export function DraftsTab({
                     ) : null}
                     {selectedBundle.publishPackage.qualityGate.shouldFix.length > 0 ? (
                       <>
-                        <strong>Should Fix</strong>
+                        <strong>建议修正</strong>
                         <ul className="compact-list">
                           {selectedBundle.publishPackage.qualityGate.shouldFix.map((item) => (
                             <li key={item.code}>
@@ -610,7 +785,7 @@ export function DraftsTab({
                     ) : null}
                     {selectedBundle.publishPackage.qualityGate.optionalPolish.length > 0 ? (
                       <>
-                        <strong>Optional Polish</strong>
+                        <strong>可选润色</strong>
                         <ul className="compact-list">
                           {selectedBundle.publishPackage.qualityGate.optionalPolish.map((item) => (
                             <li key={item.code}>
@@ -621,6 +796,19 @@ export function DraftsTab({
                         </ul>
                       </>
                     ) : null}
+                  </article>
+                ) : null}
+                {selectedBundle.reviewReport?.qualityPyramid?.length ? (
+                  <article className="status-block">
+                    <h3>质量金字塔</h3>
+                    <ul className="compact-list">
+                      {selectedBundle.reviewReport.qualityPyramid.map((layer) => (
+                        <li key={layer.level}>
+                          <strong>{layer.level} {layer.title}</strong>
+                          <span>{layer.status} · {layer.summary}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </article>
                 ) : null}
                 <article className="status-block">
@@ -654,12 +842,11 @@ export function DraftsTab({
                     ))}
                   </ul>
                 </article>
-                <div className="action-row" style={{ marginTop: '24px', justifyContent: 'center' }}>
+                <div className="action-row publish-review-action-row">
                   <button
-                    className="primary-button"
+                    className="secondary-button publish-review-button"
                     onClick={() => void runProjectStep("review", "已请求全面质量评审。")}
                     disabled={isPending}
-                    style={{ padding: '12px 32px', fontSize: '15px' }}
                   >
                     请求人工质量评审
                   </button>
@@ -670,14 +857,14 @@ export function DraftsTab({
                 {canPublish ? (
                   <>
                     <p>已经可以进入发布前整理了。</p>
-                    <p className="subtle">当前不会因为写作质量 gate 被硬拦，但建议先看完 warn-only 提示再继续。</p>
+                    <p className="subtle">建议先看完质量金字塔和门槛提示，再决定是否直接进入发布整理。</p>
                   </>
                 ) : (
                   <>
                     <p>现在还不能生成发布前整理。</p>
                     <div className="action-row">
                       <button
-                        className="primary-button"
+                        className="secondary-button"
                         onClick={onOpenVitalityCheck}
                         disabled={isPending}
                       >
@@ -730,9 +917,104 @@ function updateOutlineDraft(
   );
 }
 
+function EvidenceSelector({
+  selectedIds,
+  sourceCards,
+  sourceCardMap,
+  helperText,
+  onChange,
+}: {
+  selectedIds: string[];
+  sourceCards: SourceCard[];
+  sourceCardMap: Map<string, SourceCard>;
+  helperText: string;
+  onChange: (nextIds: string[]) => void;
+}) {
+  const selectedCards = selectedIds
+    .map((id) => sourceCardMap.get(id))
+    .filter((card): card is SourceCard => Boolean(card));
+
+  function toggleSourceCard(sourceCardId: string) {
+    if (selectedIds.includes(sourceCardId)) {
+      onChange(selectedIds.filter((id) => id !== sourceCardId));
+      return;
+    }
+    onChange([...selectedIds, sourceCardId]);
+  }
+
+  return (
+    <div className="evidence-picker">
+      <p className="subtle evidence-picker-help">{helperText}</p>
+
+      {selectedCards.length > 0 ? (
+        <div className="evidence-picker-selected">
+          {selectedCards.map((card) => (
+            <button
+              type="button"
+              key={card.id}
+              className="evidence-pill"
+              onClick={() => toggleSourceCard(card.id)}
+              title={`点击移除：${card.title}`}
+            >
+              <strong>{card.title}</strong>
+              <span>{card.id}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="subtle evidence-picker-empty">还没选资料卡。下面按标题勾选就行。</p>
+      )}
+
+      <ContainedScrollArea className="evidence-picker-list">
+        <div className="evidence-picker-card-list">
+          {sourceCards.map((card) => {
+            const checked = selectedIds.includes(card.id);
+            return (
+              <label key={card.id} className={`evidence-card ${checked ? "is-selected" : ""}`}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleSourceCard(card.id)}
+                />
+                <div className="evidence-card-body">
+                  <div className="evidence-card-head">
+                    <strong>{card.title}</strong>
+                    <span>{card.id}</span>
+                  </div>
+                  <p>{card.summary || card.evidence || "这张资料卡还没有摘要。"}</p>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </ContainedScrollArea>
+
+      <details className="evidence-picker-advanced">
+        <summary>高级模式：直接看内部 ID</summary>
+        <AutoGrowTextarea
+          value={selectedIds.join("\n")}
+          onChange={(event) => onChange(splitLines(event.target.value))}
+          rows={4}
+        />
+      </details>
+    </div>
+  );
+}
+
 function splitLines(value: string) {
   return value
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function buildOutlineSectionDescription(section: NonNullable<ProjectBundle["outlineDraft"]>["sections"][number]) {
+  const brief = (value: string, maxLength = 34) => (value.length > maxLength ? `${value.slice(0, maxLength)}...` : value);
+  const summaryItems = [
+    section.purpose ? `目的：${brief(section.purpose)}` : "",
+    section.sectionThesis ? `主判断：${brief(section.sectionThesis)}` : "",
+    section.singlePurpose || section.move ? `动作：${brief(section.singlePurpose || section.move, 28)}` : "",
+  ].filter(Boolean);
+
+  return summaryItems.join(" / ") || "这一段还没有补充任务说明。";
 }

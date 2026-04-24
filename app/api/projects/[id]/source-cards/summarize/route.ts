@@ -20,14 +20,15 @@ export async function POST(request: Request, context: RouteContext) {
       return fail("请先粘贴资料原文。");
     }
 
+    const title = body.title?.trim() || "未命名资料";
     const result = enqueueProjectJob({
       projectId: id,
       step: "source-card-summarize",
       payload: {
         rawText,
-        title: body.title?.trim() || "未命名资料",
+        title,
       },
-      dedupeScope: `${body.title?.trim() || "未命名资料"}\n${rawText}`,
+      dedupeScope: `${title}\n${rawText}`,
     });
 
     return ok(

@@ -1,4 +1,4 @@
-import type { OutlineDraft, PublishPackage, ResearchBrief, ReviewReport, SectorModel, SourceCard, TopicCoCreationResult, TopicJudgeResult } from "@/lib/types";
+import type { OutlineDraft, PublishPackage, ResearchBrief, ReviewReport, SectorModel, SourceCard, TopicCoCreationModelResult, TopicJudgeResult } from "@/lib/types";
 import type { TaskName } from "@/lib/prompt-engine";
 import { buildPromptTask } from "@/lib/prompt-engine";
 import { buildLLMCallHashes, recordLLMCall, summarizeLLMError } from "@/lib/observability/llm-calls";
@@ -14,6 +14,10 @@ const modelName = process.env.MODEL_NAME ?? "gpt-4.1-mini";
 const apiBaseUrl = process.env.MODEL_API_BASE_URL ?? "https://api.openai.com/v1";
 const apiPath = process.env.MODEL_API_PATH ?? "/chat/completions";
 const temperature = Number(process.env.MODEL_TEMPERATURE ?? "0.4");
+const thinkingType = process.env.MODEL_THINKING_TYPE?.trim();
+const reasoningEffort = process.env.MODEL_REASONING_EFFORT?.trim();
+const timeoutScale = Number(process.env.MODEL_TIMEOUT_SCALE ?? (modelName === "deepseek-v4-pro" ? "2" : "1"));
+const maxTokenScale = Number(process.env.MODEL_MAX_TOKEN_SCALE ?? (thinkingType === "enabled" ? "4" : "1"));
 
 type TaskTuning = {
   timeoutMs: number;
@@ -36,14 +40,15 @@ export async function runStructuredTask<T>(
   options: StructuredTaskOptions = {},
 ): Promise<T> {
   const prompt = buildPromptTask(task, input);
+  const tuning = getTaskTuning(task);
   if (modelMode === "mock") {
     const mockOutput = buildMockResponse(task, input);
     maybeRecordAudit({
       task,
       prompt,
       content: JSON.stringify(mockOutput),
-      timeoutMs: getTaskTuning(task).timeoutMs,
-      maxTokens: getTaskTuning(task).maxTokens,
+      timeoutMs: tuning.timeoutMs,
+      maxTokens: tuning.maxTokens,
       latencyMs: 0,
       tokenUsage: {},
       status: "ok",
@@ -57,7 +62,6 @@ export async function runStructuredTask<T>(
     throw new Error("缺少 MODEL_API_KEY，无法调用远程模型。");
   }
 
-  const tuning = getTaskTuning(task);
   const tokenAttempts = [tuning.maxTokens, tuning.retryMaxTokens].filter(
     (value, index, values): value is number => typeof value === "number" && values.indexOf(value) === index,
   );
@@ -216,6 +220,19 @@ async function callModel(
 ) {
   let response: Response;
   const startedAt = Date.now();
+  const requestBody: Record<string, unknown> = {
+    model: modelName,
+    temperature,
+    max_tokens: input.maxTokens,
+    ...(input.useJsonMode ? { response_format: { type: "json_object" } } : {}),
+    ...(thinkingType ? { thinking: { type: thinkingType } } : {}),
+    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    messages: [
+      { role: "system", content: prompt.system },
+      { role: "user", content: prompt.user },
+    ],
+  };
+
   try {
     response = await fetch(`${apiBaseUrl}${apiPath}`, {
       method: "POST",
@@ -224,16 +241,7 @@ async function callModel(
         "Content-Type": "application/json",
         Authorization: `Bearer ${input.apiKey}`,
       },
-      body: JSON.stringify({
-        model: modelName,
-        temperature,
-        max_tokens: input.maxTokens,
-        ...(input.useJsonMode ? { response_format: { type: "json_object" } } : {}),
-        messages: [
-          { role: "system", content: prompt.system },
-          { role: "user", content: prompt.user },
-        ],
-      }),
+      body: JSON.stringify(requestBody),
     });
   } catch (error) {
     if (isTimeoutError(error)) {
@@ -254,13 +262,21 @@ async function callModel(
   }
 
   const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+    choices?: Array<{ message?: { content?: string; reasoning_content?: string }; finish_reason?: string }>;
     usage?: Record<string, unknown>;
   };
   const content = payload.choices?.[0]?.message?.content;
   const finishReason = payload.choices?.[0]?.finish_reason;
   if (!content) {
-    throw new Error("模型没有返回内容。");
+    if (finishReason && finishReason !== "stop") {
+      return {
+        content: "",
+        finishReason,
+        usage: payload.usage ?? {},
+        latencyMs: Date.now() - startedAt,
+      };
+    }
+    throw new Error("模型没有返回最终内容。");
   }
 
   return {
@@ -272,9 +288,13 @@ async function callModel(
 }
 
 function getTaskTuning(task: TaskName): TaskTuning {
+  return applyTimeoutScale(getBaseTaskTuning(task));
+}
+
+function getBaseTaskTuning(task: TaskName): TaskTuning {
   switch (task) {
     case "topic_cocreate":
-      return { timeoutMs: 180000, maxTokens: 2200, retryMaxTokens: 3000, useJsonMode: true };
+      return { timeoutMs: 480000, maxTokens: 4800, retryMaxTokens: 6400, useJsonMode: true };
     case "research_brief":
       return { timeoutMs: 120000, maxTokens: 1800, retryMaxTokens: 2800, useJsonMode: true };
     case "source_card_summarizer":
@@ -282,9 +302,9 @@ function getTaskTuning(task: TaskName): TaskTuning {
     case "sector_modeler":
       return { timeoutMs: 120000, maxTokens: 2400, retryMaxTokens: 3200, useJsonMode: true };
     case "outline_writer":
-      return { timeoutMs: 90000, maxTokens: 2200, retryMaxTokens: 3200, useJsonMode: true };
+      return { timeoutMs: 120000, maxTokens: 3600, retryMaxTokens: 5200, useJsonMode: true };
     case "draft_polisher":
-      return { timeoutMs: 90000, maxTokens: 2400, useJsonMode: false };
+      return { timeoutMs: 120000, maxTokens: 3600, useJsonMode: false };
     case "opening_rewriter":
     case "transition_rewriter":
     case "evidence_weaver":
@@ -297,15 +317,31 @@ function getTaskTuning(task: TaskName): TaskTuning {
     case "quality_reviewer":
       return { timeoutMs: 120000, maxTokens: 2400, retryMaxTokens: 3200, useJsonMode: true };
     case "draft_writer":
-      return { timeoutMs: 90000, maxTokens: 2200, useJsonMode: false };
+      return { timeoutMs: 120000, maxTokens: 4200, useJsonMode: false };
     case "publish_prep":
       return { timeoutMs: 30000, maxTokens: 1400, retryMaxTokens: 2200, useJsonMode: true };
     case "publish_summary_refiner":
       return { timeoutMs: 30000, maxTokens: 500, retryMaxTokens: 800, useJsonMode: true };
     case "think_card":
     case "topic_judge":
-      return { timeoutMs: 120000, maxTokens: 2600, retryMaxTokens: 3600, useJsonMode: true };
+      return { timeoutMs: 240000, maxTokens: 2600, retryMaxTokens: 3600, useJsonMode: true };
   }
+}
+
+function applyTimeoutScale(tuning: TaskTuning): TaskTuning {
+  return {
+    ...tuning,
+    timeoutMs: applyPositiveScale(tuning.timeoutMs, timeoutScale),
+    maxTokens: applyPositiveScale(tuning.maxTokens, maxTokenScale),
+    retryMaxTokens: tuning.retryMaxTokens ? applyPositiveScale(tuning.retryMaxTokens, maxTokenScale) : undefined,
+  };
+}
+
+function applyPositiveScale(value: number, scale: number) {
+  if (!Number.isFinite(scale) || scale <= 0 || scale === 1) {
+    return value;
+  }
+  return Math.round(value * scale);
 }
 
 function buildStructuredTaskLengthError(task: TaskName): string {
@@ -387,7 +423,7 @@ export function buildTopicCoCreateFallback(
   currentIntuition: string,
   rawMaterials: string,
   sourceDigests: CoCreationSourceDigest[] = [],
-): TopicCoCreationResult {
+): TopicCoCreationModelResult {
   return {
     sector,
     candidateAngles: buildTopicCoCreateFromMaterials(sector, currentIntuition, rawMaterials, sourceDigests),
@@ -460,7 +496,7 @@ function mockRewriteParagraph(task: TaskName, paragraphText: string, whyItFails:
   }
 }
 
-function mockTopicCoCreate(sector: string, currentIntuition: string, rawMaterials: string): TopicCoCreationResult {
+function mockTopicCoCreate(sector: string, currentIntuition: string, rawMaterials: string): TopicCoCreationModelResult {
   return buildTopicCoCreateFallback(sector || "未命名板块", currentIntuition, rawMaterials, []);
 }
 
@@ -624,6 +660,12 @@ function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorMode
         singlePurpose: "先纠偏",
         mustLandDetail: "一句话把主判断立住",
         sceneOrCost: "先落一个读者最容易误判的现实感受",
+        mainlineSentence: `${topic} 真正决定价值的，不是标签，而是结构。`,
+        callbackTarget: "开头的反常识判断",
+        microStoryNeed: "需要一个读者最容易误判的微场景",
+        discoveryTurn: "从市场标签转到真实结构",
+        opposingView: "回应“离核心近就该涨”的误判",
+        readerUsefulness: "帮助读者先校正判断框架",
         evidenceIds: sectorModel?.evidenceIds.slice(0, 1) ?? [],
         mustUseEvidenceIds: sectorModel?.evidenceIds.slice(0, 1) ?? [],
         tone: "反常识、拉住读者",
@@ -644,6 +686,12 @@ function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorMode
         singlePurpose: "搭骨架",
         mustLandDetail: "讲清切割线和空间骨架",
         sceneOrCost: "落到通勤或生活路径上的实际差别",
+        mainlineSentence: "把总判断落回空间骨架和生活边界。",
+        callbackTarget: "误解为什么会产生",
+        microStoryNeed: "需要一个生活路径对比",
+        discoveryTurn: "从统一板块感切到被切开的拼图感",
+        opposingView: "回应“一个板块就该一个价格带”的误判",
+        readerUsefulness: "帮助读者在地图上真正看懂差异",
         evidenceIds: sectorModel?.evidenceIds.slice(0, 2) ?? [],
         mustUseEvidenceIds: sectorModel?.evidenceIds.slice(0, 1) ?? [],
         tone: "拆结构、做地图感",
@@ -664,6 +712,12 @@ function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorMode
         singlePurpose: index === 0 ? "落人物场景" : "拆片区差异",
         mustLandDetail: `让读者记住 ${zone.name} 的一句话画像`,
         sceneOrCost: index === 0 ? "落一个具体生活场景" : "写清现实代价或门槛",
+        mainlineSentence: `${zone.name} 是把总判断具体化的那一块拼图。`,
+        callbackTarget: index === 0 ? "空间骨架" : "前一块片区差异",
+        microStoryNeed: index === 0 ? "需要一个具体人物或生活体感" : "最好有一个门槛/代价微场景",
+        discoveryTurn: `让读者发现 ${zone.name} 和想象中的不是同一件事。`,
+        opposingView: zone.risks[0] ?? "回应市场对这一区的惯性想象",
+        readerUsefulness: `帮助读者判断自己是否适合 ${zone.name}。`,
         evidenceIds: zone.evidenceIds,
         mustUseEvidenceIds: zone.evidenceIds.slice(0, Math.max(1, Math.min(2, zone.evidenceIds.length))),
         tone: "分区拆解、给抓手",
@@ -684,6 +738,12 @@ function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorMode
         singlePurpose: "回环收束",
         mustLandDetail: "明确对谁成立、对谁不成立",
         sceneOrCost: "落一个最真实的门槛或代价",
+        mainlineSentence: "把所有片区判断重新收回到读者的真实选择。",
+        callbackTarget: "开头的主判断与误解",
+        microStoryNeed: "最好落一个最终选择场景",
+        discoveryTurn: "从板块分析转到读者自己的取舍",
+        opposingView: "回应“只看标签就能下结论”的偷懒判断",
+        readerUsefulness: "告诉读者下一步该怎么判断自己能不能接。",
         evidenceIds: sectorModel?.evidenceIds.slice(-2) ?? [],
         mustUseEvidenceIds: sectorModel?.evidenceIds.slice(-1) ?? [],
         tone: "收束、落到购房者判断",
@@ -752,6 +812,7 @@ function mockQualityReviewer(deterministicReview: ReviewReport | null | undefine
       completionScore: 40,
       globalScore: 40,
       checks: [],
+      qualityPyramid: [],
       sectionScores: [],
       paragraphFlags: [],
       rewriteIntents: [],

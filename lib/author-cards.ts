@@ -1,9 +1,12 @@
 import type {
   ArticleType,
+  ArticlePrototype,
   HAMDFrame,
   HKRFrame,
   HKRRFrame,
   ThinkCard,
+  TopicMeta,
+  TopicReaderPersona,
   ReviewSeverity,
   StyleCore,
   VitalityCheck,
@@ -14,6 +17,84 @@ import { buildDefaultWritingMoves } from "@/lib/writing-moves";
 
 const DEFAULT_AI_ROLE =
   "AI 只负责整理素材、对比角度、提醒盲点和生成初稿启发，不替代作者自己的核心角度、真实立场和最终判断。";
+
+function defaultReaderPersona(): TopicReaderPersona {
+  return "risk_aware_reader";
+}
+
+function defaultArticlePrototype(articleType: ArticleType): ArticlePrototype {
+  switch (articleType) {
+    case "规划拆解型":
+      return "spatial_segmentation";
+    case "价值重估型":
+      return "total_judgement";
+    case "误解纠偏型":
+      return "risk_deconstruction";
+    case "断供型":
+      return "decision_service";
+    case "更新拆迁型":
+      return "scene_character";
+  }
+}
+
+export function defaultTopicMeta(): TopicMeta {
+  return {
+    signalMode: null,
+    signalBrief: null,
+    topicScorecard: null,
+    readerLens: [],
+    selectedAngleId: null,
+    selectedAngleTitle: null,
+  };
+}
+
+function buildPrototypeMoveLibrary(prototype: ArticlePrototype) {
+  switch (prototype) {
+    case "spatial_segmentation":
+      return {
+        openingMoves: ["先纠偏统一标签", "再抛出切割线"],
+        transitionMoves: ["从地图跳到生活边界", "从片区差异过渡到决策"],
+        endingEchoMoves: ["回到那条分界线", "回到真正该怎么判断"],
+      };
+    case "buyer_split":
+      return {
+        openingMoves: ["先问这是谁的板块", "先拆适配人群"],
+        transitionMoves: ["从预算切到生活路径", "从人群切到风险边界"],
+        endingEchoMoves: ["回到谁适合谁不适合", "回到读者当前这一步决策"],
+      };
+    case "transaction_observation":
+      return {
+        openingMoves: ["先落交易桌细节", "先讲成交微观异动"],
+        transitionMoves: ["从交易现象转到结构原因", "从产品差异转到价格弹性"],
+        endingEchoMoves: ["回到交易桌", "回到价格和接受度"],
+      };
+    case "decision_service":
+      return {
+        openingMoves: ["先抛一个判断题", "先把读者最关心的分叉点摆出来"],
+        transitionMoves: ["从事实过渡到选择", "从风险过渡到适配"],
+        endingEchoMoves: ["回到该不该继续看", "回到下一步该怎么做"],
+      };
+    case "risk_deconstruction":
+      return {
+        openingMoves: ["先拆最大误解", "先指出容易踩坑的地方"],
+        transitionMoves: ["从亮点切到代价", "从误判切到不成立条件"],
+        endingEchoMoves: ["回到代价", "回到这题为什么不能偷懒"],
+      };
+    case "scene_character":
+      return {
+        openingMoves: ["先落人物", "先落生活场景"],
+        transitionMoves: ["从场景转到结构", "从人物切到板块命题"],
+        endingEchoMoves: ["回到这个人", "回到这个场景里的选择"],
+      };
+    case "total_judgement":
+    default:
+      return {
+        openingMoves: ["先给反常识总判断", "先把旧标签拧过来"],
+        transitionMoves: ["从总判断切到结构骨架", "从结构骨架切到读者决策"],
+        endingEchoMoves: ["回到总判断", "回到为什么现在值得写"],
+      };
+  }
+}
 
 function withFallback(value: string | undefined, fallback: string) {
   const next = value?.trim();
@@ -31,18 +112,22 @@ export function defaultHKR(): HKRFrame {
 
 export function defaultThinkCard(input: {
   topic: string;
+  articleType: ArticleType;
   thesis?: string;
   notes?: string;
   hkrr?: HKRRFrame;
   hamd?: HAMDFrame;
   audience?: string;
 }): ThinkCard {
-  const { topic, thesis, notes, hkrr, hamd, audience } = input;
+  const { topic, articleType, thesis, notes, hkrr, hamd, audience } = input;
   return {
     materialDigest: withFallback(notes, `${topic} 这篇先从现有素材里找最硬的冲突，再决定值不值得写。`),
     topicVerdict: thesis?.trim() ? "strong" : "rework",
     verdictReason: withFallback(thesis, `${topic} 目前最值得写的是“市场标签和真实结构的错位”。`),
     coreJudgement: withFallback(thesis, `${topic} 真正决定价值的不是热度，而是结构。`),
+    articlePrototype: defaultArticlePrototype(articleType),
+    targetReaderPersona: defaultReaderPersona(),
+    creativeAnchor: withFallback(hamd?.anchor, `${topic} 真正要记住的，不是标签，而是结构。`),
     counterIntuition: withFallback(hamd?.different, `${topic} 最容易被看错的，不是表面位置，而是内部错位。`),
     readerPayoff: withFallback(hkrr?.knowledge, `读者会更清楚 ${topic} 为什么会被误判，以及应该怎么判断它。`),
     decisionImplication: `看完 ${topic} 这篇，读者应该知道什么人适合继续看、什么人应该谨慎绕开。`,
@@ -65,6 +150,7 @@ export function defaultThinkCard(input: {
 export function defaultStyleCore(input: {
   topic: string;
   articleType: ArticleType;
+  articlePrototype?: ArticlePrototype;
   thesis?: string;
   hkrr?: HKRRFrame;
   hamd?: HAMDFrame;
@@ -77,10 +163,14 @@ export function defaultStyleCore(input: {
       articleType: input.articleType,
       thesis: input.thesis,
     });
+  const prototypeMoves = buildPrototypeMoveLibrary(input.articlePrototype ?? defaultArticlePrototype(input.articleType));
 
   return {
     rhythm: withFallback(moves.narrativeDrive, withFallback(input.hkrr?.rhythm, "开头立判断，中段拆结构，结尾回到代价。")),
     breakPattern: withFallback(moves.breakPoint, "在平推资料之前，用生活场景或反面代价主动打断。"),
+    openingMoves: prototypeMoves.openingMoves,
+    transitionMoves: prototypeMoves.transitionMoves,
+    endingEchoMoves: prototypeMoves.endingEchoMoves,
     knowledgeDrop: withFallback(input.hkrr?.knowledge, `${input.topic} 的知识点要顺手掏出来，而不是写成资料堆。`),
     personalView: withFallback(moves.personalPosition, `我对 ${input.topic} 的判断来自长期观察，不来自销售想象。`),
     judgement: withFallback(input.thesis, `${input.topic} 真正决定价值的不是热度，而是结构。`),
@@ -98,6 +188,9 @@ export function defaultStyleCore(input: {
     toneCeiling: "像长期观察者，不像老师批卷，也不像中介卖房。",
     concretenessRequirement: "每一段都要有具体判断、具体场景或具体代价，不能只写抽象词。",
     costSense: withFallback(moves.costSense, `把 ${input.topic} 的门槛、等待和代价写透。`),
+    forbiddenFabrications: ["禁止把推测写成亲历", "没有证据支撑时不要写具体现场细节", "不要编造来源里不存在的时间点和人物动作"],
+    genericLanguageBlackList: ["赋能", "多维度", "全方位", "系统性提升", "打造闭环", "高质量发展"],
+    unsupportedSceneDetector: "如果人物、场景、通勤或生活细节没有真实材料支撑，请标成待作者补，不要直接写成亲历。",
   };
 }
 
@@ -187,7 +280,10 @@ export function buildCardsFromLegacy(input: {
   vitalityCheck?: VitalityCheck;
 }): { thinkCard: ThinkCard; styleCore: StyleCore; vitalityCheck: VitalityCheck } {
   const thinkBase = defaultThinkCard(input);
-  const styleBase = defaultStyleCore(input);
+  const styleBase = defaultStyleCore({
+    ...input,
+    articlePrototype: input.thinkCard?.articlePrototype,
+  });
   const vitalityBase = defaultVitalityCheck();
 
   return {
@@ -224,6 +320,9 @@ export function isThinkCardComplete(card: ThinkCard): boolean {
       card.topicVerdict &&
       card.verdictReason.trim() &&
       card.coreJudgement.trim() &&
+      card.articlePrototype &&
+      card.targetReaderPersona &&
+      card.creativeAnchor.trim() &&
       card.counterIntuition.trim() &&
       card.readerPayoff.trim() &&
       card.decisionImplication.trim() &&
@@ -240,6 +339,9 @@ export function isStyleCoreComplete(core: StyleCore): boolean {
   return (
     core.rhythm.trim().length > 0 &&
     core.breakPattern.trim().length > 0 &&
+    core.openingMoves.length > 0 &&
+    core.transitionMoves.length > 0 &&
+    core.endingEchoMoves.length > 0 &&
     core.knowledgeDrop.trim().length > 0 &&
     core.personalView.trim().length > 0 &&
     core.judgement.trim().length > 0 &&
@@ -256,7 +358,10 @@ export function isStyleCoreComplete(core: StyleCore): boolean {
     core.humbleSetup.trim().length > 0 &&
     core.toneCeiling.trim().length > 0 &&
     core.concretenessRequirement.trim().length > 0 &&
-    core.costSense.trim().length > 0
+    core.costSense.trim().length > 0 &&
+    core.forbiddenFabrications.length > 0 &&
+    core.genericLanguageBlackList.length > 0 &&
+    core.unsupportedSceneDetector.trim().length > 0
   );
 }
 
@@ -264,6 +369,9 @@ export function countStyleCoreMissing(core: StyleCore) {
   const entries = [
     ["rhythm", core.rhythm],
     ["breakPattern", core.breakPattern],
+    ["openingMoves", core.openingMoves.join(" ")],
+    ["transitionMoves", core.transitionMoves.join(" ")],
+    ["endingEchoMoves", core.endingEchoMoves.join(" ")],
     ["knowledgeDrop", core.knowledgeDrop],
     ["personalView", core.personalView],
     ["judgement", core.judgement],
@@ -281,8 +389,11 @@ export function countStyleCoreMissing(core: StyleCore) {
     ["toneCeiling", core.toneCeiling],
     ["concretenessRequirement", core.concretenessRequirement],
     ["costSense", core.costSense],
+    ["forbiddenFabrications", core.forbiddenFabrications.join(" ")],
+    ["genericLanguageBlackList", core.genericLanguageBlackList.join(" ")],
+    ["unsupportedSceneDetector", core.unsupportedSceneDetector],
   ].filter(([, value]) => !value.trim());
-  const keyFields: Array<keyof StyleCore> = ["rhythm", "characterPortrait", "culturalLift", "echo", "costSense"];
+  const keyFields: Array<keyof StyleCore> = ["rhythm", "openingMoves", "transitionMoves", "characterPortrait", "culturalLift", "echo", "costSense", "forbiddenFabrications"];
   const missingKeyFields = entries.filter(([key]) => keyFields.includes(key as keyof StyleCore)).map(([key]) => key);
   return {
     missingFields: entries.map(([key]) => key),
@@ -345,6 +456,9 @@ export function formatThinkCard(card: ThinkCard): string {
     `- 选题值：${card.topicVerdict}`,
     `- 判断原因：${card.verdictReason}`,
     `- 核心判断：${card.coreJudgement}`,
+    `- 文章原型：${card.articlePrototype}`,
+    `- 目标读者画像：${card.targetReaderPersona}`,
+    `- 创作锚点：${card.creativeAnchor}`,
     `- 反直觉抓手：${card.counterIntuition}`,
     `- 读者收益：${card.readerPayoff}`,
     `- 决策影响：${card.decisionImplication}`,
@@ -363,6 +477,9 @@ export function formatStyleCore(core: StyleCore): string {
   return [
     `- 节奏推进：${core.rhythm}`,
     `- 故意打破：${core.breakPattern}`,
+    `- 开头动作：${core.openingMoves.join(" / ") || "暂无"}`,
+    `- 转场动作：${core.transitionMoves.join(" / ") || "暂无"}`,
+    `- 结尾回环动作：${core.endingEchoMoves.join(" / ") || "暂无"}`,
     `- 知识顺手掏出来：${core.knowledgeDrop}`,
     `- 私人视角：${core.personalView}`,
     `- 判断力：${core.judgement}`,
@@ -380,6 +497,9 @@ export function formatStyleCore(core: StyleCore): string {
     `- 语气上限：${core.toneCeiling}`,
     `- 具体性要求：${core.concretenessRequirement}`,
     `- 现实代价：${core.costSense}`,
+    `- 禁止编造：${core.forbiddenFabrications.join(" / ") || "暂无"}`,
+    `- 泛化黑名单：${core.genericLanguageBlackList.join(" / ") || "暂无"}`,
+    `- unsupported scene 检测：${core.unsupportedSceneDetector}`,
   ].join("\n");
 }
 

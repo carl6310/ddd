@@ -41,10 +41,13 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
     sectorModel,
     outlineDraft,
     articleDraft,
+    editorialFeedbackEvents: [],
     reviewReport,
     publishPackage: null,
   });
-  context.log("info", "gate_checked", "写作质量门槛已计算（warn-only）。", {
+  context.log("info", "gate_checked", "写作质量门槛已计算。", {
+    mode: qualityGate.mode,
+    overallStatus: qualityGate.overallStatus,
     mustFix: qualityGate.mustFix.length,
     shouldFix: qualityGate.shouldFix.length,
     optionalPolish: qualityGate.optionalPolish.length,

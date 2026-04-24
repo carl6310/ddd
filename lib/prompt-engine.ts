@@ -2,6 +2,7 @@ import type {
   ArticleProject,
   OutlineDraft,
   ResearchBrief,
+  SignalBrief,
   SectorModel,
   SourceCard,
   ReviewReport,
@@ -53,6 +54,7 @@ export function buildPromptTask(
     sourceCards?: SourceCard[];
     sampleDigest?: string;
     styleReference?: string;
+    signalBrief?: SignalBrief | null;
     researchBrief?: ResearchBrief | null;
     sectorModel?: SectorModel | null;
     outlineDraft?: OutlineDraft | null;
@@ -145,44 +147,121 @@ ${input.rawMaterials || "暂无"}
       };
     case "topic_cocreate":
       return {
-        system: `
-你是一位上海板块选题编辑，要和作者一起做“选题共创”。
-你不是直接写文章，而是围绕一个板块提出 3 个真正值得写的候选角度。
-为了保证完整返回，你只输出最核心的题卡骨架，不要写长篇解释。
-必须输出严格 JSON，不要输出额外文字。
-JSON 结构：
-{
-  "sector": "板块名",
-  "candidateAngles": [
-    {
-      "id": "angle-1",
-      "title": "标题方向",
-      "articleType": "断供型|价值重估型|规划拆解型|误解纠偏型|更新拆迁型",
-      "thesis": "一句话主判断",
-      "hook": "最强传播钩子",
-      "different": "和常规板块稿最大的不同",
-      "tension": "这条题抓住的核心材料冲突"
-    }
-  ]
-}
-
-要求：
-1. 不要输出泛泛的“聊聊这个板块”
-2. 只从这次提供的材料里长题，不要复读常见板块母题
-3. 每个角度必须围绕不同的“材料冲突”或“材料空白点”
-4. 候选角度必须彼此有明显差异，不要只是换标题说同一件事
-5. 每个字段都要短，不要写长段落
-6. 不要输出 whyItWorks、risk、anchor、hkrr、recommendation、sourceBasis，这些会由系统后处理
-7. 候选角度控制为 3 个，确保完整 JSON 能一次返回
-        `.trim(),
-        user: `
-板块：${input.sector}
-作者当前直觉：${input.currentIntuition || "暂无"}
-手头材料：
-${input.rawMaterials || "暂无"}
-不想写成什么：
-${input.avoidAngles || "不想写成泛板块介绍和中介稿"}
-        `.trim(),
+        system: [
+          "你是一位上海板块选题编辑，要和作者一起做“选题共创”。",
+          "你不是直接写文章，也不是只给几个像标题的短句。",
+          "你的任务是：基于用户提供的板块、直觉、材料和约束，产出一组可进入正式写作流程的候选角度。",
+          "你不是自由散点列举，而是必须先按角度桶发散，再整理成“宽覆盖长名单”。",
+          "你必须优先覆盖不同 angleType，而不是围绕同一个判断换几个标题皮。",
+          "",
+          "你的核心目标有 4 个：",
+          "1. 拉宽角度覆盖面，而不是只在同一个判断上换几种说法",
+          "2. 优先给出有判断力度、有读者价值、可被证据支撑的角度",
+          "3. 明确暴露信息不足和证据缺口，不要假装确定",
+          "4. 输出适合进入后续 ThinkCard / StyleCore / Research / Outline 流程的候选方向",
+          "必须输出严格 JSON，不要输出额外文字。",
+          "",
+          "角度桶定义：",
+          "- thesis: 总判断型",
+          "- counterintuitive: 反常识型",
+          "- spatial_segmentation: 空间切割型",
+          "- buyer_segment: 客群视角型",
+          "- transaction_micro: 交易微观型",
+          "- supply_structure: 供给结构型",
+          "- policy_transmission: 政策传导型",
+          "- timing_window: 时间窗口型",
+          "- comparative: 对比参照型",
+          "- risk_deconstruction: 风险拆解型",
+          "- decision_service: 决策服务型",
+          "- narrative_upgrade: 叙事升级型",
+          "- scene_character: 人物/场景型",
+          "- lifecycle: 生命周期型",
+          "- mismatch: 错配型",
+          "- culture_psychology: 文化/心理型",
+          "JSON 结构：",
+          "{",
+          '  "sector": "板块名",',
+          '  "candidateAngles": [',
+          "    {",
+          '      "id": "angle-1",',
+          '      "title": "标题方向",',
+          '      "angleType": "thesis|counterintuitive|spatial_segmentation|buyer_segment|transaction_micro|supply_structure|policy_transmission|timing_window|comparative|risk_deconstruction|decision_service|narrative_upgrade|scene_character|lifecycle|mismatch|culture_psychology",',
+          '      "articleType": "断供型|价值重估型|规划拆解型|误解纠偏型|更新拆迁型",',
+          '      "articlePrototype": "total_judgement|spatial_segmentation|buyer_split|transaction_observation|decision_service|risk_deconstruction|scene_character",',
+          '      "targetReaderPersona": "busy_relocator|improver_buyer|risk_aware_reader|local_life_reader",',
+          '      "creativeAnchor": "这条角度最该被记住的锚点",',
+          '      "coreJudgement": "一句话核心判断",',
+          '      "counterIntuition": "最值得打破的直觉",',
+          '      "readerValue": "读者看完能直接拿走什么判断收益",',
+          '      "whyNow": "为什么这条角度值得现在写，不是以后再说",',
+          '      "hkr": { "h": 1, "k": 1, "r": 1, "total": 3 },',
+          '      "readerLens": ["busy_relocator"],',
+          '      "signalRefs": ["引用到的信号标题"],',
+          '      "neededEvidence": ["还需要补的关键证据 1", "还需要补的关键证据 2"],',
+          '      "riskOfMisfire": "这条角度最容易写偏的地方",',
+          '      "recommendedNextStep": "下一步最该先补什么"',
+          "    }",
+          "  ]",
+          "}",
+          "",
+          "工作流程：",
+          "第一步：理解输入，区分哪些是已知事实、哪些是用户直觉、哪些还缺证据。",
+          "第二步：按 angle buckets 发散，尽量覆盖多种 angleType，每个角度都必须是一个可成立的写作方向。",
+          "第三步：去重和筛选，合并判断高度重复、只是措辞不同的候选。",
+          "第四步：输出 JSON，只保留最适合后续进入正式项目的原始长名单。",
+          "",
+          "要求：",
+          "1. 先按 angle buckets 发散，再去重，再排序，最后输出 JSON",
+          "2. 候选角度优先覆盖不同 angleType；至少覆盖 8 种不同 angleType",
+          "3. 候选角度总数输出 12-16 个，宁可每个更短，也不要少给",
+          "4. 不要输出泛泛的“聊聊这个板块”",
+          "5. 只从这次提供的材料里长题，不要复读常见板块母题",
+          "6. 每个角度必须围绕不同的“材料冲突”或“材料空白点”",
+          "7. 角度之间不能只是同一判断的换皮表述；如果本质是同一角度，就合并而不是改标题",
+          "8. 每个 angle 都必须是“可立项”的，不要只给标题党短句",
+          "9. coreJudgement / readerValue / whyNow / neededEvidence / articlePrototype / targetReaderPersona 必须具体，不能写成套话",
+          "10. 材料不足时也要尽量覆盖多种 angleType，但必须在 neededEvidence 和 riskOfMisfire 里诚实暴露证据缺口",
+          "11. 同一种 articleType 最多出现 3 次，避免候选池塌成单一路数",
+          "12. 优先生成适合上海板块分析写作的方法论角度：空间、交易、客群、供给、决策、现实代价、误判风险",
+          "13. 表达必须自然、清楚、中文可读，不要机器化腔调",
+          "14. hkr 要用 1-5 的整数给 happy / knowledge / resonance 三项，total 为三项之和",
+          "15. 不要输出 whyItWorks、risk、anchor、hook、different、hkrr、recommendation、sourceBasis、coverageSummary；这些由系统后处理",
+        ].join("\n"),
+        user: [
+          "请基于以下输入进行选题共创。",
+          "",
+          "【板块 / 主题】",
+          input.sector || "未明确提供",
+          "",
+          "【用户当前直觉】",
+          input.currentIntuition || "未提供",
+          "",
+          "【原始材料】",
+          "手头材料：",
+          input.rawMaterials || "暂无",
+          "",
+          "【Signal Brief】",
+          input.signalBrief
+            ? [
+                `查询：${input.signalBrief.queries.join(" | ") || "未执行联网搜索"}`,
+                ...input.signalBrief.signals.map(
+                  (signal, index) =>
+                    `${index + 1}. [${signal.signalType}] ${signal.title} | ${[signal.source, signal.publishedAt, signal.url].filter(Boolean).join(" | ")}\n摘要：${signal.summary}\n为什么重要：${signal.whyItMatters}`,
+                ),
+                `缺口：${input.signalBrief.gaps.join("；") || "暂无"}`,
+                `新鲜度提醒：${input.signalBrief.freshnessNote}`,
+              ].join("\n")
+            : "暂无",
+          "",
+          "【额外约束】",
+          "不想写成什么：",
+          input.avoidAngles || "不想写成泛板块介绍和中介稿",
+          "",
+          "请注意：",
+          "- 如果输入信息不完整，不要拒绝输出；仍然要尽量给出宽覆盖候选",
+          "- 但需要在 neededEvidence / riskOfMisfire 中明确指出信息不足",
+          "- 优先给出可以进入正式项目的方向，而不是只有传播感的标题",
+        ].join("\n"),
       };
     case "think_card":
     case "topic_judge":
@@ -206,6 +285,9 @@ JSON 结构：
     "topicVerdict": "strong|rework|weak",
     "verdictReason": "为什么值或不值",
     "coreJudgement": "这篇最核心的一句话判断",
+    "articlePrototype": "total_judgement|spatial_segmentation|buyer_split|transaction_observation|decision_service|risk_deconstruction|scene_character",
+    "targetReaderPersona": "busy_relocator|improver_buyer|risk_aware_reader|local_life_reader",
+    "creativeAnchor": "这篇真正要记住的创作锚点",
     "counterIntuition": "最值得打破的读者直觉",
     "readerPayoff": "读者看完真正得到的判断收益",
     "decisionImplication": "这篇判断会怎么改变读者的决策",
@@ -223,6 +305,9 @@ JSON 结构：
   "styleCore": {
     "rhythm": "节奏推进",
     "breakPattern": "故意打破",
+    "openingMoves": ["可用开头动作"],
+    "transitionMoves": ["可用转场动作"],
+    "endingEchoMoves": ["可用结尾回环动作"],
     "knowledgeDrop": "知识怎么顺手掏出来",
     "personalView": "私人视角",
     "judgement": "判断力",
@@ -239,7 +324,10 @@ JSON 结构：
     "humbleSetup": "谦逊铺垫法",
     "toneCeiling": "这篇语气最多只能到哪，不允许滑到哪里",
     "concretenessRequirement": "这篇对具体性的最低要求",
-    "costSense": "现实代价"
+    "costSense": "现实代价",
+    "forbiddenFabrications": ["禁止编造的具体事项"],
+    "genericLanguageBlackList": ["禁止出现的泛化表达"],
+    "unsupportedSceneDetector": "如何识别像亲历但无证据支撑的场景"
   },
   "hkrr": {
     "happy": "这篇内容带来的认知快感",
@@ -273,9 +361,11 @@ JSON 结构：
 2. ThinkCard 的 topicVerdict 只能是 strong / rework / weak
 3. 如果是 rework 或 weak，必须把 rewriteSuggestion 和 alternativeAngles 写具体
 4. ThinkCard 必须把“核心判断、反直觉抓手、读者收益、决策影响、明确不写什么”写清楚
+5. ThinkCard 必须明确文章原型、目标读者画像和创作锚点
 5. StyleCore 必须明确允许动作、禁止动作、可用比喻、语气上限和具体性要求
 4. AI role 必须明确：AI 只提供素材整理、对比和启发，不替代作者核心角度
 6. StyleCore 每一项都必须具体，不能写“增强可读性”“增加故事性”这种空话
+7. 必须给出 openingMoves / transitionMoves / endingEchoMoves 与 anti-fabrication 规则
         `.trim(),
         user: `
 请对下面选题做 ThinkCard 定义。
@@ -413,6 +503,12 @@ JSON 结构：
       "singlePurpose": "这一段唯一动作，例如先纠偏/再搭骨架/再落场景",
       "mustLandDetail": "这一段必须落地的具体细节或判断",
       "sceneOrCost": "这一段必须落的人物场景或现实代价，没有就写为什么没有",
+      "mainlineSentence": "这一段怎么把全文主线重新拽回来",
+      "callbackTarget": "这一段要回扣哪一个前文锚点",
+      "microStoryNeed": "这里是否需要一个微型故事或人物体感",
+      "discoveryTurn": "这一段最关键的发现转折",
+      "opposingView": "这一段要回应的反面理解或相反证据",
+      "readerUsefulness": "这一段对读者当前决策最有用的地方",
       "evidenceIds": ["source card id"],
       "mustUseEvidenceIds": ["这一段必须真正写进正文的证据 id"],
       "tone": "节奏/情绪说明",
@@ -453,8 +549,8 @@ ${languageText}
 
 要求：先纠偏，再讲空间骨架，再分区拆解，再讲供应和未来，最后回到购房者视角。
 要求：至少有一个 section 负责落人物或生活场景，至少有一个 section 负责升维，结尾 section 必须明确回环。
-要求：每个 section 必须有唯一主判断、唯一动作、必须落地细节、场景或代价、承接目标、反面理解。
-要求：每个 section 的 move / break / bridge / styleObjective / singlePurpose / transitionTarget 都必须可执行，不能写空词。
+要求：每个 section 必须有唯一主判断、唯一动作、必须落地细节、场景或代价、承接目标、反面理解、mainlineSentence、callbackTarget、readerUsefulness。
+要求：每个 section 的 move / break / bridge / styleObjective / singlePurpose / transitionTarget / discoveryTurn 都必须可执行，不能写空词。
 要求：每个 section 的 mustUseEvidenceIds 至少 1 个，并且必须是这段正文后续真正要挂进文中的证据。
         `.trim(),
       };
@@ -480,6 +576,7 @@ ${authorBrainText}
 9. 全文至少用 5 个口语化转场/情绪/谦逊词组，至少 3 处短句独立成段，至少 2 处疑问句
 10. 在核心判断前至少有 1 处谦逊铺垫（说实话我也不确定、这只是个人理解）
 11. 如果某段需要实地体感但你没有素材，用「（待作者补：XXX）」标注，不要编造假体感。具体人物场景如果是推测的，也要标注「（待作者确认：XXX）」
+12. 如果某段的 microStoryNeed / sceneOrCost 缺少证据支撑，必须显式用待作者补标注，不要假装亲历
         `.trim(),
         user: `
 项目主题：${input.project?.topic}
@@ -510,7 +607,7 @@ ${(input.sectorModel?.zones ?? [])
 ${(input.outlineDraft?.sections ?? [])
   .map(
     (section, index) =>
-      `${index + 1}. ${section.heading} | 目标：${section.purpose} | 段落主判断：${section.sectionThesis || "待补"} | 唯一动作：${section.singlePurpose || "待补"} | 必须落地：${section.mustLandDetail || "待补"} | 场景/代价：${section.sceneOrCost || "待补"} | 动作：${section.move} | 打破：${section.break} | 承接：${section.bridge} | 承接目标：${section.transitionTarget || "待补"} | 反面理解：${section.counterPoint || "待补"} | 风格目标：${section.styleObjective} | 重点：${section.keyPoints.join("、")} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"} | 证据：${section.evidenceIds.join("、")}`,
+      `${index + 1}. ${section.heading} | 目标：${section.purpose} | 段落主判断：${section.sectionThesis || "待补"} | 唯一动作：${section.singlePurpose || "待补"} | 主线句：${section.mainlineSentence || "待补"} | 回环目标：${section.callbackTarget || "待补"} | 微型故事：${section.microStoryNeed || "待补"} | 发现转折：${section.discoveryTurn || "待补"} | 必须落地：${section.mustLandDetail || "待补"} | 场景/代价：${section.sceneOrCost || "待补"} | 对立观点：${section.opposingView || section.counterPoint || "待补"} | 读者用途：${section.readerUsefulness || "待补"} | 动作：${section.move} | 打破：${section.break} | 承接：${section.bridge} | 承接目标：${section.transitionTarget || "待补"} | 风格目标：${section.styleObjective} | 重点：${section.keyPoints.join("、")} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"} | 证据：${section.evidenceIds.join("、")}`,
   )
   .join("\n")}
 
@@ -544,6 +641,7 @@ ${languageText}
 5. 结尾必须明确回扣开头判断或锚点
 6. 如果已有生活场景、文化升维、代价感，优先保留并压得更顺
 7. 不要把文章修成更平的“标准稿”，而是要修得更像作者本人
+8. 遇到 unsupported scene 时，要么补上待作者确认标记，要么改写成明确推测，不要装作亲历
         `.trim(),
         user: `
 项目主题：${input.project?.topic}
@@ -594,6 +692,7 @@ ${authorBrainText}
 4. 必须根据 issueType 做针对性修正，而不是泛泛润色
 5. 保留作者感，避免写成公文、百科或销售话术
 6. 如果当前段落需要体感/人物而素材不足，用“（待作者补：XXX）”标注，不要编造
+7. 如果当前段落像亲历但证据不足，改成明确推测或待作者确认
         `.trim(),
         user: `
 任务类型：${task}
@@ -615,7 +714,7 @@ ${(input.outlineDraft?.sections ?? [])
   .filter((section) => !input.sectionHeading || section.heading === input.sectionHeading)
   .map(
     (section) =>
-      `- ${section.heading} | 主判断：${section.sectionThesis || section.purpose} | 唯一动作：${section.singlePurpose || section.move} | 必须落地：${section.mustLandDetail || "待补"} | 场景/代价：${section.sceneOrCost || "待补"} | 承接目标：${section.transitionTarget || "待补"} | 反面理解：${section.counterPoint || "待补"} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "无"} | 一般证据：${section.evidenceIds.join("、") || "无"}`,
+      `- ${section.heading} | 主判断：${section.sectionThesis || section.purpose} | 唯一动作：${section.singlePurpose || section.move} | 主线句：${section.mainlineSentence || "待补"} | 回环目标：${section.callbackTarget || "待补"} | 微型故事：${section.microStoryNeed || "待补"} | 发现转折：${section.discoveryTurn || "待补"} | 必须落地：${section.mustLandDetail || "待补"} | 场景/代价：${section.sceneOrCost || "待补"} | 承接目标：${section.transitionTarget || "待补"} | 反面理解：${section.opposingView || section.counterPoint || "待补"} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "无"} | 一般证据：${section.evidenceIds.join("、") || "无"}`,
   )
   .join("\n")}
 
@@ -667,6 +766,7 @@ JSON 结构：
 6. 有没有具体人物 / 生活场景 / 体感
 7. 有没有自然的文化升维和前后回环
 8. 有没有把现实代价和不成立条件写透
+9. 有没有 unsupported scene、假亲历、无证据细节
 
 如果流畅度、衔接、节奏有问题，请明确指出：
 - 最卡的 1-3 个段落
@@ -747,6 +847,7 @@ JSON 结构：
 6. placement 必须足够具体，让编辑不用猜放在哪一段
 7. layout 必须指出图片排布方式，不能只说“配图”
 8. brief 必须像给制图/找图的人写的任务说明
+9. publishChecklist 要吸收 quality pyramid 里的 must_fix / should_fix 提醒
         `.trim(),
         user: `
 项目主题：${input.project?.topic}

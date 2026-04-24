@@ -96,6 +96,9 @@ export function canPreparePublish(reviewReport: ReviewReport | null, vitalityChe
   if (vitalityCheck.hardBlocked) {
     return false;
   }
+  if (reviewReport.qualityPyramid?.some((layer) => layer.level === "L1" && layer.status === "fail")) {
+    return false;
+  }
   return true;
 }
 

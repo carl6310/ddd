@@ -1,5 +1,5 @@
 import { fail, ok } from "@/lib/api";
-import { getJobRun, listJobLogs } from "@/lib/jobs/repository";
+import { deleteQueuedJob, getJobRun, listJobLogs } from "@/lib/jobs/repository";
 
 interface RouteContext {
   params: Promise<{ jobId: string }>;
@@ -29,4 +29,22 @@ export async function GET(_request: Request, context: RouteContext) {
     },
     logsTail: listJobLogs(jobId),
   });
+}
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  try {
+    const { jobId } = await context.params;
+    const job = deleteQueuedJob(jobId);
+    return ok({
+      deleted: true,
+      job: {
+        id: job.id,
+        projectId: job.projectId,
+        step: job.step,
+        status: job.status,
+      },
+    });
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "删除任务失败。", 400);
+  }
 }

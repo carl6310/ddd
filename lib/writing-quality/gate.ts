@@ -10,6 +10,7 @@ export function buildWritingQualityGate(bundle: ProjectBundle): WritingQualityGa
   const mustFix: WritingQualityGateItem[] = [];
   const shouldFix: WritingQualityGateItem[] = [];
   const optionalPolish: WritingQualityGateItem[] = [];
+  let mode: WritingQualityGateResult["mode"] = "warn-only";
 
   if (evidence.summary.brokenCitationCount > 0) {
     mustFix.push(createItem("broken_citations", "存在无效引用", `正文里有 ${evidence.summary.brokenCitationCount} 处无效 [SC] 引用，发布前必须修掉。`));
@@ -22,6 +23,20 @@ export function buildWritingQualityGate(bundle: ProjectBundle): WritingQualityGa
 
   const review = bundle.reviewReport;
   if (review) {
+    for (const layer of review.qualityPyramid ?? []) {
+      if (layer.status === "fail") {
+        mode = layer.level === "L1" ? "hard-block" : "soft-block";
+      } else if (layer.status === "warn" && mode === "warn-only") {
+        mode = "soft-block";
+      }
+      for (const item of layer.mustFix) {
+        mustFix.push(createItem(`pyramid_${layer.level.toLowerCase()}_${mustFix.length + 1}`, `${layer.title} 必修`, item));
+      }
+      for (const item of layer.shouldFix) {
+        shouldFix.push(createItem(`pyramid_${layer.level.toLowerCase()}_${shouldFix.length + 1}`, `${layer.title} 建议优化`, item));
+      }
+    }
+
     const rewriteIntents = review.rewriteIntents ?? [];
     const paragraphFlags = review.paragraphFlags ?? [];
 
@@ -57,10 +72,10 @@ export function buildWritingQualityGate(bundle: ProjectBundle): WritingQualityGa
   }
 
   const overallStatus: WritingQualityGateResult["overallStatus"] =
-    mustFix.length > 0 ? "warn" : shouldFix.length > 0 ? "warn" : "pass";
+    mustFix.length > 0 ? "fail" : shouldFix.length > 0 ? "warn" : "pass";
 
   return {
-    mode: "warn-only",
+    mode,
     overallStatus,
     mustFix,
     shouldFix,

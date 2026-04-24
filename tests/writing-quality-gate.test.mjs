@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 const { buildWritingQualityGate } = await import("../lib/writing-quality/gate.ts");
 
-test("writing quality gate emits warn-only buckets", () => {
+test("writing quality gate emits layered gate buckets", () => {
   const gate = buildWritingQualityGate({
     project: {
       thesis: "塘桥真正的问题不是位置，而是结构。",
@@ -29,6 +29,9 @@ test("writing quality gate emits warn-only buckets", () => {
       editedMarkdown: "",
     },
     reviewReport: {
+      qualityPyramid: [
+        { level: "L2", title: "StructureFlow", status: "warn", summary: "需要继续优化", mustFix: [], shouldFix: ["转场偏弱"], optionalPolish: [] },
+      ],
       checks: [],
       rewriteIntents: [
         {
@@ -49,8 +52,8 @@ test("writing quality gate emits warn-only buckets", () => {
     publishPackage: null,
   });
 
-  assert.equal(gate.mode, "warn-only");
-  assert.equal(gate.overallStatus, "warn");
+  assert.equal(gate.mode, "soft-block");
+  assert.equal(gate.overallStatus, "fail");
   assert.ok(gate.mustFix.length >= 1);
   assert.ok(gate.shouldFix.length >= 1);
 });

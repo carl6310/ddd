@@ -1,6 +1,6 @@
-import { appendJobLog, claimNextQueuedJob, markJobFailed, markJobHeartbeat, markJobProgress, markJobResult, markJobSucceeded } from "./repository";
+import { appendJobLog, claimNextQueuedJob, claimQueuedJob, markJobFailed, markJobHeartbeat, markJobProgress, markJobResult, markJobSucceeded } from "./repository";
 import { jobRegistry } from "./registry";
-import { JobError, type JobExecutionContext } from "./types";
+import { JobError, type JobExecutionContext, type JobRun } from "./types";
 
 function toJobFailure(error: unknown) {
   if (error instanceof JobError) {
@@ -16,12 +16,7 @@ function toJobFailure(error: unknown) {
   };
 }
 
-export async function runNextQueuedJob() {
-  const job = claimNextQueuedJob();
-  if (!job) {
-    return null;
-  }
-
+export async function runClaimedJob(job: JobRun) {
   const context: JobExecutionContext = {
     job,
     setProgress(stage, message) {
@@ -60,4 +55,22 @@ export async function runNextQueuedJob() {
   }
 
   return job;
+}
+
+export async function runNextQueuedJob() {
+  const job = claimNextQueuedJob();
+  if (!job) {
+    return null;
+  }
+
+  return await runClaimedJob(job);
+}
+
+export async function runQueuedJob(jobId: string) {
+  const job = claimQueuedJob(jobId);
+  if (!job) {
+    return null;
+  }
+
+  return await runClaimedJob(job);
 }

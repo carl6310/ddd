@@ -54,7 +54,7 @@ fi
 echo "即将打开浏览器..."
 ( sleep 2; open "${URL}" ) &
 
-echo "启动本地服务中，关闭这个窗口即可停止服务。"
+echo "启动本地服务和后台 worker 中，关闭这个窗口即可停止服务。"
 echo ""
 
-npm run dev -- --hostname "${HOST}" --port "${PORT}"
+HOST="${HOST}" PORT="${PORT}" npm run dev:all

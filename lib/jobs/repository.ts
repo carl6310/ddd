@@ -5,6 +5,11 @@ import type { EnqueueJobResult, JobLog, JobLogLevel, JobPayload, JobRun, JobStat
 type RawJobRun = Record<string, unknown>;
 type RawJobLog = Record<string, unknown>;
 
+export type JobRunWithProject = JobRun & {
+  projectTopic: string;
+  projectStage: string;
+};
+
 function mapJobRun(row: RawJobRun): JobRun {
   return {
     id: String(row.id),
@@ -69,6 +74,42 @@ export function listProjectJobs(projectId: string, limit = 12): JobRun[] {
     .prepare("SELECT * FROM job_runs WHERE project_id = ? ORDER BY created_at DESC LIMIT ?")
     .all(projectId, limit)
     .map((row) => mapJobRun(row as RawJobRun));
+}
+
+export function listActiveJobs(): JobRun[] {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM job_runs WHERE status IN ('queued', 'running') ORDER BY created_at ASC")
+    .all()
+    .map((row) => mapJobRun(row as RawJobRun));
+}
+
+export function listRecentJobsWithProjects(limit = 50): JobRunWithProject[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `
+        SELECT
+          job_runs.*,
+          article_projects.topic AS project_topic,
+          article_projects.stage AS project_stage
+        FROM job_runs
+        LEFT JOIN article_projects ON article_projects.id = job_runs.project_id
+        ORDER BY
+          CASE WHEN job_runs.status IN ('queued', 'running') THEN 0 ELSE 1 END,
+          job_runs.created_at DESC
+        LIMIT ?
+      `,
+    )
+    .all(limit)
+    .map((row) => {
+      const raw = row as RawJobRun;
+      return {
+        ...mapJobRun(raw),
+        projectTopic: String(raw.project_topic ?? "项目已删除"),
+        projectStage: String(raw.project_stage ?? ""),
+      };
+    });
 }
 
 export function listJobLogs(jobId: string, limit = 20): JobLog[] {
@@ -136,7 +177,21 @@ export function claimNextQueuedJob(): JobRun | null {
   return withImmediateTransaction(() => {
     const db = getDb();
     const row = db
-      .prepare("SELECT * FROM job_runs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1")
+      .prepare(
+        `
+          SELECT *
+          FROM job_runs AS queued
+          WHERE queued.status = 'queued'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM job_runs AS running
+              WHERE running.status = 'running'
+                AND running.project_id = queued.project_id
+            )
+          ORDER BY queued.created_at ASC
+          LIMIT 1
+        `,
+      )
       .get() as RawJobRun | undefined;
 
     if (!row) {
@@ -161,6 +216,39 @@ export function claimNextQueuedJob(): JobRun | null {
     ).run(nextAttempt, now, now, String(row.id));
     appendJobLog(String(row.id), "info", "job_claimed", "任务已被 worker 领取。", { attemptCount: nextAttempt });
     const job = getJobRun(String(row.id));
+    if (!job) {
+      throw new Error("领取任务后读取失败。");
+    }
+    return job;
+  });
+}
+
+export function claimQueuedJob(jobId: string): JobRun | null {
+  return withImmediateTransaction(() => {
+    const db = getDb();
+    const row = db.prepare("SELECT * FROM job_runs WHERE id = ?").get(jobId) as RawJobRun | undefined;
+    if (!row || String(row.status) !== "queued") {
+      return null;
+    }
+
+    const now = nowIso();
+    const nextAttempt = toNumber(row.attempt_count, 0) + 1;
+    db.prepare(
+      `
+        UPDATE job_runs
+        SET status = 'running',
+            attempt_count = ?,
+            started_at = COALESCE(started_at, ?),
+            heartbeat_at = ?,
+            finished_at = NULL,
+            result_json = NULL,
+            error_code = NULL,
+            error_message = NULL
+        WHERE id = ? AND status = 'queued'
+      `,
+    ).run(nextAttempt, now, now, jobId);
+    appendJobLog(jobId, "info", "job_claimed", "任务已被 worker 领取。", { attemptCount: nextAttempt });
+    const job = getJobRun(jobId);
     if (!job) {
       throw new Error("领取任务后读取失败。");
     }
@@ -227,6 +315,23 @@ export function markJobFailed(jobId: string, input: { code: string; message: str
     `,
   ).run(finishedAt, finishedAt, input.code, input.message, jobId);
   appendJobLog(jobId, "error", "job_failed", input.message, { errorCode: input.code });
+}
+
+export function deleteQueuedJob(jobId: string): JobRun {
+  return withImmediateTransaction(() => {
+    const db = getDb();
+    const row = db.prepare("SELECT * FROM job_runs WHERE id = ?").get(jobId) as RawJobRun | undefined;
+    if (!row) {
+      throw new Error("任务不存在。");
+    }
+    const job = mapJobRun(row);
+    if (job.status !== "queued") {
+      throw new Error("只能删除排队中的任务；运行中任务请等待完成或失败后再处理。");
+    }
+
+    db.prepare("DELETE FROM job_runs WHERE id = ? AND status = 'queued'").run(jobId);
+    return job;
+  });
 }
 
 export function listStaleRunningJobs(cutoffIso: string): JobRun[] {

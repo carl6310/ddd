@@ -13,9 +13,11 @@ export function AccordionCard({
   defaultOpen?: boolean;
   className?: string;
 }) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
   return (
-    <details className={`accordion-card stack ${className}`} open={defaultOpen}>
-      <summary className="accordion-head">
+    <article className={`accordion-card ${isOpen ? "is-open" : ""} ${className}`}>
+      <button className="accordion-head" type="button" aria-expanded={isOpen} onClick={() => setIsOpen((current) => !current)}>
         <div className="accordion-title-block">
           <h4>{title}</h4>
           {description ? <p className="subtle">{description}</p> : null}
@@ -25,8 +27,8 @@ export function AccordionCard({
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </div>
-      </summary>
-      <div className="accordion-body stack">{children}</div>
-    </details>
+      </button>
+      {isOpen ? <div className="accordion-body stack">{children}</div> : null}
+    </article>
   );
 }

@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import type { JobLog } from "@/lib/jobs/types";
-import type { ProjectJobSummary } from "@/hooks/use-job-polling";
+import type { ProjectJobSummary, ProjectQueueSummary } from "@/hooks/use-job-polling";
 import { JobStatusChip } from "./job-status-chip";
 
 export function JobLogPanel({
   job,
   logs,
+  queueSummary,
   onRetry,
   isRetrying,
 }: {
   job: ProjectJobSummary | null;
   logs: JobLog[];
+  queueSummary: ProjectQueueSummary;
   onRetry: (() => void) | null;
   isRetrying: boolean;
 }) {
@@ -39,7 +41,7 @@ export function JobLogPanel({
         </div>
         <div className="job-toast-summary">
           <span className="job-toast-step">{getStepLabel(job.step)}</span>
-          <span className="job-toast-msg">{job.progressMessage || getStatusCopy(job.status)}</span>
+          <span className="job-toast-msg">{job.progressMessage || getStatusCopy(job)}</span>
         </div>
         <div className="job-toast-actions">
           <JobStatusChip status={job.status} />
@@ -64,6 +66,17 @@ export function JobLogPanel({
 
       {expanded ? (
         <div className="job-toast-detail">
+          {job.status === "queued" ? (
+            <p className="job-toast-queue-meta">
+              前面还有 {job.queueAheadCount ?? 0} 个任务，当前全局队列共 {queueSummary.activeCount} 个任务
+              {queueSummary.runningCount > 0 ? `，其中 ${queueSummary.runningCount} 个正在执行` : ""}。
+            </p>
+          ) : null}
+          {job.status === "running" ? (
+            <p className="job-toast-queue-meta">
+              当前正在执行。全局还有 {queueSummary.queuedCount} 个任务在排队。
+            </p>
+          ) : null}
           {job.errorMessage ? <p className="job-toast-error">{job.errorMessage}</p> : null}
           {logs.length > 0 ? (
             <ul className="job-toast-log-list">
@@ -106,10 +119,10 @@ function getStepLabel(step: ProjectJobSummary["step"]) {
   }
 }
 
-function getStatusCopy(status: ProjectJobSummary["status"]) {
-  switch (status) {
+function getStatusCopy(job: ProjectJobSummary) {
+  switch (job.status) {
     case "queued":
-      return "任务已排队，等待 worker 处理。";
+      return `任务已排队，前面还有 ${job.queueAheadCount ?? 0} 个。`;
     case "running":
       return "任务正在后台执行。";
     case "succeeded":
@@ -117,6 +130,6 @@ function getStatusCopy(status: ProjectJobSummary["status"]) {
     case "failed":
       return "任务执行失败。";
     default:
-      return status;
+      return job.status;
   }
 }

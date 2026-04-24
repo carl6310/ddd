@@ -42,10 +42,12 @@ npm install
 python3 -m pip install -r requirements.txt
 cp .env.example .env.local
 npm run import-samples
-npm run dev
+npm run dev:all
 ```
 
 默认会把 `wz/` 目录中的 `.docx` 样本导入到 `data/workbench.db`。
+`dev:all` 会同时启动 Next.js 页面服务和后台 worker；只运行 `npm run dev` 时，长任务会入队但不会自动执行。
+后台 worker 默认最多并行跑 2 个不同项目的任务，可通过 `.env.local` 里的 `JOB_WORKER_CONCURRENCY` 调整。同一个项目的连续步骤仍会串行执行，避免后一步读到旧数据或覆盖前一步结果。
 
 ## 一键启动
 

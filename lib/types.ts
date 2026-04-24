@@ -1,3 +1,8 @@
+import type { SignalBrief, SignalProviderMode, SignalSourceDigest } from "@/lib/signals/types";
+
+export { SIGNAL_PROVIDER_MODES, SIGNAL_TYPES } from "@/lib/signals/types";
+export type { SignalBrief, SignalBriefSignal, SignalProviderMode, SignalSourceDigest, SignalType } from "@/lib/signals/types";
+
 export const ARTICLE_TYPES = [
   "断供型",
   "价值重估型",
@@ -27,6 +32,18 @@ export const SOURCE_TIME_SENSITIVITIES = ["evergreen", "timely", "volatile"] as 
 
 export const REVIEW_SEVERITIES = ["pass", "warn", "fail"] as const;
 export const TOPIC_VERDICTS = ["strong", "rework", "weak"] as const;
+export const TOPIC_SCORECARD_STATUSES = ["ready_to_open", "needs_more_signals", "weak_topic"] as const;
+export const ARTICLE_PROTOTYPES = [
+  "total_judgement",
+  "spatial_segmentation",
+  "buyer_split",
+  "transaction_observation",
+  "decision_service",
+  "risk_deconstruction",
+  "scene_character",
+] as const;
+export const TOPIC_READER_PERSONAS = ["busy_relocator", "improver_buyer", "risk_aware_reader", "local_life_reader"] as const;
+export const QUALITY_PYRAMID_LEVELS = ["L1", "L2", "L3", "L4"] as const;
 
 export type ArticleType = (typeof ARTICLE_TYPES)[number];
 export type ProjectStage = (typeof PROJECT_STAGES)[number];
@@ -37,6 +54,27 @@ export type SourceClaimType = (typeof SOURCE_CLAIM_TYPES)[number];
 export type SourceTimeSensitivity = (typeof SOURCE_TIME_SENSITIVITIES)[number];
 export type ReviewSeverity = (typeof REVIEW_SEVERITIES)[number];
 export type TopicVerdict = (typeof TOPIC_VERDICTS)[number];
+export type TopicScorecardStatus = (typeof TOPIC_SCORECARD_STATUSES)[number];
+export type ArticlePrototype = (typeof ARTICLE_PROTOTYPES)[number];
+export type TopicReaderPersona = (typeof TOPIC_READER_PERSONAS)[number];
+export type QualityPyramidLevel = (typeof QUALITY_PYRAMID_LEVELS)[number];
+
+export const ARTICLE_PROTOTYPE_LABELS: Record<ArticlePrototype, string> = {
+  total_judgement: "总判断",
+  spatial_segmentation: "空间切割",
+  buyer_split: "客群切分",
+  transaction_observation: "交易观察",
+  decision_service: "决策服务",
+  risk_deconstruction: "风险拆解",
+  scene_character: "人物/场景",
+};
+
+export const TOPIC_READER_PERSONA_LABELS: Record<TopicReaderPersona, string> = {
+  busy_relocator: "忙碌迁居者",
+  improver_buyer: "改善型买家",
+  risk_aware_reader: "风险敏感读者",
+  local_life_reader: "本地生活读者",
+};
 
 export interface HKRRFrame {
   happy: string;
@@ -78,6 +116,9 @@ export interface ThinkCard {
   topicVerdict: TopicVerdict;
   verdictReason: string;
   coreJudgement: string;
+  articlePrototype: ArticlePrototype;
+  targetReaderPersona: TopicReaderPersona;
+  creativeAnchor: string;
   counterIntuition: string;
   readerPayoff: string;
   decisionImplication: string;
@@ -91,6 +132,9 @@ export interface ThinkCard {
 export interface StyleCore {
   rhythm: string;
   breakPattern: string;
+  openingMoves: string[];
+  transitionMoves: string[];
+  endingEchoMoves: string[];
   knowledgeDrop: string;
   personalView: string;
   judgement: string;
@@ -108,6 +152,9 @@ export interface StyleCore {
   toneCeiling: string;
   concretenessRequirement: string;
   costSense: string;
+  forbiddenFabrications: string[];
+  genericLanguageBlackList: string[];
+  unsupportedSceneDetector: string;
 }
 
 export interface VitalityCheckEntry {
@@ -160,6 +207,7 @@ export interface ArticleProject {
   coreQuestion: string;
   targetWords: number;
   notes: string;
+  topicMeta: TopicMeta;
   thinkCard: ThinkCard;
   styleCore: StyleCore;
   vitalityCheck: VitalityCheck;
@@ -236,6 +284,12 @@ export interface OutlineSection {
   singlePurpose: string;
   mustLandDetail: string;
   sceneOrCost: string;
+  mainlineSentence: string;
+  callbackTarget: string;
+  microStoryNeed: string;
+  discoveryTurn: string;
+  opposingView: string;
+  readerUsefulness: string;
   evidenceIds: string[];
   mustUseEvidenceIds: string[];
   tone: string;
@@ -313,12 +367,23 @@ export interface WritingQualityGateResult {
   optionalPolish: WritingQualityGateItem[];
 }
 
+export interface QualityPyramidLayer {
+  level: QualityPyramidLevel;
+  title: string;
+  status: ReviewSeverity;
+  summary: string;
+  mustFix: string[];
+  shouldFix: string[];
+  optionalPolish: string[];
+}
+
 export interface ReviewCheck {
   key: string;
   title: string;
   status: ReviewSeverity;
   detail: string;
   evidenceIds: string[];
+  layer?: QualityPyramidLevel;
 }
 
 export interface ReviewSectionScore {
@@ -358,6 +423,7 @@ export interface ReviewReport {
   completionScore: number;
   globalScore: number;
   checks: ReviewCheck[];
+  qualityPyramid: QualityPyramidLayer[];
   sectionScores: ReviewSectionScore[];
   paragraphFlags: ReviewParagraphFlag[];
   rewriteIntents: RewriteIntent[];
@@ -373,8 +439,35 @@ export interface ProjectBundle {
   sectorModel: SectorModel | null;
   outlineDraft: OutlineDraft | null;
   articleDraft: ArticleDraft | null;
+  editorialFeedbackEvents: EditorialFeedbackEvent[];
   reviewReport: ReviewReport | null;
   publishPackage: PublishPackage | null;
+}
+
+export interface TopicHKRScore {
+  h: number;
+  k: number;
+  r: number;
+  total: number;
+}
+
+export interface TopicScorecard {
+  status: TopicScorecardStatus;
+  hkr: TopicHKRScore;
+  readerValueSummary: string;
+  signalCoverageSummary: string;
+  evidenceRisk: string;
+  recommendation: string;
+  canForceProceed: boolean;
+}
+
+export interface TopicMeta {
+  signalMode: SignalProviderMode | null;
+  signalBrief: SignalBrief | null;
+  topicScorecard: TopicScorecard | null;
+  readerLens: TopicReaderPersona[];
+  selectedAngleId: string | null;
+  selectedAngleTitle: string | null;
 }
 
 export interface TopicJudgeResult {
@@ -389,24 +482,107 @@ export interface TopicJudgeResult {
   writingMoves: WritingMovesFrame;
 }
 
-export interface TopicCoCreationCandidate {
-  id: string;
+export const TOPIC_ANGLE_TYPES = [
+  "thesis",
+  "counterintuitive",
+  "spatial_segmentation",
+  "buyer_segment",
+  "transaction_micro",
+  "supply_structure",
+  "policy_transmission",
+  "timing_window",
+  "comparative",
+  "risk_deconstruction",
+  "decision_service",
+  "narrative_upgrade",
+  "scene_character",
+  "lifecycle",
+  "mismatch",
+  "culture_psychology",
+] as const;
+
+export type TopicAngleType = (typeof TOPIC_ANGLE_TYPES)[number];
+
+export const TOPIC_ANGLE_TYPE_LABELS: Record<TopicAngleType, string> = {
+  thesis: "总判断型",
+  counterintuitive: "反常识型",
+  spatial_segmentation: "空间切割型",
+  buyer_segment: "客群视角型",
+  transaction_micro: "交易微观型",
+  supply_structure: "供给结构型",
+  policy_transmission: "政策传导型",
+  timing_window: "时间窗口型",
+  comparative: "对比参照型",
+  risk_deconstruction: "风险拆解型",
+  decision_service: "决策服务型",
+  narrative_upgrade: "叙事升级型",
+  scene_character: "人物/场景型",
+  lifecycle: "生命周期型",
+  mismatch: "错配型",
+  culture_psychology: "文化/心理型",
+};
+
+export interface TopicAngleDraft {
+  id?: string;
   title: string;
+  angleType: string;
   articleType: ArticleType;
-  thesis: string;
-  hook: string;
-  different: string;
-  tension: string;
-  whyItWorks: string;
-  risk: string;
-  anchor: string;
-  hkrr: HKRRFrame;
-  recommendation: "high" | "medium" | "low";
+  articlePrototype?: ArticlePrototype;
+  targetReaderPersona?: TopicReaderPersona;
+  creativeAnchor?: string;
+  coreJudgement: string;
+  counterIntuition: string;
+  readerValue: string;
+  whyNow: string;
+  hkr?: TopicHKRScore;
+  readerLens?: TopicReaderPersona[];
+  signalRefs?: string[];
+  neededEvidence: string[];
+  riskOfMisfire: string;
+  recommendedNextStep: string;
+  angleTypeLabel?: string;
+  sourceBasis?: string[];
+  topicScorecard?: TopicScorecard;
+}
+
+export interface TopicAngle extends Omit<TopicAngleDraft, "id" | "angleType"> {
+  id: string;
+  angleType: TopicAngleType;
+  angleTypeLabel: string;
+  articlePrototype: ArticlePrototype;
+  targetReaderPersona: TopicReaderPersona;
+  creativeAnchor: string;
+  hkr: TopicHKRScore;
+  readerLens: TopicReaderPersona[];
+  signalRefs: string[];
   sourceBasis: string[];
+  topicScorecard: TopicScorecard;
+}
+
+export type TopicCoCreationCandidate = TopicAngle;
+
+export interface TopicCoCreationCoverageSummary {
+  includedTypes: TopicAngleType[];
+  missingTypes: TopicAngleType[];
+  duplicatesMerged: number;
+}
+
+export interface TopicCoCreationModelResult {
+  sector: string;
+  candidateAngles: TopicAngleDraft[];
+  materialInsights?: {
+    themes: string[];
+    tensions: string[];
+    blindSpots: string[];
+  };
 }
 
 export interface TopicCoCreationResult {
   sector: string;
+  recommendedAngles: TopicAngle[];
+  angleLonglist: TopicAngle[];
+  coverageSummary: TopicCoCreationCoverageSummary;
+  angles: TopicAngle[];
   candidateAngles: TopicCoCreationCandidate[];
   materialInsights?: {
     themes: string[];
@@ -416,14 +592,123 @@ export interface TopicCoCreationResult {
 }
 
 export interface TopicCoCreationResponse {
+  signalMode: SignalProviderMode;
+  signalBrief: SignalBrief;
   result: TopicCoCreationResult;
-  sourceDigests: Array<{
-    url: string;
-    title: string;
-    summary: string;
-    publishedAt: string;
-    note: string;
-    ok: boolean;
-    error?: string;
-  }>;
+  sourceDigests: SignalSourceDigest[];
+}
+
+export interface TopicCoCreationInput {
+  sector: string;
+  currentIntuition: string;
+  rawMaterials: string;
+  avoidAngles: string;
+  signalMode: SignalProviderMode;
+}
+
+export interface TopicCoCreationRun {
+  id: string;
+  input: TopicCoCreationInput;
+  response: TopicCoCreationResponse;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const TOPIC_DISCOVERY_SESSION_STATUSES = ["draft", "running", "ready", "failed"] as const;
+export const TOPIC_DISCOVERY_LINK_STATUSES = ["pending", "running", "ready", "failed"] as const;
+
+export type TopicDiscoverySessionStatus = (typeof TOPIC_DISCOVERY_SESSION_STATUSES)[number];
+export type TopicDiscoveryLinkStatus = (typeof TOPIC_DISCOVERY_LINK_STATUSES)[number];
+
+export interface TopicDiscoverySession {
+  id: string;
+  sector: string;
+  intuition: string;
+  focusPoints: string[];
+  rawMaterials: string;
+  avoidAngles: string;
+  status: TopicDiscoverySessionStatus;
+  searchMode: SignalProviderMode;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TopicDiscoveryLink {
+  id: string;
+  sessionId: string;
+  url: string;
+  status: TopicDiscoveryLinkStatus;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PreSourceCard {
+  id: string;
+  sessionId: string;
+  linkId: string | null;
+  url: string;
+  sourceTitle: string;
+  sourceType: SourceType;
+  publishedAt: string;
+  summary: string;
+  keyClaims: string[];
+  signalTags: string[];
+  suggestedAngles: string[];
+  riskHints: string[];
+  extractStatus: TopicDiscoveryLinkStatus;
+  rawContentRef: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersistedSignalBrief {
+  sessionId: string;
+  queries: string[];
+  signals: SignalBrief["signals"];
+  gaps: string[];
+  freshnessNote: string;
+  generatedAt: string;
+}
+
+export interface TopicDiscoveryBundle {
+  session: TopicDiscoverySession;
+  links: TopicDiscoveryLink[];
+  preSourceCards: PreSourceCard[];
+  signalBrief: PersistedSignalBrief | null;
+  topicAngles: TopicAngle[];
+}
+
+export const TOPIC_DISCOVERY_JOB_STEPS = ["pre-source-extract", "signal-brief", "topic-discovery-cocreate"] as const;
+export const TOPIC_DISCOVERY_JOB_STATUSES = ["queued", "running", "succeeded", "failed"] as const;
+
+export type TopicDiscoveryJobStep = (typeof TOPIC_DISCOVERY_JOB_STEPS)[number];
+export type TopicDiscoveryJobStatus = (typeof TOPIC_DISCOVERY_JOB_STATUSES)[number];
+
+export interface TopicDiscoveryJobRun {
+  id: string;
+  sessionId: string;
+  step: TopicDiscoveryJobStep;
+  status: TopicDiscoveryJobStatus;
+  dedupeKey: string;
+  payload: Record<string, unknown>;
+  progressStage: string | null;
+  progressMessage: string | null;
+  result: Record<string, unknown> | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  heartbeatAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface TopicDiscoveryJobLog {
+  id: number;
+  jobId: string;
+  level: "info" | "warn" | "error";
+  code: string;
+  message: string;
+  detail: Record<string, unknown>;
+  createdAt: string;
 }

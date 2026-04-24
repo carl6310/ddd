@@ -5,12 +5,20 @@ import type {
   HAMDFrame,
   HKRRFrame,
   OutlineDraft,
+  PersistedSignalBrief,
+  PreSourceCard,
   ProjectBundle,
   PublishPackage,
   ResearchBrief,
   ReviewReport,
   SampleArticle,
   EditorialFeedbackEvent,
+  TopicAngle,
+  TopicDiscoveryBundle,
+  TopicDiscoveryLink,
+  TopicDiscoverySession,
+  TopicCoCreationRun,
+  TopicMeta,
   SourceClaimType,
   SectorModel,
   SourceCard,
@@ -22,10 +30,24 @@ import type {
   VitalityCheck,
 } from "@/lib/types";
 import { getDb } from "@/lib/db";
-import { nowIso, parseJson, stringifyJson, toNumber } from "@/lib/utils";
+import { createId, nowIso, parseJson, stringifyJson, toNumber } from "@/lib/utils";
 import { buildDefaultWritingMoves } from "@/lib/writing-moves";
-import { buildCardsFromLegacy, defaultVitalityCheck, deriveLegacyFrames } from "@/lib/author-cards";
+import { buildCardsFromLegacy, defaultTopicMeta, defaultVitalityCheck, deriveLegacyFrames } from "@/lib/author-cards";
+import { classifyEditorialFeedbackEvents } from "@/lib/editorial-feedback/classifier";
 import { buildSampleActionAssets, buildStyleActionReference, type SampleActionAssetRecord } from "@/lib/style-assets/registry";
+
+function normalizeTopicMeta(value: TopicMeta | null | undefined): TopicMeta {
+  const fallback = defaultTopicMeta();
+  return {
+    ...fallback,
+    ...(value ?? {}),
+    signalBrief: value?.signalBrief ?? fallback.signalBrief,
+    topicScorecard: value?.topicScorecard ?? fallback.topicScorecard,
+    readerLens: value?.readerLens ?? fallback.readerLens,
+    selectedAngleId: value?.selectedAngleId ?? fallback.selectedAngleId,
+    selectedAngleTitle: value?.selectedAngleTitle ?? fallback.selectedAngleTitle,
+  };
+}
 
 function defaultHKRR(): HKRRFrame {
   return {
@@ -58,6 +80,12 @@ function normalizeOutlineDraft(outline: OutlineDraft): OutlineDraft {
       singlePurpose: section.singlePurpose ?? "",
       mustLandDetail: section.mustLandDetail ?? "",
       sceneOrCost: section.sceneOrCost ?? "",
+      mainlineSentence: section.mainlineSentence ?? "",
+      callbackTarget: section.callbackTarget ?? "",
+      microStoryNeed: section.microStoryNeed ?? "",
+      discoveryTurn: section.discoveryTurn ?? "",
+      opposingView: section.opposingView ?? section.counterPoint ?? "",
+      readerUsefulness: section.readerUsefulness ?? section.expectedTakeaway ?? "",
       evidenceIds: section.evidenceIds ?? [],
       mustUseEvidenceIds: section.mustUseEvidenceIds ?? [],
       tone: section.tone ?? "",
@@ -110,6 +138,7 @@ function mapProject(row: Record<string, unknown>): ArticleProject {
     coreQuestion: String(row.core_question),
     targetWords: toNumber(row.target_words, 2400),
     notes: String(row.notes),
+    topicMeta: normalizeTopicMeta(parseJson<TopicMeta>(String(row.topic_meta_json ?? "{}"), defaultTopicMeta())),
     thinkCard: cards.thinkCard,
     styleCore: cards.styleCore,
     vitalityCheck: cards.vitalityCheck,
@@ -176,8 +205,8 @@ export function createProject(project: ArticleProject): ArticleProject {
   db.prepare(
     `
       INSERT INTO article_projects (
-        id, topic, audience, article_type, stage, thesis, core_question, target_words, notes, think_card_json, style_core_json, vitality_check_json, hkrr_json, hamd_json, writing_moves_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, topic, audience, article_type, stage, thesis, core_question, target_words, notes, topic_meta_json, think_card_json, style_core_json, vitality_check_json, hkrr_json, hamd_json, writing_moves_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
   ).run(
     project.id,
@@ -189,6 +218,7 @@ export function createProject(project: ArticleProject): ArticleProject {
     project.coreQuestion,
     project.targetWords,
     project.notes,
+    stringifyJson(project.topicMeta),
     stringifyJson(project.thinkCard),
     stringifyJson(project.styleCore),
     stringifyJson(project.vitalityCheck),
@@ -226,6 +256,7 @@ export function updateProject(projectId: string, patch: Partial<ArticleProject>)
   const nextProject: ArticleProject = {
     ...current,
     ...patch,
+    topicMeta: patch.topicMeta ? normalizeTopicMeta({ ...current.topicMeta, ...patch.topicMeta }) : current.topicMeta,
     thinkCard: mergedThinkCard,
     styleCore: mergedStyleCore,
     vitalityCheck: patch.vitalityCheck ?? current.vitalityCheck,
@@ -239,7 +270,7 @@ export function updateProject(projectId: string, patch: Partial<ArticleProject>)
   db.prepare(
     `
       UPDATE article_projects
-      SET topic = ?, audience = ?, article_type = ?, stage = ?, thesis = ?, core_question = ?, target_words = ?, notes = ?, think_card_json = ?, style_core_json = ?, vitality_check_json = ?, hkrr_json = ?, hamd_json = ?, writing_moves_json = ?, updated_at = ?
+      SET topic = ?, audience = ?, article_type = ?, stage = ?, thesis = ?, core_question = ?, target_words = ?, notes = ?, topic_meta_json = ?, think_card_json = ?, style_core_json = ?, vitality_check_json = ?, hkrr_json = ?, hamd_json = ?, writing_moves_json = ?, updated_at = ?
       WHERE id = ?
     `,
   ).run(
@@ -251,6 +282,7 @@ export function updateProject(projectId: string, patch: Partial<ArticleProject>)
     nextProject.coreQuestion,
     nextProject.targetWords,
     nextProject.notes,
+    stringifyJson(nextProject.topicMeta),
     stringifyJson(nextProject.thinkCard),
     stringifyJson(nextProject.styleCore),
     stringifyJson(nextProject.vitalityCheck),
@@ -391,6 +423,16 @@ export function saveArticleDraft(projectId: string, draft: ArticleDraft): Articl
         updated_at = excluded.updated_at
     `,
   ).run(projectId, draft.analysisMarkdown, draft.narrativeMarkdown, draft.editedMarkdown, now, now);
+  replaceEditorialFeedbackEvents(
+    projectId,
+    draft.editedMarkdown.trim()
+      ? classifyEditorialFeedbackEvents({
+          projectId,
+          narrativeMarkdown: draft.narrativeMarkdown,
+          editedMarkdown: draft.editedMarkdown,
+        })
+      : [],
+  );
   return draft;
 }
 
@@ -457,8 +499,332 @@ export function getProjectBundle(projectId: string): ProjectBundle | null {
     sectorModel: getSectorModel(projectId),
     outlineDraft: getOutlineDraft(projectId),
     articleDraft: getArticleDraft(projectId),
+    editorialFeedbackEvents: listEditorialFeedbackEvents(projectId),
     reviewReport: getReviewReport(projectId),
     publishPackage: getPublishPackage(projectId),
+  };
+}
+
+export function getLatestTopicCoCreationRun(): TopicCoCreationRun | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM topic_cocreate_runs ORDER BY updated_at DESC, created_at DESC LIMIT 1")
+    .get() as Record<string, unknown> | undefined;
+  return row ? mapTopicCoCreationRun(row) : null;
+}
+
+export function saveTopicCoCreationRun(input: {
+  input: TopicCoCreationRun["input"];
+  response: TopicCoCreationRun["response"];
+}): TopicCoCreationRun {
+  const db = getDb();
+  const now = nowIso();
+  const run: TopicCoCreationRun = {
+    id: createId("tccr"),
+    input: input.input,
+    response: input.response,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  db.prepare(
+    `
+      INSERT INTO topic_cocreate_runs (id, input_json, response_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+  ).run(run.id, stringifyJson(run.input), stringifyJson(run.response), run.createdAt, run.updatedAt);
+
+  db.prepare(
+    `
+      DELETE FROM topic_cocreate_runs
+      WHERE id NOT IN (
+        SELECT id FROM topic_cocreate_runs ORDER BY updated_at DESC, created_at DESC LIMIT 10
+      )
+    `,
+  ).run();
+
+  return run;
+}
+
+export function createTopicDiscoverySession(input: {
+  sector: string;
+  intuition?: string;
+  focusPoints?: string[];
+  rawMaterials?: string;
+  avoidAngles?: string;
+  searchMode?: TopicDiscoverySession["searchMode"];
+  status?: TopicDiscoverySession["status"];
+}): TopicDiscoverySession {
+  const db = getDb();
+  const now = nowIso();
+  const session: TopicDiscoverySession = {
+    id: createId("tds"),
+    sector: input.sector.trim(),
+    intuition: input.intuition?.trim() ?? "",
+    focusPoints: input.focusPoints?.map((item) => item.trim()).filter(Boolean) ?? [],
+    rawMaterials: input.rawMaterials?.trim() ?? "",
+    avoidAngles: input.avoidAngles?.trim() ?? "",
+    searchMode: input.searchMode ?? "input_only",
+    status: input.status ?? "draft",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  db.prepare(
+    `
+      INSERT INTO topic_discovery_sessions (
+        id, sector, intuition, focus_points_json, raw_materials, avoid_angles, search_mode, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  ).run(
+    session.id,
+    session.sector,
+    session.intuition,
+    stringifyJson(session.focusPoints),
+    session.rawMaterials,
+    session.avoidAngles,
+    session.searchMode,
+    session.status,
+    session.createdAt,
+    session.updatedAt,
+  );
+
+  return session;
+}
+
+export function getTopicDiscoverySession(sessionId: string): TopicDiscoverySession | null {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM topic_discovery_sessions WHERE id = ?").get(sessionId) as Record<string, unknown> | undefined;
+  return row ? mapTopicDiscoverySession(row) : null;
+}
+
+export function getLatestTopicDiscoverySession(): TopicDiscoverySession | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM topic_discovery_sessions ORDER BY updated_at DESC, created_at DESC LIMIT 1")
+    .get() as Record<string, unknown> | undefined;
+  return row ? mapTopicDiscoverySession(row) : null;
+}
+
+export function updateTopicDiscoverySession(
+  sessionId: string,
+  patch: Partial<Pick<TopicDiscoverySession, "sector" | "intuition" | "focusPoints" | "rawMaterials" | "avoidAngles" | "searchMode" | "status">>,
+): TopicDiscoverySession {
+  const current = getTopicDiscoverySession(sessionId);
+  if (!current) {
+    throw new Error("选题发现会话不存在。");
+  }
+
+  const next: TopicDiscoverySession = {
+    ...current,
+    ...patch,
+    sector: patch.sector?.trim() ?? current.sector,
+    intuition: patch.intuition?.trim() ?? current.intuition,
+    focusPoints: patch.focusPoints?.map((item) => item.trim()).filter(Boolean) ?? current.focusPoints,
+    rawMaterials: patch.rawMaterials?.trim() ?? current.rawMaterials,
+    avoidAngles: patch.avoidAngles?.trim() ?? current.avoidAngles,
+    updatedAt: nowIso(),
+  };
+
+  const db = getDb();
+  db.prepare(
+    `
+      UPDATE topic_discovery_sessions
+      SET sector = ?, intuition = ?, focus_points_json = ?, raw_materials = ?, avoid_angles = ?, search_mode = ?, status = ?, updated_at = ?
+      WHERE id = ?
+    `,
+  ).run(next.sector, next.intuition, stringifyJson(next.focusPoints), next.rawMaterials, next.avoidAngles, next.searchMode, next.status, next.updatedAt, sessionId);
+
+  return next;
+}
+
+export function listTopicDiscoveryLinks(sessionId: string): TopicDiscoveryLink[] {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM topic_discovery_links WHERE session_id = ? ORDER BY created_at ASC")
+    .all(sessionId)
+    .map((row) => mapTopicDiscoveryLink(row as Record<string, unknown>));
+}
+
+export function replaceTopicDiscoveryLinks(sessionId: string, urls: string[]): TopicDiscoveryLink[] {
+  const db = getDb();
+  const now = nowIso();
+  db.prepare("DELETE FROM topic_discovery_links WHERE session_id = ?").run(sessionId);
+  const statement = db.prepare(
+    `
+      INSERT INTO topic_discovery_links (id, session_id, url, status, error_message, created_at, updated_at)
+      VALUES (?, ?, ?, 'pending', NULL, ?, ?)
+    `,
+  );
+  const links = Array.from(new Set(urls.map((url) => url.trim()).filter(Boolean))).map((url) => {
+    const link: TopicDiscoveryLink = {
+      id: createId("tdl"),
+      sessionId,
+      url,
+      status: "pending",
+      errorMessage: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    statement.run(link.id, link.sessionId, link.url, link.createdAt, link.updatedAt);
+    return link;
+  });
+
+  return links;
+}
+
+export function updateTopicDiscoveryLink(linkId: string, patch: Partial<Pick<TopicDiscoveryLink, "status" | "errorMessage">>) {
+  const db = getDb();
+  db.prepare(
+    `
+      UPDATE topic_discovery_links
+      SET status = COALESCE(?, status),
+          error_message = ?,
+          updated_at = ?
+      WHERE id = ?
+    `,
+  ).run(patch.status ?? null, patch.errorMessage ?? null, nowIso(), linkId);
+}
+
+export function listPreSourceCards(sessionId: string): PreSourceCard[] {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM pre_source_cards WHERE session_id = ? ORDER BY created_at DESC")
+    .all(sessionId)
+    .map((row) => mapPreSourceCard(row as Record<string, unknown>));
+}
+
+export function replacePreSourceCards(sessionId: string, cards: PreSourceCard[]): PreSourceCard[] {
+  const db = getDb();
+  db.prepare("DELETE FROM pre_source_cards WHERE session_id = ?").run(sessionId);
+  const statement = db.prepare(
+    `
+      INSERT INTO pre_source_cards (
+        id, session_id, link_id, url, source_title, source_type, published_at, summary,
+        key_claims_json, signal_tags_json, suggested_angles_json, risk_hints_json,
+        extract_status, raw_content_ref, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  );
+  for (const card of cards) {
+    statement.run(
+      card.id,
+      card.sessionId,
+      card.linkId,
+      card.url,
+      card.sourceTitle,
+      card.sourceType,
+      card.publishedAt,
+      card.summary,
+      stringifyJson(card.keyClaims),
+      stringifyJson(card.signalTags),
+      stringifyJson(card.suggestedAngles),
+      stringifyJson(card.riskHints),
+      card.extractStatus,
+      card.rawContentRef,
+      card.createdAt,
+      card.updatedAt,
+    );
+  }
+  return cards;
+}
+
+export function getSignalBrief(sessionId: string): PersistedSignalBrief | null {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM signal_briefs WHERE session_id = ?").get(sessionId) as Record<string, unknown> | undefined;
+  return row ? mapPersistedSignalBrief(row) : null;
+}
+
+export function saveSignalBrief(brief: PersistedSignalBrief): PersistedSignalBrief {
+  const db = getDb();
+  const now = nowIso();
+  db.prepare(
+    `
+      INSERT INTO signal_briefs (session_id, queries_json, signals_json, gaps_json, freshness_note, generated_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session_id) DO UPDATE SET
+        queries_json = excluded.queries_json,
+        signals_json = excluded.signals_json,
+        gaps_json = excluded.gaps_json,
+        freshness_note = excluded.freshness_note,
+        generated_at = excluded.generated_at,
+        updated_at = excluded.updated_at
+    `,
+  ).run(
+    brief.sessionId,
+    stringifyJson(brief.queries),
+    stringifyJson(brief.signals),
+    stringifyJson(brief.gaps),
+    brief.freshnessNote,
+    brief.generatedAt,
+    now,
+    now,
+  );
+  return brief;
+}
+
+export function listTopicAngleCandidates(sessionId: string): TopicAngle[] {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM topic_angle_candidates WHERE session_id = ? ORDER BY rank ASC, created_at ASC")
+    .all(sessionId)
+    .map((row) => mapTopicAngleCandidate(row as Record<string, unknown>));
+}
+
+export function replaceTopicAngleCandidates(sessionId: string, angles: TopicAngle[]): TopicAngle[] {
+  const db = getDb();
+  const now = nowIso();
+  db.prepare("DELETE FROM topic_angle_candidates WHERE session_id = ?").run(sessionId);
+  const statement = db.prepare(
+    `
+      INSERT INTO topic_angle_candidates (
+        id, session_id, title, angle_type, core_judgement, counter_intuition, reader_value, why_now,
+        hkr_json, reader_lens_json, signal_refs_json, pre_source_refs_json, needed_evidence_json,
+        risk_of_misfire, recommended_next_step, is_recommended, rank, angle_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  );
+
+  for (const [index, angle] of angles.entries()) {
+    statement.run(
+      angle.id,
+      sessionId,
+      angle.title,
+      angle.angleType,
+      angle.coreJudgement,
+      angle.counterIntuition,
+      angle.readerValue,
+      angle.whyNow,
+      stringifyJson(angle.hkr),
+      stringifyJson(angle.readerLens),
+      stringifyJson(angle.signalRefs),
+      stringifyJson(angle.sourceBasis),
+      stringifyJson(angle.neededEvidence),
+      angle.riskOfMisfire,
+      angle.recommendedNextStep,
+      index < 6 ? 1 : 0,
+      index,
+      stringifyJson(angle),
+      now,
+      now,
+    );
+  }
+
+  return angles;
+}
+
+export function getTopicDiscoveryBundle(sessionId: string): TopicDiscoveryBundle | null {
+  const session = getTopicDiscoverySession(sessionId);
+  if (!session) {
+    return null;
+  }
+
+  return {
+    session,
+    links: listTopicDiscoveryLinks(sessionId),
+    preSourceCards: listPreSourceCards(sessionId),
+    signalBrief: getSignalBrief(sessionId),
+    topicAngles: listTopicAngleCandidates(sessionId),
   };
 }
 
@@ -503,6 +869,110 @@ function mapEditorialFeedbackEvent(row: Record<string, unknown>): EditorialFeedb
     detail: parseJson<Record<string, unknown>>(String(row.detail_json ?? "{}"), {}),
     createdAt: String(row.created_at),
   };
+}
+
+function mapTopicCoCreationRun(row: Record<string, unknown>): TopicCoCreationRun {
+  return {
+    id: String(row.id),
+    input: parseJson<TopicCoCreationRun["input"]>(String(row.input_json), {
+      sector: "",
+      currentIntuition: "",
+      rawMaterials: "",
+      avoidAngles: "",
+      signalMode: "input_only",
+    }),
+    response: parseJson<TopicCoCreationRun["response"]>(String(row.response_json), {
+      signalMode: "input_only",
+      signalBrief: {
+        queries: [],
+        signals: [],
+        gaps: [],
+        freshnessNote: "",
+      },
+      result: {
+        sector: "",
+        recommendedAngles: [],
+        angleLonglist: [],
+        coverageSummary: {
+          includedTypes: [],
+          missingTypes: [],
+          duplicatesMerged: 0,
+        },
+        angles: [],
+        candidateAngles: [],
+      },
+      sourceDigests: [],
+    }),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function mapTopicDiscoverySession(row: Record<string, unknown>): TopicDiscoverySession {
+  return {
+    id: String(row.id),
+    sector: String(row.sector),
+    intuition: String(row.intuition ?? ""),
+    focusPoints: parseJson<string[]>(String(row.focus_points_json ?? "[]"), []),
+    rawMaterials: String(row.raw_materials ?? ""),
+    avoidAngles: String(row.avoid_angles ?? ""),
+    searchMode: String(row.search_mode ?? "input_only") as TopicDiscoverySession["searchMode"],
+    status: String(row.status ?? "draft") as TopicDiscoverySession["status"],
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function mapTopicDiscoveryLink(row: Record<string, unknown>): TopicDiscoveryLink {
+  return {
+    id: String(row.id),
+    sessionId: String(row.session_id),
+    url: String(row.url),
+    status: String(row.status ?? "pending") as TopicDiscoveryLink["status"],
+    errorMessage: row.error_message ? String(row.error_message) : null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function mapPreSourceCard(row: Record<string, unknown>): PreSourceCard {
+  return {
+    id: String(row.id),
+    sessionId: String(row.session_id),
+    linkId: row.link_id ? String(row.link_id) : null,
+    url: String(row.url),
+    sourceTitle: String(row.source_title),
+    sourceType: String(row.source_type ?? "media") as PreSourceCard["sourceType"],
+    publishedAt: String(row.published_at ?? ""),
+    summary: String(row.summary ?? ""),
+    keyClaims: parseJson<string[]>(String(row.key_claims_json ?? "[]"), []),
+    signalTags: parseJson<string[]>(String(row.signal_tags_json ?? "[]"), []),
+    suggestedAngles: parseJson<string[]>(String(row.suggested_angles_json ?? "[]"), []),
+    riskHints: parseJson<string[]>(String(row.risk_hints_json ?? "[]"), []),
+    extractStatus: String(row.extract_status ?? "pending") as PreSourceCard["extractStatus"],
+    rawContentRef: String(row.raw_content_ref ?? ""),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function mapPersistedSignalBrief(row: Record<string, unknown>): PersistedSignalBrief {
+  return {
+    sessionId: String(row.session_id),
+    queries: parseJson<string[]>(String(row.queries_json ?? "[]"), []),
+    signals: parseJson<PersistedSignalBrief["signals"]>(String(row.signals_json ?? "[]"), []),
+    gaps: parseJson<string[]>(String(row.gaps_json ?? "[]"), []),
+    freshnessNote: String(row.freshness_note ?? ""),
+    generatedAt: String(row.generated_at),
+  };
+}
+
+function mapTopicAngleCandidate(row: Record<string, unknown>): TopicAngle {
+  const parsed = parseJson<TopicAngle>(String(row.angle_json), null as unknown as TopicAngle);
+  if (parsed) {
+    return parsed;
+  }
+  throw new Error("topic angle candidate 数据损坏。");
 }
 
 export function listSampleArticles(): SampleArticle[] {

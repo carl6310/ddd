@@ -8,13 +8,15 @@ import { ResearchTab } from "./workbench/ResearchTab";
 import { DraftsTab } from "./workbench/DraftsTab";
 import { ReviewSidebar } from "./workbench/ReviewSidebar";
 import { JobLogPanel } from "./workbench/job-log-panel";
+import { TaskCenterModal } from "./workbench/task-center-modal";
 import { useJobPolling, type JobDetail, type ProjectJobSummary } from "@/hooks/use-job-polling";
 import { useJobAction } from "@/hooks/use-job-action";
 import type { JobStatus, JobStep } from "@/lib/jobs/types";
 import { Toast } from "./ui/toast";
 
-type ActiveTab = "overview" | "research" | "drafts";
+type ActiveTab = "overview" | "research" | "drafts" | "publish";
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
+type StaleArtifact = "research-brief" | "sector-model" | "outline" | "drafts" | "review" | "publish-prep";
 type WorkspaceSection =
   | "overview-think-card"
   | "overview-style-core"
@@ -54,14 +56,30 @@ export function ProjectWorkbench({
   const [isPending, setIsPending] = useState(false);
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
   const [isRetryingJob, setIsRetryingJob] = useState(false);
+  const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialView.tab);
   const [focusedSection, setFocusedSection] = useState<WorkspaceSection>(initialView.section);
+  const [staleArtifactsByProject, setStaleArtifactsByProject] = useState<Record<string, StaleArtifact[]>>({});
   const lastAutoNavigatedProjectId = useRef(initialSelectedBundle?.project.id ?? "");
   const previousJobStatuses = useRef(new Map<string, JobStatus>());
   const handledTerminalJobs = useRef(new Set<string>());
-  const { jobs, refresh: refreshJobs, loadJobDetail } = useJobPolling(selectedProjectId);
+  const { jobs, queueSummary, refresh: refreshJobs, loadJobDetail } = useJobPolling(selectedProjectId);
   const stepJobAction = useJobAction({ trackDetail: false });
   const publishPrepJobAction = useJobAction({ trackDetail: false });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const stored = window.localStorage.getItem("workbench-stale-artifacts");
+      if (stored) {
+        setStaleArtifactsByProject(JSON.parse(stored) as Record<string, StaleArtifact[]>);
+      }
+    } catch {
+      setStaleArtifactsByProject({});
+    }
+  }, []);
 
   useEffect(() => {
     if (!selectedProjectId && projects[0]?.id) {
@@ -140,6 +158,42 @@ export function ProjectWorkbench({
     return jobs.find((job) => job.status === "queued" || job.status === "running") ?? jobs.find((job) => job.status === "failed") ?? null;
   }, [jobs]);
 
+  const updateProjectStaleArtifacts = useCallback((projectId: string, updater: (current: StaleArtifact[]) => StaleArtifact[]) => {
+    setStaleArtifactsByProject((currentMap) => {
+      const nextItems = updater(currentMap[projectId] ?? []);
+      const nextMap = { ...currentMap };
+      if (nextItems.length > 0) {
+        nextMap[projectId] = nextItems;
+      } else {
+        delete nextMap[projectId];
+      }
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("workbench-stale-artifacts", JSON.stringify(nextMap));
+      }
+      return nextMap;
+    });
+  }, []);
+
+  const markArtifactsStale = useCallback(
+    (artifacts: StaleArtifact[], projectId = selectedProjectId) => {
+      if (!projectId || artifacts.length === 0) {
+        return;
+      }
+      updateProjectStaleArtifacts(projectId, (current) => Array.from(new Set([...current, ...artifacts])));
+    },
+    [selectedProjectId, updateProjectStaleArtifacts],
+  );
+
+  const clearArtifacts = useCallback(
+    (artifacts: StaleArtifact[], projectId = selectedProjectId) => {
+      if (!projectId || artifacts.length === 0) {
+        return;
+      }
+      updateProjectStaleArtifacts(projectId, (current) => current.filter((item) => !artifacts.includes(item)));
+    },
+    [selectedProjectId, updateProjectStaleArtifacts],
+  );
+
   useEffect(() => {
     if (!highlightedJob) {
       setJobDetail(null);
@@ -174,6 +228,7 @@ export function ProjectWorkbench({
       if ((previousStatus === "queued" || previousStatus === "running") && job.status === "succeeded") {
         handledTerminalJobs.current.add(job.id);
         completedJobs.push(job);
+        reconcileStaleArtifactsForCompletedJob(job.step, selectedProjectId, clearArtifacts, markArtifactsStale);
       }
 
       if ((previousStatus === "queued" || previousStatus === "running") && job.status === "failed") {
@@ -203,10 +258,11 @@ export function ProjectWorkbench({
           showFeedback(error instanceof Error ? error.message : "读取任务详情失败。");
         });
     }
-  }, [jobs, loadJobDetail, refreshProjectsAndBundle, selectedProjectId]);
+  }, [clearArtifacts, jobs, loadJobDetail, markArtifactsStale, refreshProjectsAndBundle, selectedProjectId]);
 
   const stepSubmissionPending = stepJobAction.isSubmitting || publishPrepJobAction.isSubmitting;
   const uiPending = isPending || stepSubmissionPending;
+  const selectedStaleArtifacts = selectedProjectId ? staleArtifactsByProject[selectedProjectId] ?? [] : [];
 
   async function runProjectStep(path: WorkbenchStepPath, _successMessage: string, forceProceed = false) {
     if (!selectedProjectId) {
@@ -263,12 +319,13 @@ export function ProjectWorkbench({
       });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error || "保存 ThinkCard / StyleCore 失败。");
+        throw new Error(payload.error || "保存选题判断 / 表达策略失败。");
       }
       await refreshProjectsAndBundle(selectedProjectId);
-      showFeedback("ThinkCard / StyleCore 已保存。", "success");
+      markArtifactsStale(["research-brief", "sector-model", "outline", "drafts", "review", "publish-prep"]);
+      showFeedback("选题判断 / 表达策略已保存。", "success");
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : "保存 ThinkCard / StyleCore 失败。");
+      showFeedback(error instanceof Error ? error.message : "保存选题判断 / 表达策略失败。");
     } finally {
       setIsPending(false);
     }
@@ -290,7 +347,7 @@ export function ProjectWorkbench({
           );
         },
       });
-      setActiveTab("drafts");
+      setActiveTab("publish");
       setFocusedSection("publish-prep");
       await refreshJobs();
       if (submission.deduped) {
@@ -331,12 +388,27 @@ export function ProjectWorkbench({
         </div>
         <div className="topbar-right">
           <div className="mode-chip">{process.env.NEXT_PUBLIC_MODEL_MODE ? `模型模式：${process.env.NEXT_PUBLIC_MODEL_MODE}` : "本地服务已连接"}</div>
+          <button type="button" className="mode-chip task-center-trigger" onClick={() => setIsTaskCenterOpen(true)}>
+            后台任务 {queueSummary.runningCount} 运行 / {queueSummary.queuedCount} 排队
+          </button>
         </div>
       </header>
+
+      <TaskCenterModal
+        open={isTaskCenterOpen}
+        onClose={() => setIsTaskCenterOpen(false)}
+        onChanged={async () => {
+          await refreshJobs();
+          if (selectedProjectId) {
+            await refreshProjectsAndBundle(selectedProjectId);
+          }
+        }}
+      />
 
       <JobLogPanel
         job={visibleJob}
         logs={detailedVisibleJob ? jobDetail?.logsTail ?? [] : []}
+        queueSummary={queueSummary}
         onRetry={visibleJob?.status === "failed" ? () => void retryFailedJob(visibleJob.id) : null}
         isRetrying={isRetryingJob}
       />
@@ -368,38 +440,59 @@ export function ProjectWorkbench({
             </div>
           ) : (
             <>
-              <ReviewSidebar
+              <StaleArtifactNotice
                 selectedBundle={selectedBundle}
-                activeTab={activeTab}
-                focusedSection={focusedSection}
-                isPending={uiPending}
+                staleArtifacts={selectedStaleArtifacts}
                 onNavigate={(tab, section) => {
                   setActiveTab(tab);
                   setFocusedSection(section);
                 }}
-                onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                onClear={clearArtifacts}
               />
-              <div className="workflow-tabs">
+              <div className="workflow-tabs" aria-label="工作台主阶段">
                 <button
                   className={`tab-button ${activeTab === "overview" ? "active" : ""}`}
-                  onClick={() => setActiveTab("overview")}
+                  onClick={() => {
+                    setActiveTab("overview");
+                    setFocusedSection(null);
+                  }}
                   data-tab="overview"
+                  aria-pressed={activeTab === "overview"}
                 >
-                  选题与检查
+                  判断
                 </button>
                 <button
                   className={`tab-button ${activeTab === "research" ? "active" : ""}`}
-                  onClick={() => setActiveTab("research")}
+                  onClick={() => {
+                    setActiveTab("research");
+                    setFocusedSection(null);
+                  }}
                   data-tab="research"
+                  aria-pressed={activeTab === "research"}
                 >
-                  资料准备
+                  资料
                 </button>
                 <button
                   className={`tab-button ${activeTab === "drafts" ? "active" : ""}`}
-                  onClick={() => setActiveTab("drafts")}
+                  onClick={() => {
+                    setActiveTab("drafts");
+                    setFocusedSection(null);
+                  }}
                   data-tab="drafts"
+                  aria-pressed={activeTab === "drafts"}
                 >
-                  写作推进
+                  写作
+                </button>
+                <button
+                  className={`tab-button ${activeTab === "publish" ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveTab("publish");
+                    setFocusedSection("publish-prep");
+                  }}
+                  data-tab="publish"
+                  aria-pressed={activeTab === "publish"}
+                >
+                  发布
                 </button>
               </div>
 
@@ -422,35 +515,52 @@ export function ProjectWorkbench({
                   setSelectedBundle={setSelectedBundle}
                   selectedProjectId={selectedProjectId}
                   refreshProjectsAndBundle={refreshProjectsAndBundle}
-                  isPending={uiPending}
-                  setIsPending={setIsPending}
-                  setMessage={showFeedback}
-                  runProjectStep={runProjectStep}
-                  focusSection={mapResearchFocus(focusedSection)}
+	                  isPending={uiPending}
+	                  setIsPending={setIsPending}
+	                  setMessage={showFeedback}
+                  markArtifactsStale={markArtifactsStale}
+	                  runProjectStep={runProjectStep}
+	                  focusSection={mapResearchFocus(focusedSection)}
                 />
               )}
 
-              {activeTab === "drafts" && (
+              {(activeTab === "drafts" || activeTab === "publish") && (
                 <DraftsTab 
                   selectedBundle={selectedBundle}
                   setSelectedBundle={setSelectedBundle}
                   selectedProjectId={selectedProjectId}
                   refreshProjectsAndBundle={refreshProjectsAndBundle}
-                  isPending={uiPending}
-                  setIsPending={setIsPending}
-                  setMessage={showFeedback}
+	                  isPending={uiPending}
+	                  setIsPending={setIsPending}
+	                  setMessage={showFeedback}
+                  markArtifactsStale={markArtifactsStale}
                   runProjectStep={runProjectStep}
                   generatePublishPrep={generatePublishPrep}
+                  surfaceTitle={activeTab === "publish" ? "发布" : "写作"}
                   onOpenVitalityCheck={() => {
                     setActiveTab("overview");
                     setFocusedSection("overview-vitality");
                   }}
-                  focusSection={mapDraftsFocus(focusedSection)}
+                  focusSection={activeTab === "publish" ? "publish-prep" : mapDraftsFocus(focusedSection)}
                 />
               )}
             </>
           )}
         </section>
+
+        {selectedBundle ? (
+          <ReviewSidebar
+            selectedBundle={selectedBundle}
+            activeTab={activeTab}
+            focusedSection={focusedSection}
+            isPending={uiPending}
+            onNavigate={(tab, section) => {
+              setActiveTab(tab);
+              setFocusedSection(section);
+            }}
+            onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+          />
+        ) : null}
       </section>
     </main>
   );
@@ -461,6 +571,127 @@ export function ProjectWorkbench({
       return;
     }
     setFeedback({ text, kind: forcedKind ?? inferMessageKind(text) });
+  }
+}
+
+function StaleArtifactNotice({
+  selectedBundle,
+  staleArtifacts,
+  onNavigate,
+  onClear,
+}: {
+  selectedBundle: ProjectBundle;
+  staleArtifacts: StaleArtifact[];
+  onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
+  onClear: (artifacts: StaleArtifact[]) => void;
+}) {
+  const visibleArtifacts = staleArtifacts.filter((artifact) => hasArtifact(selectedBundle, artifact));
+  if (visibleArtifacts.length === 0) {
+    return null;
+  }
+  const target = getArtifactTarget(visibleArtifacts[0]);
+
+  return (
+    <section className="stale-artifact-notice">
+      <div>
+        <strong>下游结果可能已过期</strong>
+        <p>上游内容已经改过，建议重新生成：{visibleArtifacts.map(getArtifactLabel).join("、")}。</p>
+      </div>
+      <div className="stale-artifact-actions">
+        <button type="button" className="secondary-button" onClick={() => onNavigate(target.tab, target.section)}>
+          去处理
+        </button>
+        <button type="button" className="ghost-button" onClick={() => onClear(visibleArtifacts)}>
+          标记已处理
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function reconcileStaleArtifactsForCompletedJob(
+  step: JobStep,
+  projectId: string,
+  clearArtifacts: (artifacts: StaleArtifact[], projectId?: string) => void,
+  markArtifactsStale: (artifacts: StaleArtifact[], projectId?: string) => void,
+) {
+  switch (step) {
+    case "research-brief":
+      clearArtifacts(["research-brief"], projectId);
+      markArtifactsStale(["sector-model", "outline", "drafts", "review", "publish-prep"], projectId);
+      return;
+    case "sector-model":
+      clearArtifacts(["sector-model"], projectId);
+      markArtifactsStale(["outline", "drafts", "review", "publish-prep"], projectId);
+      return;
+    case "outline":
+      clearArtifacts(["outline"], projectId);
+      markArtifactsStale(["drafts", "review", "publish-prep"], projectId);
+      return;
+    case "drafts":
+      clearArtifacts(["drafts"], projectId);
+      markArtifactsStale(["review", "publish-prep"], projectId);
+      return;
+    case "review":
+      clearArtifacts(["review"], projectId);
+      markArtifactsStale(["publish-prep"], projectId);
+      return;
+    case "publish-prep":
+      clearArtifacts(["publish-prep"], projectId);
+      return;
+    default:
+      return;
+  }
+}
+
+function hasArtifact(bundle: ProjectBundle, artifact: StaleArtifact) {
+  switch (artifact) {
+    case "research-brief":
+      return Boolean(bundle.researchBrief);
+    case "sector-model":
+      return Boolean(bundle.sectorModel);
+    case "outline":
+      return Boolean(bundle.outlineDraft);
+    case "drafts":
+      return Boolean(bundle.articleDraft);
+    case "review":
+      return Boolean(bundle.reviewReport);
+    case "publish-prep":
+      return Boolean(bundle.publishPackage);
+  }
+}
+
+function getArtifactLabel(artifact: StaleArtifact) {
+  switch (artifact) {
+    case "research-brief":
+      return "研究清单";
+    case "sector-model":
+      return "板块建模";
+    case "outline":
+      return "段落提纲";
+    case "drafts":
+      return "双稿";
+    case "review":
+      return "VitalityCheck";
+    case "publish-prep":
+      return "发布整理";
+  }
+}
+
+function getArtifactTarget(artifact: StaleArtifact): { tab: ActiveTab; section: WorkspaceSection } {
+  switch (artifact) {
+    case "research-brief":
+      return { tab: "research", section: "research-brief" };
+    case "sector-model":
+      return { tab: "drafts", section: "sector-model" };
+    case "outline":
+      return { tab: "drafts", section: "outline" };
+    case "drafts":
+      return { tab: "drafts", section: "drafts" };
+    case "review":
+      return { tab: "overview", section: "overview-vitality" };
+    case "publish-prep":
+      return { tab: "publish", section: "publish-prep" };
   }
 }
 
@@ -521,7 +752,7 @@ function getResultTabForJobStep(step: JobStep): ActiveTab {
     case "outline":
     case "drafts":
     case "publish-prep":
-      return "drafts";
+      return "publish";
     case "review":
     default:
       return "overview";
@@ -640,9 +871,9 @@ function mapDraftsFocus(section: WorkspaceSection) {
 function getProjectViewState(stage?: ProjectStage): { tab: ActiveTab; section: WorkspaceSection } {
   switch (stage) {
     case "ThinkCard / HKR":
-      return { tab: "overview", section: "overview-think-card" };
+      return { tab: "overview", section: null };
     case "StyleCore":
-      return { tab: "overview", section: "overview-style-core" };
+      return { tab: "overview", section: null };
     case "研究清单":
       return { tab: "research", section: "research-brief" };
     case "资料卡整理":
@@ -656,7 +887,7 @@ function getProjectViewState(stage?: ProjectStage): { tab: ActiveTab; section: W
     case "VitalityCheck":
       return { tab: "overview", section: "overview-vitality" };
     case "发布前整理":
-      return { tab: "drafts", section: "publish-prep" };
+      return { tab: "publish", section: "publish-prep" };
     case "选题定义":
     default:
       return { tab: "overview", section: null };

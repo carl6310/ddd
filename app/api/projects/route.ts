@@ -1,10 +1,11 @@
-import { fail, ok } from "@/lib/api";
+import { fail, failWithData, ok } from "@/lib/api";
 import { buildCardsFromLegacy, deriveLegacyFrames } from "@/lib/author-cards";
 import { runStructuredTask } from "@/lib/llm";
 import { buildStyleReference, createProject, listProjects } from "@/lib/repository";
-import type { ArticleProject, TopicJudgeResult } from "@/lib/types";
+import type { ArticleProject, TopicJudgeResult, TopicMeta } from "@/lib/types";
 import { createId, nowIso, toNumber } from "@/lib/utils";
 import { buildDefaultWritingMoves } from "@/lib/writing-moves";
+import { defaultTopicMeta } from "@/lib/author-cards";
 
 export async function GET() {
   return ok({ projects: listProjects() });
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
       targetWords?: number;
       notes?: string;
       sampleDigest?: string;
+      topicMeta?: TopicMeta;
+      forceProceed?: boolean;
       articleType?: ArticleProject["articleType"];
       thesis?: string;
       coreQuestion?: string;
@@ -31,6 +34,12 @@ export async function POST(request: Request) {
 
     if (!body.topic?.trim()) {
       return fail("创建项目时必须填写选题。");
+    }
+    if (body.topicMeta?.topicScorecard?.canForceProceed && !body.forceProceed) {
+      return failWithData(body.topicMeta.topicScorecard.recommendation, 409, {
+        needsConfirmation: true,
+        topicScorecard: body.topicMeta.topicScorecard,
+      });
     }
 
     const topicJudge =
@@ -58,6 +67,10 @@ export async function POST(request: Request) {
             targetWords: toNumber(body.targetWords, 2400),
             sampleDigest: body.sampleDigest,
             styleReference: buildStyleReference(body.topic.trim(), null),
+          }, {
+            audit: {
+              promptVersion: "think_card:create_project:v1",
+            },
           });
 
     const cards = buildCardsFromLegacy({
@@ -95,6 +108,7 @@ export async function POST(request: Request) {
       coreQuestion: topicJudge.coreQuestion,
       targetWords: toNumber(body.targetWords, 2400),
       notes: body.notes?.trim() || topicJudge.rationale,
+      topicMeta: body.topicMeta ?? defaultTopicMeta(),
       thinkCard: cards.thinkCard,
       styleCore: cards.styleCore,
       vitalityCheck: cards.vitalityCheck,

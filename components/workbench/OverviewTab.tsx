@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import type { ProjectBundle } from "@/lib/types";
+import { getTopicReaderLens } from "@/lib/topic-meta";
 import { canPreparePublish } from "@/lib/workflow";
-import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
-import { InlineTextEdit, InlineTextAreaEdit } from "@/components/ui/inline-edit";
+import { formatProjectStage } from "@/lib/project-stage-labels";
+import { InlineTextAreaEdit } from "@/components/ui/inline-edit";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { AccordionCard } from "@/components/ui/accordion-card";
 import { buildWritingQualitySnapshot } from "@/lib/writing-quality/summary";
@@ -195,6 +196,9 @@ export function OverviewTab({
     selectedBundle.project.thinkCard.materialDigest,
     selectedBundle.project.thinkCard.verdictReason,
     selectedBundle.project.thinkCard.coreJudgement,
+    selectedBundle.project.thinkCard.articlePrototype,
+    selectedBundle.project.thinkCard.targetReaderPersona,
+    selectedBundle.project.thinkCard.creativeAnchor,
     selectedBundle.project.thinkCard.counterIntuition,
     selectedBundle.project.thinkCard.readerPayoff,
     selectedBundle.project.thinkCard.decisionImplication,
@@ -208,6 +212,9 @@ export function OverviewTab({
   const styleCoreCompletion = countFilled([
     selectedBundle.project.styleCore.rhythm,
     selectedBundle.project.styleCore.breakPattern,
+    selectedBundle.project.styleCore.openingMoves.join(" "),
+    selectedBundle.project.styleCore.transitionMoves.join(" "),
+    selectedBundle.project.styleCore.endingEchoMoves.join(" "),
     selectedBundle.project.styleCore.knowledgeDrop,
     selectedBundle.project.styleCore.personalView,
     selectedBundle.project.styleCore.judgement,
@@ -225,6 +232,9 @@ export function OverviewTab({
     selectedBundle.project.styleCore.toneCeiling,
     selectedBundle.project.styleCore.concretenessRequirement,
     selectedBundle.project.styleCore.costSense,
+    selectedBundle.project.styleCore.forbiddenFabrications.join(" "),
+    selectedBundle.project.styleCore.genericLanguageBlackList.join(" "),
+    selectedBundle.project.styleCore.unsupportedSceneDetector,
   ]);
   const vitalityIssueCount = selectedBundle.project.vitalityCheck.entries.filter((entry) => entry.status !== "pass").length;
   const vitalityIssues = selectedBundle.project.vitalityCheck.entries.filter(
@@ -233,6 +243,7 @@ export function OverviewTab({
   const vitalityPassed = selectedBundle.project.vitalityCheck.entries.filter((entry) => entry.status === "pass");
   const vitalityGuidance = buildVitalityGuidance(vitalityIssues, selectedBundle.reviewReport);
   const writingQuality = buildWritingQualitySnapshot(selectedBundle);
+  const topicReaderLens = getTopicReaderLens(selectedBundle.project.topicMeta);
 
   return (
     <>
@@ -245,7 +256,7 @@ export function OverviewTab({
             </p>
           </div>
           <div className="badge-cluster">
-            <span className="badge">{selectedBundle.project.stage}</span>
+            <span className="badge">{formatProjectStage(selectedBundle.project.stage)}</span>
             <a className="link-button" href={`/api/projects/${selectedBundle.project.id}/export/markdown`} target="_blank" rel="noreferrer">
               导出 Markdown
             </a>
@@ -259,6 +270,22 @@ export function OverviewTab({
           <div className="project-summary-row">
             <strong>核心问题</strong>
             <p>{selectedBundle.project.coreQuestion}</p>
+          </div>
+          {selectedBundle.project.topicMeta.topicScorecard ? (
+            <div className="project-summary-row">
+              <strong>选题评分</strong>
+              <p>
+                {selectedBundle.project.topicMeta.topicScorecard.status} · HKR {selectedBundle.project.topicMeta.topicScorecard.hkr.h}/
+                {selectedBundle.project.topicMeta.topicScorecard.hkr.k}/{selectedBundle.project.topicMeta.topicScorecard.hkr.r}
+              </p>
+            </div>
+          ) : null}
+          <div className="project-summary-row">
+            <strong>文章原型 / 读者镜头</strong>
+            <p>
+              {selectedBundle.project.thinkCard.articlePrototype} · {selectedBundle.project.thinkCard.targetReaderPersona}
+              {topicReaderLens.length ? ` · ${topicReaderLens.join(" / ")}` : ""}
+            </p>
           </div>
         </div>
       </section>
@@ -288,7 +315,7 @@ export function OverviewTab({
       <section className="card stack section-shell">
         <div className="card-header">
           <div>
-            <h2>选题与检查</h2>
+            <h2>判断</h2>
             <p className="subtle">先看摘要，只有需要修改时才进入编辑态，避免把首页变成一张长表单。</p>
           </div>
         </div>
@@ -308,18 +335,27 @@ export function OverviewTab({
         </div>
 
         {surface === "dashboard" ? (
-          <section className="stack section-panel">
+          <section className="stack section-panel overview-dashboard-stage">
             <div className="editor-overview-grid">
-              <EditorStatCard label="ThinkCard" value={`${thinkCardCompletion}/14`} note="主判断、反直觉抓手、读者收益和 HKR 已填字段。" />
-              <EditorStatCard label="StyleCore" value={`${styleCoreCompletion}/19`} note="风格动作、限制条件和具体性要求目前已填字段。" />
-              <EditorStatCard label="VitalityCheck" value={`${vitalityIssueCount}`} note="当前未通过的检查项数量。" />
-              <EditorStatCard label="Writing Quality" value={writingQuality.overallScore !== null ? String(writingQuality.overallScore) : "n/a"} note="当前项目的写作质量基线分数。" />
+              <EditorStatCard label="选题判断" value={`${thinkCardCompletion}/17`} note="ThinkCard 主判断、原型、读者画像、创作锚点和 HKR 已填字段。" />
+              <EditorStatCard label="表达策略" value={`${styleCoreCompletion}/25`} note="StyleCore 风格动作、限制条件、anti-fabrication 和具体性要求目前已填字段。" />
+              <EditorStatCard label="生命力检查" value={`${vitalityIssueCount}`} note="当前未通过的检查项数量。" />
+              <EditorStatCard label="写作质量" value={writingQuality.overallScore !== null ? String(writingQuality.overallScore) : "n/a"} note="当前项目的写作质量基线分数。" />
             </div>
             <div className="overview-quick-grid">
               <OverviewQuickCard
+                title="选题评分"
+                description="看这题为什么值得写，以及当前建议开题还是补信号。"
+                meta={selectedBundle.project.topicMeta.topicScorecard ? selectedBundle.project.topicMeta.topicScorecard.status : "未记录"}
+                onOpen={() => {
+                  setLocalEditorSection("think-card");
+                  setLocalSurface("editor");
+                }}
+              />
+              <OverviewQuickCard
                 title="选题判断"
-                description="看主判断、题值和读者收获。"
-                meta={`${thinkCardCompletion}/9 已填`}
+                description="主判断、题值、读者收获和不写什么。"
+                meta={`${thinkCardCompletion}/17 已填`}
                 onOpen={() => {
                   setLocalEditorSection("think-card");
                   setLocalSurface("editor");
@@ -327,34 +363,74 @@ export function OverviewTab({
               />
               <OverviewQuickCard
                 title="表达策略"
-                description="看推进、判断和作者站位。"
-                meta={`${styleCoreCompletion}/14 已填`}
+                description="推进节奏、表达动作、作者站位和禁区。"
+                meta={`${styleCoreCompletion}/25 已填`}
                 onOpen={() => {
                   setLocalEditorSection("style-core");
                   setLocalSurface("editor");
                 }}
               />
               <OverviewQuickCard
-                title="旧版映射"
-                description="检查老链路还能不能正常工作。"
-                meta="HKRR / HAMD / 旧动作卡"
-                onOpen={() => {
-                  setLocalEditorSection("compatibility");
-                  setLocalSurface("editor");
-                }}
-              />
-              <OverviewQuickCard
-                title="发布前检查"
-                description="先看 fail，再看 warn。"
-                meta={`${vitalityIssueCount} 个问题待处理`}
+                title="质量金字塔"
+                description="看问题卡在 L1-L4 哪一层。"
+                meta={selectedBundle.reviewReport?.qualityPyramid?.map((layer) => `${layer.level}:${layer.status}`).join(" / ") || "未运行"}
                 onOpen={() => {
                   setLocalEditorSection("vitality");
                   setLocalSurface("editor");
                 }}
               />
             </div>
+            <CompatibilityDiagnostics selectedBundle={selectedBundle} compact />
+            {selectedBundle.project.topicMeta.signalBrief ? (
+              <article className="status-block">
+                <h3>信号简报</h3>
+                <ul className="compact-list">
+                  {selectedBundle.project.topicMeta.signalBrief.signals.slice(0, 4).map((signal) => (
+                    <li key={`${signal.title}-${signal.source}`}>
+                      <strong>{signal.title}</strong>
+                      <span>{signal.summary}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ) : null}
+            {selectedBundle.project.topicMeta.topicScorecard ? (
+              <article className="status-block">
+                <h3>选题评分</h3>
+                <ul className="compact-list">
+                  <li>
+                    <strong>建议状态</strong>
+                    <span>{selectedBundle.project.topicMeta.topicScorecard.status}</span>
+                  </li>
+                  <li>
+                    <strong>HKR</strong>
+                    <span>
+                      {selectedBundle.project.topicMeta.topicScorecard.hkr.h}/{selectedBundle.project.topicMeta.topicScorecard.hkr.k}/
+                      {selectedBundle.project.topicMeta.topicScorecard.hkr.r}
+                    </span>
+                  </li>
+                  <li>
+                    <strong>信号覆盖</strong>
+                    <span>{selectedBundle.project.topicMeta.topicScorecard.signalCoverageSummary}</span>
+                  </li>
+                </ul>
+              </article>
+            ) : null}
+            {selectedBundle.reviewReport?.qualityPyramid?.length ? (
+              <article className="status-block">
+                <h3>质量金字塔</h3>
+                <ul className="compact-list">
+                  {selectedBundle.reviewReport.qualityPyramid.map((layer) => (
+                    <li key={layer.level}>
+                      <strong>{layer.level} {layer.title}</strong>
+                      <span>{layer.status} · {layer.summary}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ) : null}
             <article className="status-block">
-              <h3>Writing Quality</h3>
+              <h3>写作质量</h3>
               <ul className="compact-list">
                 <li>
                   <strong>总体质量分</strong>
@@ -393,13 +469,10 @@ export function OverviewTab({
         {surface === "editor" ? (
           <div className="section-subnav">
             <button className={`section-subnav-button ${activeEditorSection === "think-card" ? "active" : ""}`} onClick={() => setLocalEditorSection("think-card")}>
-            ThinkCard
+            选题判断
           </button>
           <button className={`section-subnav-button ${activeEditorSection === "style-core" ? "active" : ""}`} onClick={() => setLocalEditorSection("style-core")}>
-            StyleCore
-          </button>
-          <button className={`section-subnav-button ${activeEditorSection === "compatibility" ? "active" : ""}`} onClick={() => setLocalEditorSection("compatibility")}>
-            兼容层
+            表达策略
           </button>
           <button className={`section-subnav-button ${activeEditorSection === "vitality" ? "active" : ""}`} onClick={() => setLocalEditorSection("vitality")}>
             VitalityCheck
@@ -410,11 +483,14 @@ export function OverviewTab({
         {surface === "editor" && activeEditorSection === "think-card" ? (
           <section className="stack section-panel">
             <div className="section-panel-header">
-              <h3>ThinkCard</h3>
+              <div className="stack section-header-copy">
+                <h3>选题判断</h3>
+                <p className="subtle">ThinkCard 是这篇文章的主命题来源。</p>
+              </div>
               <span className="badge">{selectedBundle.project.thinkCard.topicVerdict}</span>
             </div>
             <div className="editor-overview-grid">
-              <EditorStatCard label="完成度" value={`${thinkCardCompletion}/14`} note="先把主判断、反直觉抓手、读者收益和 HKR 补完整。" />
+              <EditorStatCard label="完成度" value={`${thinkCardCompletion}/17`} note="先把主判断、原型、读者画像、创作锚点和 HKR 补完整。" />
               <EditorStatCard label="当前题值" value={selectedBundle.project.thinkCard.topicVerdict} note="`strong / rework / weak` 决定后面是否值得继续往下推。" />
               <EditorStatCard label="替代角度" value={String(selectedBundle.project.thinkCard.alternativeAngles.length)} note="保留备选角度，避免正文写到一半才发现命题不成立。" />
             </div>
@@ -424,6 +500,9 @@ export function OverviewTab({
                 <TextAreaField label="核心问题" value={selectedBundle.project.coreQuestion} rows={3} onChange={(value) => updateProjectField(setSelectedBundle, { coreQuestion: value })} />
                 <TextAreaField label="素材吃透摘要" value={selectedBundle.project.thinkCard.materialDigest} rows={4} onChange={(value) => updateThinkCardField(setSelectedBundle, { materialDigest: value })} />
                 <TextAreaField label="核心判断" value={selectedBundle.project.thinkCard.coreJudgement} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { coreJudgement: value })} />
+                <SelectField label="文章原型" value={selectedBundle.project.thinkCard.articlePrototype} onChange={(value) => updateThinkCardField(setSelectedBundle, { articlePrototype: value as typeof selectedBundle.project.thinkCard.articlePrototype })} options={["total_judgement", "spatial_segmentation", "buyer_split", "transaction_observation", "decision_service", "risk_deconstruction", "scene_character"]} />
+                <SelectField label="目标读者画像" value={selectedBundle.project.thinkCard.targetReaderPersona} onChange={(value) => updateThinkCardField(setSelectedBundle, { targetReaderPersona: value as typeof selectedBundle.project.thinkCard.targetReaderPersona })} options={["busy_relocator", "improver_buyer", "risk_aware_reader", "local_life_reader"]} />
+                <TextAreaField label="创作锚点" value={selectedBundle.project.thinkCard.creativeAnchor} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { creativeAnchor: value })} />
                 <TextAreaField label="反直觉抓手" value={selectedBundle.project.thinkCard.counterIntuition} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { counterIntuition: value })} />
               </AccordionCard>
               <AccordionCard title="题值判断" description="这里决定这题值不值得继续投入。">
@@ -470,7 +549,7 @@ export function OverviewTab({
               </AccordionCard>
             </div>
             <button onClick={saveProjectFrame} disabled={isPending}>
-              保存 ThinkCard
+              保存选题判断
             </button>
           </section>
         ) : null}
@@ -478,11 +557,14 @@ export function OverviewTab({
         {surface === "editor" && activeEditorSection === "style-core" ? (
           <section className="stack section-panel">
             <div className="section-panel-header">
-              <h3>StyleCore</h3>
-              <span className="badge">风格动作编辑</span>
+              <div className="stack section-header-copy">
+                <h3>表达策略</h3>
+                <p className="subtle">StyleCore 是后续提纲、初稿和修稿的写法约束。</p>
+              </div>
+              <span className="badge">StyleCore</span>
             </div>
             <div className="editor-overview-grid">
-              <EditorStatCard label="完成度" value={`${styleCoreCompletion}/19`} note="先补齐推进、判断、作者站位和限制条件这几组动作。" />
+              <EditorStatCard label="完成度" value={`${styleCoreCompletion}/25`} note="先补齐推进、动作资产、作者站位和 anti-fabrication 规则。" />
               <EditorStatCard label="核心动作" value="节奏 + 判断" note="这两组字段最直接决定正文是不是只是资料堆叠。" />
               <EditorStatCard label="作者像" value="私人视角" note="没有作者站位时，整篇会更像结构化报告而不是文章。" />
             </div>
@@ -490,6 +572,9 @@ export function OverviewTab({
               <AccordionCard title="推进与判断" description="决定文章往前走的主驱动力。" defaultOpen>
                 <TextAreaField label="节奏推进" value={selectedBundle.project.styleCore.rhythm} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { rhythm: value })} />
                 <TextAreaField label="故意打破" value={selectedBundle.project.styleCore.breakPattern} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { breakPattern: value })} />
+                <TextAreaField label="开头动作" value={selectedBundle.project.styleCore.openingMoves.join("\n")} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { openingMoves: value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) })} />
+                <TextAreaField label="转场动作" value={selectedBundle.project.styleCore.transitionMoves.join("\n")} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { transitionMoves: value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) })} />
+                <TextAreaField label="结尾回环动作" value={selectedBundle.project.styleCore.endingEchoMoves.join("\n")} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { endingEchoMoves: value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) })} />
                 <TextAreaField label="判断力" value={selectedBundle.project.styleCore.judgement} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { judgement: value })} />
                 <TextAreaField label="对立面理解" value={selectedBundle.project.styleCore.counterView} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { counterView: value })} />
               </AccordionCard>
@@ -556,10 +641,13 @@ export function OverviewTab({
               <AccordionCard title="回收与代价" description="结尾有没有回环，判断有没有现实重量。">
                 <TextAreaField label="回环呼应" value={selectedBundle.project.styleCore.echo} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { echo: value })} />
                 <TextAreaField label="现实代价" value={selectedBundle.project.styleCore.costSense} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { costSense: value })} />
+                <TextAreaField label="禁止编造" value={selectedBundle.project.styleCore.forbiddenFabrications.join("\n")} rows={4} onChange={(value) => updateStyleCoreField(setSelectedBundle, { forbiddenFabrications: value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) })} />
+                <TextAreaField label="泛化黑名单" value={selectedBundle.project.styleCore.genericLanguageBlackList.join("\n")} rows={4} onChange={(value) => updateStyleCoreField(setSelectedBundle, { genericLanguageBlackList: value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) })} />
+                <TextAreaField label="Unsupported scene detector" value={selectedBundle.project.styleCore.unsupportedSceneDetector} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { unsupportedSceneDetector: value })} />
               </AccordionCard>
             </div>
             <button onClick={saveProjectFrame} disabled={isPending}>
-              保存 StyleCore
+              保存表达策略
             </button>
           </section>
         ) : null}
@@ -567,29 +655,13 @@ export function OverviewTab({
         {surface === "editor" && activeEditorSection === "compatibility" ? (
           <section className="stack section-panel">
             <div className="section-panel-header">
-              <h3>兼容层</h3>
-              <span className="badge">旧链路兼容</span>
+              <div className="stack section-header-copy">
+                <h3>系统映射</h3>
+                <p className="subtle">旧链路诊断，只读查看。</p>
+              </div>
+              <span className="badge">只读</span>
             </div>
-            <div className="status-block">
-              <p className="subtle">这部分会从 ThinkCard / StyleCore 自动派生，先保留给旧链路和导出使用。</p>
-              <ul className="compact-list">
-                <li>
-                  <strong>HKRR</strong>
-                  <span>{selectedBundle.project.hkrr.happy} / {selectedBundle.project.hkrr.knowledge} / {selectedBundle.project.hkrr.resonance}</span>
-                </li>
-                <li>
-                  <strong>HAMD</strong>
-                  <span>{selectedBundle.project.hamd.hook || "待补"} / {selectedBundle.project.hamd.anchor || "待补"} / {selectedBundle.project.hamd.different || "待补"}</span>
-                </li>
-                <li>
-                  <strong>旧动作卡</strong>
-                  <span>{selectedBundle.project.writingMoves.signatureLine || "待补"}</span>
-                </li>
-              </ul>
-            </div>
-            <button onClick={saveProjectFrame} disabled={isPending}>
-              同步兼容层
-            </button>
+            <CompatibilityDiagnostics selectedBundle={selectedBundle} />
           </section>
         ) : null}
 
@@ -911,6 +983,138 @@ function OverviewQuickCard({
         进入编辑
       </button>
     </article>
+  );
+}
+
+function CompatibilityDiagnostics({
+  selectedBundle,
+  compact = false,
+}: {
+  selectedBundle: ProjectBundle;
+  compact?: boolean;
+}) {
+  const { hkrr, hamd, writingMoves } = selectedBundle.project;
+  const derivedItems = [
+    {
+      label: "HKRR",
+      value: [hkrr.happy, hkrr.knowledge, hkrr.resonance, hkrr.rhythm].filter(Boolean).length,
+      total: 4,
+      summary: hkrr.summary || hkrr.knowledge || "待同步",
+    },
+    {
+      label: "HAMD",
+      value: [hamd.hook, hamd.anchor, hamd.different].filter(Boolean).length,
+      total: 3,
+      summary: hamd.anchor || hamd.hook || "待同步",
+    },
+    {
+      label: "旧动作卡",
+      value: [
+        writingMoves.signatureLine,
+        writingMoves.characterScene,
+        writingMoves.freshObservation,
+        writingMoves.culturalLift,
+        writingMoves.costSense,
+        writingMoves.echoLine,
+      ].filter(Boolean).length,
+      total: 6,
+      summary: writingMoves.signatureLine || writingMoves.echoLine || "待同步",
+    },
+  ];
+
+  if (compact) {
+    return (
+      <details className="compat-diagnostics compact-compat-diagnostics">
+        <summary>
+          <span>系统映射</span>
+          <small>旧链路只读诊断</small>
+        </summary>
+        <div className="compat-diagnostics-grid">
+          {derivedItems.map((item) => (
+            <article className="compat-diagnostics-item" key={item.label}>
+              <span>{item.label}</span>
+              <strong>
+                {item.value}/{item.total}
+              </strong>
+              <small>{item.summary}</small>
+            </article>
+          ))}
+        </div>
+      </details>
+    );
+  }
+
+  return (
+    <div className="compat-diagnostics">
+      <div className="compat-diagnostics-grid">
+        {derivedItems.map((item) => (
+          <article className="compat-diagnostics-item" key={item.label}>
+            <span>{item.label}</span>
+            <strong>
+              {item.value}/{item.total}
+            </strong>
+            <small>{item.summary}</small>
+          </article>
+        ))}
+      </div>
+      <div className="compat-readout">
+        <section>
+          <h4>HKRR</h4>
+          <ul className="compact-list">
+            <li>
+              <strong>Happy</strong>
+              <span>{hkrr.happy || "待同步"}</span>
+            </li>
+            <li>
+              <strong>Knowledge</strong>
+              <span>{hkrr.knowledge || "待同步"}</span>
+            </li>
+            <li>
+              <strong>Resonance</strong>
+              <span>{hkrr.resonance || "待同步"}</span>
+            </li>
+            <li>
+              <strong>Rhythm</strong>
+              <span>{hkrr.rhythm || "待同步"}</span>
+            </li>
+          </ul>
+        </section>
+        <section>
+          <h4>HAMD</h4>
+          <ul className="compact-list">
+            <li>
+              <strong>Hook</strong>
+              <span>{hamd.hook || "待同步"}</span>
+            </li>
+            <li>
+              <strong>Anchor</strong>
+              <span>{hamd.anchor || "待同步"}</span>
+            </li>
+            <li>
+              <strong>Different</strong>
+              <span>{hamd.different || "待同步"}</span>
+            </li>
+          </ul>
+        </section>
+        <section>
+          <h4>旧动作卡</h4>
+          <ul className="compact-list">
+            <li>
+              <strong>Signature</strong>
+              <span>{writingMoves.signatureLine || "待同步"}</span>
+            </li>
+            <li>
+              <strong>Fresh observation</strong>
+              <span>{writingMoves.freshObservation || "待同步"}</span>
+            </li>
+            <li>
+              <strong>Echo</strong>
+              <span>{writingMoves.echoLine || "待同步"}</span>
+            </li>
+          </ul>
+        </section>
+      </div>
+    </div>
   );
 }
 
