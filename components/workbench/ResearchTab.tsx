@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { ProjectBundle, SourceCard } from "@/lib/types";
 import { getResearchGaps } from "@/lib/workflow";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Card, Panel, Surface } from "@/components/ui/surface";
 import { useJobAction } from "@/hooks/use-job-action";
 import { analyzeEvidenceCoverage } from "@/lib/evidence/coverage";
 
@@ -118,6 +122,28 @@ export function ResearchTab({
         .filter((card): card is SourceCard => Boolean(card)),
     [evidenceAnalysis.orphanSourceCardIds, selectedBundle.sourceCards],
   );
+  const evidenceSummaryMetrics = [
+    {
+      label: "引用覆盖率",
+      value: `${Math.round(evidenceAnalysis.summary.citationCoverage * 100)}%`,
+    },
+    {
+      label: "分段证据覆盖",
+      value: `${Math.round(evidenceAnalysis.summary.sectionEvidenceCoverage * 100)}%`,
+    },
+    {
+      label: "关键点覆盖",
+      value: `${Math.round(evidenceAnalysis.summary.keyPointCoverage * 100)}%`,
+    },
+    {
+      label: "无效引用",
+      value: evidenceAnalysis.summary.brokenCitationCount,
+    },
+    {
+      label: "孤立资料卡",
+      value: evidenceAnalysis.summary.orphanSourceCardCount,
+    },
+  ];
   const citedSourceCardIds = useMemo(() => new Set(sourceCardGroups.citations.map((card) => card.id)), [sourceCardGroups.citations]);
   const orphanSourceCardIds = useMemo(() => new Set(evidenceAnalysis.orphanSourceCardIds), [evidenceAnalysis.orphanSourceCardIds]);
 
@@ -318,27 +344,27 @@ export function ResearchTab({
 
   return (
     <>
-      <section className="card stack section-shell">
+      <Surface className="stack section-shell">
         <div className="section-shell-compact-head">
           <h2>资料</h2>
-          <div className="section-subnav">
-            <button className={`section-subnav-button ${activeSection === "research-brief" ? "active" : ""}`} onClick={() => setActiveSection("research-brief")}>
+          <div className="section-subnav" role="tablist" aria-label="资料阶段视图">
+            <button type="button" role="tab" aria-selected={activeSection === "research-brief"} className={`section-subnav-button ${activeSection === "research-brief" ? "active" : ""}`} onClick={() => setActiveSection("research-brief")}>
               研究清单
             </button>
-            <button className={`section-subnav-button ${activeSection === "source-form" ? "active" : ""}`} onClick={() => setActiveSection("source-form")}>
+            <button type="button" role="tab" aria-selected={activeSection === "source-form"} className={`section-subnav-button ${activeSection === "source-form" ? "active" : ""}`} onClick={() => setActiveSection("source-form")}>
               资料录入
             </button>
-            <button className={`section-subnav-button ${activeSection === "source-library" ? "active" : ""}`} onClick={() => setActiveSection("source-library")}>
+            <button type="button" role="tab" aria-selected={activeSection === "source-library"} className={`section-subnav-button ${activeSection === "source-library" ? "active" : ""}`} onClick={() => setActiveSection("source-library")}>
               资料索引
             </button>
           </div>
         </div>
 
         {activeSection === "research-brief" ? (
-          <section className="stack section-panel research-brief-stage">
+          <Panel className="stack section-panel research-brief-stage">
             <div className="section-panel-header">
               <h3>研究清单</h3>
-              {selectedBundle.researchBrief ? <span className="badge">{selectedBundle.researchBrief.mustResearch.length} 个维度</span> : null}
+              {selectedBundle.researchBrief ? <Chip tone="accent">{selectedBundle.researchBrief.mustResearch.length} 个维度</Chip> : null}
             </div>
             {selectedBundle.researchBrief ? (
               <div className="stack">
@@ -357,7 +383,7 @@ export function ResearchTab({
                 </label>
                 <ContainedScrollArea className="editor-card-grid editor-scroll-stack research-brief-list">
                   {selectedBundle.researchBrief.mustResearch.map((item, index) => (
-                    <article className="status-block stack compact-editor-card research-brief-item" key={`must-research-${index}`}>
+                    <Card className="status-block stack compact-editor-card research-brief-item" key={`must-research-${index}`}>
                       <label>
                         研究维度
                         <input
@@ -402,7 +428,7 @@ export function ResearchTab({
                           rows={3}
                         />
                       </label>
-                    </article>
+                    </Card>
                   ))}
                 </ContainedScrollArea>
                 <div className="two-column">
@@ -446,30 +472,32 @@ export function ResearchTab({
                     rows={5}
                   />
                 </label>
-                <button onClick={saveResearchBrief} disabled={isPending}>
+                <Button type="button" variant="secondary" size="md" onClick={saveResearchBrief} disabled={isPending}>
                   保存研究清单
-                </button>
+                </Button>
               </div>
             ) : (
-              <div className="empty-state stack">
+              <EmptyState className="stack" title="还没有研究清单">
                 <p>还没有研究清单。</p>
-                <button
-                  className="primary-button"
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
                   onClick={() => void runProjectStep("research-brief", "研究清单已生成。")}
                   disabled={isPending}
                 >
                   生成研究清单
-                </button>
-              </div>
+                </Button>
+              </EmptyState>
             )}
-          </section>
+          </Panel>
         ) : null}
 
         {activeSection === "source-form" ? (
-          <section className="stack section-panel">
+          <Panel className="stack section-panel">
             <div className="section-panel-header">
               <h3>资料录入</h3>
-              <span className="badge">{sourceCardForm.rawText.trim().length.toLocaleString()} 字原文</span>
+              <Chip tone="accent">{sourceCardForm.rawText.trim().length.toLocaleString()} 字原文</Chip>
             </div>
             {researchGaps.length > 0 ? (
               <details className="source-gap-panel">
@@ -487,13 +515,13 @@ export function ResearchTab({
               </details>
             ) : null}
             <div className="source-intake-layout">
-              <section className="source-intake-card source-intake-primary">
+              <Card as="section" className="source-intake-card source-intake-primary">
                 <div className="source-intake-head">
                   <div>
                     <h4>快速录入</h4>
                     <p className="subtle">链接来源、标题和入库动作。</p>
                   </div>
-                  <span className="badge">{sourceCardForm.title.trim() ? "待保存" : "未命名"}</span>
+                  <Chip>{sourceCardForm.title.trim() ? "待保存" : "未命名"}</Chip>
                 </div>
                 <div className="source-title-url-grid">
                   <label>
@@ -506,26 +534,26 @@ export function ResearchTab({
                   </label>
                 </div>
                 <div className="source-action-bar">
-                  <button onClick={extractSourceFromUrl} disabled={isPending || extractJob.isSubmitting || !sourceCardForm.url.trim()}>
+                  <Button type="button" variant="secondary" size="md" onClick={extractSourceFromUrl} disabled={isPending || extractJob.isSubmitting || !sourceCardForm.url.trim()}>
                     从链接抓正文
-                  </button>
-                  <button onClick={autoFillSourceCard} disabled={isPending || summarizeJob.isSubmitting || !sourceCardForm.rawText.trim()}>
+                  </Button>
+                  <Button type="button" variant="secondary" size="md" onClick={autoFillSourceCard} disabled={isPending || summarizeJob.isSubmitting || !sourceCardForm.rawText.trim()}>
                     自动生成摘要与证据
-                  </button>
-                  <button className="primary-button" onClick={saveSourceCard} disabled={isPending || !sourceCardSaveReadiness.ok}>
+                  </Button>
+                  <Button type="button" variant="primary" size="lg" onClick={saveSourceCard} disabled={isPending || !sourceCardSaveReadiness.ok}>
                     保存资料卡
-                  </button>
+                  </Button>
                 </div>
                 {!sourceCardSaveReadiness.ok ? <p className="subtle action-hint">{sourceCardSaveReadiness.message}</p> : null}
-              </section>
+              </Card>
 
-              <section className="source-intake-card source-raw-card">
+              <Card as="section" className="source-intake-card source-raw-card">
                 <div className="source-intake-head">
                   <div>
                     <h4>原文池</h4>
                     <p className="subtle">粘贴或抓取的完整资料原文。</p>
                   </div>
-                  <span className="badge">{sourceCardForm.rawText.trim().length.toLocaleString()} 字</span>
+                  <Chip>{sourceCardForm.rawText.trim().length.toLocaleString()} 字</Chip>
                 </div>
                 <label className="source-raw-field">
                   粘贴资料原文
@@ -536,9 +564,9 @@ export function ResearchTab({
                     placeholder="粘贴完整原文、访谈记录或网页正文。"
                   />
                 </label>
-              </section>
+              </Card>
 
-              <section className="source-intake-card source-digest-card">
+              <Card as="section" className="source-intake-card source-digest-card">
                 <div className="source-intake-head">
                   <div>
                     <h4>摘要与证据</h4>
@@ -553,12 +581,12 @@ export function ResearchTab({
                   证据片段
                   <AutoGrowTextarea value={sourceCardForm.evidence} onChange={(event) => setSourceCardForm({ ...sourceCardForm, evidence: event.target.value })} rows={5} />
                 </label>
-              </section>
+              </Card>
 
               <details className="source-intake-card source-meta-card">
                 <summary>
                   <span>资料属性</span>
-                  <small>{sourceCardForm.credibility}可信度 · {sourceCardForm.sourceType}</small>
+                  <small>{sourceCardForm.credibility}可信度 · {formatSourceType(sourceCardForm.sourceType)}</small>
                 </summary>
                 <div className="source-meta-grid">
                   <label>
@@ -657,42 +685,36 @@ export function ResearchTab({
                 </div>
               </details>
             </div>
-          </section>
+          </Panel>
         ) : null}
 
         {activeSection === "source-library" ? (
-          <section className="stack section-panel source-library-stage">
+          <Panel className="stack section-panel source-library-stage">
             <div className="section-panel-header source-library-head">
               <h3>资料索引</h3>
-              <span className="badge">{selectedBundle.sourceCards.length} 张</span>
+              <Chip tone="accent">{selectedBundle.sourceCards.length} 张</Chip>
             </div>
             <div className="two-column evidence-summary-grid">
-              <article className="status-block evidence-summary-card">
-                <h3>证据摘要</h3>
-                <ul className="compact-list">
-                  <li>
-                    <strong>引用覆盖率</strong>
-                    <span>{Math.round(evidenceAnalysis.summary.citationCoverage * 100)}%</span>
-                  </li>
-                  <li>
-                    <strong>分段证据覆盖</strong>
-                    <span>{Math.round(evidenceAnalysis.summary.sectionEvidenceCoverage * 100)}%</span>
-                  </li>
-                  <li>
-                    <strong>关键点覆盖</strong>
-                    <span>{Math.round(evidenceAnalysis.summary.keyPointCoverage * 100)}%</span>
-                  </li>
-                  <li>
-                    <strong>无效引用</strong>
-                    <span>{evidenceAnalysis.summary.brokenCitationCount}</span>
-                  </li>
-                  <li>
-                    <strong>孤立资料卡</strong>
-                    <span>{evidenceAnalysis.summary.orphanSourceCardCount}</span>
-                  </li>
-                </ul>
-              </article>
-              <article className="status-block evidence-gap-card">
+              <Card className="status-block evidence-summary-card">
+                <div className="evidence-summary-head">
+                  <div>
+                    <h3>证据摘要</h3>
+                    <p>先判断资料有没有进入正文链路，再决定补证据还是删低价值材料。</p>
+                  </div>
+                  <Chip tone={evidenceAnalysis.summary.orphanSourceCardCount > 0 ? "warning" : "success"}>
+                    {evidenceAnalysis.summary.orphanSourceCardCount > 0 ? "待处理" : "已对齐"}
+                  </Chip>
+                </div>
+                <div className="evidence-metric-grid">
+                  {evidenceSummaryMetrics.map((metric) => (
+                    <div className="evidence-metric" key={metric.label}>
+                      <span>{metric.label}</span>
+                      <strong>{metric.value}</strong>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+              <Card className="status-block evidence-gap-card">
                 <h3>待补证据</h3>
                 <ul className="compact-list">
                   {evidenceAnalysis.criticalJudgementAlerts.length > 0 ? (
@@ -708,16 +730,16 @@ export function ResearchTab({
                     </li>
                   )}
                 </ul>
-              </article>
+              </Card>
             </div>
             {orphanSourceCards.length > 0 ? (
-              <article className="status-block evidence-action-block">
+              <Card className="status-block evidence-action-block">
                 <div className="evidence-action-head">
                   <div>
                     <h3>未进入正文链路的资料卡</h3>
                     <p>这些资料已经入库，但没有被提纲或正文引用。下一步应分配到段落证据，或删除低价值材料。</p>
                   </div>
-                  <span className="badge">{orphanSourceCards.length} 张</span>
+                  <Chip tone="warning">{orphanSourceCards.length} 张</Chip>
                 </div>
                 <ul className="compact-list evidence-action-list">
                   {orphanSourceCards.slice(0, 6).map((card) => (
@@ -732,14 +754,14 @@ export function ResearchTab({
                     </li>
                   ) : null}
                 </ul>
-              </article>
+              </Card>
             ) : null}
             <div className="source-library-list-head">
               <div>
                 <h3>资料卡列表</h3>
                 <p>按正文可用性浏览，先处理未进入正文链路的资料。</p>
               </div>
-              <span className="badge">{selectedBundle.sourceCards.length} 张</span>
+              <Chip tone="accent">{selectedBundle.sourceCards.length} 张</Chip>
             </div>
             <ContainedScrollArea className="source-card-board editor-scroll-stack">
               {selectedBundle.sourceCards.length > 0 ? (
@@ -747,22 +769,22 @@ export function ResearchTab({
                   const isCited = citedSourceCardIds.has(card.id);
                   const isOrphan = orphanSourceCardIds.has(card.id);
                   return (
-                    <article className={`source-card evidence-source-card ${isOrphan ? "source-card-orphan" : ""}`} key={card.id}>
+                    <Card className={`source-card evidence-source-card ${isOrphan ? "source-card-orphan" : ""}`} key={card.id}>
                       <div className="source-card-head">
                         <div className="source-card-title-group">
                           <strong>{card.title || "未命名资料卡"}</strong>
                           <div className="source-card-status-row">
-                            <span className={`status-chip ${isCited ? "status-chip-pass" : isOrphan ? "status-chip-warn" : ""}`}>
+                            <Chip tone={isCited ? "success" : isOrphan ? "warning" : "neutral"}>
                               {isCited ? "已被正文引用" : isOrphan ? "未进入正文链路" : "待分配"}
-                            </span>
-                            <span className="status-chip">{card.credibility}可信度</span>
-                            <span className="status-chip">{card.supportLevel}</span>
-                            <span className="status-chip">{card.claimType}</span>
+                            </Chip>
+                            <Chip>{card.credibility}可信度</Chip>
+                            <Chip>{formatSupportLevel(card.supportLevel)}</Chip>
+                            <Chip>{formatClaimType(card.claimType)}</Chip>
                           </div>
                         </div>
-                        <button className="danger-button source-card-delete" onClick={() => deleteCard(card.id)} disabled={isPending}>
+                        <Button type="button" variant="danger" size="sm" className="source-card-delete" onClick={() => deleteCard(card.id)} disabled={isPending}>
                           删除
-                        </button>
+                        </Button>
                       </div>
                       <div className="source-card-body-grid">
                         <div className="source-card-main-copy">
@@ -784,7 +806,7 @@ export function ResearchTab({
                           </div>
                           <div>
                             <dt>来源</dt>
-                            <dd>{card.sourceType} · {card.timeSensitivity}</dd>
+                            <dd>{formatSourceType(card.sourceType)} · {formatTimeSensitivity(card.timeSensitivity)}</dd>
                           </div>
                           <div>
                             <dt>资料 ID</dt>
@@ -803,16 +825,16 @@ export function ResearchTab({
                         ) : null}
                       </div>
                       {card.reliabilityNote ? <p className="source-card-reliability">可靠性备注：{card.reliabilityNote}</p> : null}
-                    </article>
+                    </Card>
                   );
                 })
               ) : (
-                <div className="empty-state stack">
+                <EmptyState className="stack" title="还没有资料卡">
                   <p>还没有资料卡。</p>
-                  <button className="primary-button" type="button" onClick={() => setActiveSection("source-form")}>
+                  <Button variant="primary" size="lg" type="button" onClick={() => setActiveSection("source-form")}>
                     去录入第一张资料卡
-                  </button>
-                </div>
+                  </Button>
+                </EmptyState>
               )}
             </ContainedScrollArea>
             <details className="source-library-groups-panel">
@@ -821,7 +843,7 @@ export function ResearchTab({
                 <small>按片区 / 可信度</small>
               </summary>
               <div className="two-column source-library-groups">
-                <article className="status-block source-library-group">
+                <Card className="status-block source-library-group">
                   <h3>按片区分组</h3>
                   <ul className="compact-list">
                     {Object.entries(sourceCardGroups.byZone).map(([group, cards]) => (
@@ -831,8 +853,8 @@ export function ResearchTab({
                       </li>
                     ))}
                   </ul>
-                </article>
-                <article className="status-block source-library-group">
+                </Card>
+                <Card className="status-block source-library-group">
                   <h3>按可信度分组</h3>
                   <ul className="compact-list">
                     {Object.entries(sourceCardGroups.byCredibility).map(([group, cards]) => (
@@ -842,12 +864,12 @@ export function ResearchTab({
                       </li>
                     ))}
                   </ul>
-                </article>
+                </Card>
               </div>
             </details>
-          </section>
+          </Panel>
         ) : null}
-      </section>
+      </Surface>
     </>
   );
 }
@@ -878,6 +900,46 @@ function splitTagText(value: string) {
     .split(/\n|,/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function formatSourceType(value: SourceCard["sourceType"]) {
+  const labels: Record<SourceCard["sourceType"], string> = {
+    official: "官方",
+    media: "媒体",
+    commentary: "评论",
+    interview: "访谈",
+    observation: "观察",
+  };
+  return labels[value] ?? value;
+}
+
+function formatSupportLevel(value: SourceCard["supportLevel"]) {
+  const labels: Record<SourceCard["supportLevel"], string> = {
+    high: "强支撑",
+    medium: "中支撑",
+    low: "弱支撑",
+  };
+  return labels[value] ?? value;
+}
+
+function formatClaimType(value: SourceCard["claimType"]) {
+  const labels: Record<SourceCard["claimType"], string> = {
+    fact: "事实",
+    observation: "观察",
+    judgement: "判断",
+    counterevidence: "反证",
+    quote: "引语",
+  };
+  return labels[value] ?? value;
+}
+
+function formatTimeSensitivity(value: SourceCard["timeSensitivity"]) {
+  const labels: Record<SourceCard["timeSensitivity"], string> = {
+    evergreen: "长期有效",
+    timely: "阶段有效",
+    volatile: "高时效",
+  };
+  return labels[value] ?? value;
 }
 
 function getSourceCardSaveReadiness(form: SourceCardFormState) {

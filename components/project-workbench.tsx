@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { ArticleProject, ProjectBundle, ProjectStage, SampleArticle } from "@/lib/types";
 import { ProjectSidebar } from "./workbench/ProjectSidebar";
 import { OverviewTab } from "./workbench/OverviewTab";
@@ -13,6 +13,10 @@ import { useJobPolling, type JobDetail, type ProjectJobSummary } from "@/hooks/u
 import { useJobAction } from "@/hooks/use-job-action";
 import type { JobStatus, JobStep } from "@/lib/jobs/types";
 import { Toast } from "./ui/toast";
+import { AppShell } from "./layout/app-shell";
+import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type ActiveTab = "overview" | "research" | "drafts" | "publish";
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
@@ -380,9 +384,8 @@ export function ProjectWorkbench({
   const detailedVisibleJob = jobDetail && highlightedJob && jobDetail.job.id === highlightedJob.id ? jobDetail.job : null;
   const visibleJob = detailedVisibleJob ?? highlightedJob;
 
-  return (
-    <main className="page-shell">
-      <header className="page-topbar">
+  const appHeader = (
+    <>
         <div className="topbar-left">
           <h1 className="topbar-title">上海板块写作工作台</h1>
         </div>
@@ -392,8 +395,11 @@ export function ProjectWorkbench({
             后台任务 {queueSummary.runningCount} 运行 / {queueSummary.queuedCount} 排队
           </button>
         </div>
-      </header>
+    </>
+  );
 
+  const appOverlays = (
+    <>
       <TaskCenterModal
         open={isTaskCenterOpen}
         onClose={() => setIsTaskCenterOpen(false)}
@@ -420,9 +426,11 @@ export function ProjectWorkbench({
           onClose={() => setFeedback(null)} 
         />
       ) : null}
+    </>
+  );
 
-      <section className="workspace-grid">
-        <ProjectSidebar 
+  const appSidebar = (
+    <ProjectSidebar
           projects={projects}
           selectedProjectId={selectedProjectId}
           setSelectedProjectId={setSelectedProjectId}
@@ -432,12 +440,28 @@ export function ProjectWorkbench({
           refreshProjectsAndBundle={refreshProjectsAndBundle}
           sampleDigest={sampleDigest}
         />
+  );
 
-        <section className="panel main-panel">
+  const appInspector = selectedBundle ? (
+    <ReviewSidebar
+      selectedBundle={selectedBundle}
+      activeTab={activeTab}
+      focusedSection={focusedSection}
+      isPending={uiPending}
+      onNavigate={(tab, section) => {
+        setActiveTab(tab);
+        setFocusedSection(section);
+      }}
+      onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+    />
+  ) : null;
+
+  return (
+    <AppShell header={appHeader} overlays={appOverlays} sidebar={appSidebar} inspector={appInspector}>
           {!selectedBundle ? (
-            <div className="card blank-state">
-              <p>请在左侧选择或新建一个项目...</p>
-            </div>
+            <EmptyState title="还没有选中项目" className="blank-state">
+              <p>请在左侧选择或新建一个项目。</p>
+            </EmptyState>
           ) : (
             <>
               <StaleArtifactNotice
@@ -449,54 +473,75 @@ export function ProjectWorkbench({
                 }}
                 onClear={clearArtifacts}
               />
-              <div className="workflow-tabs" aria-label="工作台主阶段">
+              <div className="workflow-tabs" role="tablist" aria-label="工作台主阶段" onKeyDown={handleTabListKeyDown}>
                 <button
+                  type="button"
+                  role="tab"
                   className={`tab-button ${activeTab === "overview" ? "active" : ""}`}
                   onClick={() => {
                     setActiveTab("overview");
                     setFocusedSection(null);
                   }}
                   data-tab="overview"
-                  aria-pressed={activeTab === "overview"}
+                  aria-selected={activeTab === "overview"}
+                  aria-controls="workbench-panel-overview"
+                  id="workbench-tab-overview"
+                  tabIndex={activeTab === "overview" ? 0 : -1}
                 >
                   判断
                 </button>
                 <button
+                  type="button"
+                  role="tab"
                   className={`tab-button ${activeTab === "research" ? "active" : ""}`}
                   onClick={() => {
                     setActiveTab("research");
                     setFocusedSection(null);
                   }}
                   data-tab="research"
-                  aria-pressed={activeTab === "research"}
+                  aria-selected={activeTab === "research"}
+                  aria-controls="workbench-panel-research"
+                  id="workbench-tab-research"
+                  tabIndex={activeTab === "research" ? 0 : -1}
                 >
                   资料
                 </button>
                 <button
+                  type="button"
+                  role="tab"
                   className={`tab-button ${activeTab === "drafts" ? "active" : ""}`}
                   onClick={() => {
                     setActiveTab("drafts");
                     setFocusedSection(null);
                   }}
                   data-tab="drafts"
-                  aria-pressed={activeTab === "drafts"}
+                  aria-selected={activeTab === "drafts"}
+                  aria-controls="workbench-panel-drafts"
+                  id="workbench-tab-drafts"
+                  tabIndex={activeTab === "drafts" ? 0 : -1}
                 >
                   写作
                 </button>
                 <button
+                  type="button"
+                  role="tab"
                   className={`tab-button ${activeTab === "publish" ? "active" : ""}`}
                   onClick={() => {
                     setActiveTab("publish");
                     setFocusedSection("publish-prep");
                   }}
                   data-tab="publish"
-                  aria-pressed={activeTab === "publish"}
+                  aria-selected={activeTab === "publish"}
+                  aria-controls="workbench-panel-publish"
+                  id="workbench-tab-publish"
+                  tabIndex={activeTab === "publish" ? 0 : -1}
                 >
                   发布
                 </button>
               </div>
 
               {activeTab === "overview" && (
+                <section role="tabpanel" id="workbench-panel-overview" aria-labelledby="workbench-tab-overview">
                 <OverviewTab 
                   selectedBundle={selectedBundle}
                   setSelectedBundle={setSelectedBundle}
@@ -507,9 +552,11 @@ export function ProjectWorkbench({
                   setFocusedSection={setFocusedSection}
                   focusSection={focusedSection}
                 />
+                </section>
               )}
 
               {activeTab === "research" && (
+                <section role="tabpanel" id="workbench-panel-research" aria-labelledby="workbench-tab-research">
                 <ResearchTab 
                   selectedBundle={selectedBundle}
                   setSelectedBundle={setSelectedBundle}
@@ -522,9 +569,11 @@ export function ProjectWorkbench({
 	                  runProjectStep={runProjectStep}
 	                  focusSection={mapResearchFocus(focusedSection)}
                 />
+                </section>
               )}
 
               {(activeTab === "drafts" || activeTab === "publish") && (
+                <section role="tabpanel" id={activeTab === "publish" ? "workbench-panel-publish" : "workbench-panel-drafts"} aria-labelledby={activeTab === "publish" ? "workbench-tab-publish" : "workbench-tab-drafts"}>
                 <DraftsTab 
                   selectedBundle={selectedBundle}
                   setSelectedBundle={setSelectedBundle}
@@ -543,26 +592,11 @@ export function ProjectWorkbench({
                   }}
                   focusSection={activeTab === "publish" ? "publish-prep" : mapDraftsFocus(focusedSection)}
                 />
+                </section>
               )}
             </>
           )}
-        </section>
-
-        {selectedBundle ? (
-          <ReviewSidebar
-            selectedBundle={selectedBundle}
-            activeTab={activeTab}
-            focusedSection={focusedSection}
-            isPending={uiPending}
-            onNavigate={(tab, section) => {
-              setActiveTab(tab);
-              setFocusedSection(section);
-            }}
-            onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
-          />
-        ) : null}
-      </section>
-    </main>
+    </AppShell>
   );
 
   function showFeedback(text: string, forcedKind?: MessageKind) {
@@ -572,6 +606,29 @@ export function ProjectWorkbench({
     }
     setFeedback({ text, kind: forcedKind ?? inferMessageKind(text) });
   }
+}
+
+function handleTabListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
+    return;
+  }
+  const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+  const currentIndex = tabs.findIndex((tab) => tab === document.activeElement);
+  if (tabs.length === 0 || currentIndex === -1) {
+    return;
+  }
+  event.preventDefault();
+  const lastIndex = tabs.length - 1;
+  const nextIndex =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? lastIndex
+        : event.key === "ArrowRight"
+          ? currentIndex === lastIndex ? 0 : currentIndex + 1
+          : currentIndex === 0 ? lastIndex : currentIndex - 1;
+  tabs[nextIndex]?.focus();
+  tabs[nextIndex]?.click();
 }
 
 function StaleArtifactNotice({
@@ -592,20 +649,22 @@ function StaleArtifactNotice({
   const target = getArtifactTarget(visibleArtifacts[0]);
 
   return (
-    <section className="stale-artifact-notice">
-      <div>
-        <strong>下游结果可能已过期</strong>
+    <Callout
+      className="stale-artifact-notice"
+      title="下游结果可能已过期"
+      action={(
+        <div className="stale-artifact-actions">
+          <Button variant="secondary" onClick={() => onNavigate(target.tab, target.section)}>
+            去处理
+          </Button>
+          <Button variant="ghost" onClick={() => onClear(visibleArtifacts)}>
+            标记已处理
+          </Button>
+        </div>
+      )}
+    >
         <p>上游内容已经改过，建议重新生成：{visibleArtifacts.map(getArtifactLabel).join("、")}。</p>
-      </div>
-      <div className="stale-artifact-actions">
-        <button type="button" className="secondary-button" onClick={() => onNavigate(target.tab, target.section)}>
-          去处理
-        </button>
-        <button type="button" className="ghost-button" onClick={() => onClear(visibleArtifacts)}>
-          标记已处理
-        </button>
-      </div>
-    </section>
+    </Callout>
   );
 }
 

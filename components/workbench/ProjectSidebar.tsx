@@ -15,8 +15,11 @@ import {
   type TopicDiscoverySession,
 } from "@/lib/types";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { Modal } from "@/components/ui/modal";
+import { Card, Panel } from "@/components/ui/surface";
 import { formatProjectStage } from "@/lib/project-stage-labels";
 import { filterAnglesByType } from "@/lib/topic-cocreate-postprocess";
 import { extractUrls } from "@/lib/utils";
@@ -441,8 +444,8 @@ export function ProjectSidebar({
 
   return (
     <>
-      <aside className="panel sidebar">
-        <section className="card stack sidebar-card">
+      <Panel as="aside" className="sidebar">
+        <Card as="section" className="stack sidebar-card">
           {/* Compact action bar */}
           <div className="sidebar-action-bar">
             <button
@@ -493,6 +496,7 @@ export function ProjectSidebar({
             <div className="project-list">
               {recentProjects.map((project) => (
                 <button
+                  type="button"
                   key={project.id}
                   className={`project-item ${project.id === selectedProjectId ? "selected" : ""}`}
                   onClick={() => setSelectedProjectId(project.id)}
@@ -541,6 +545,7 @@ export function ProjectSidebar({
               <ContainedScrollArea className="project-list project-list-scroll">
                 {historicalProjects.map((project) => (
                   <button
+                    type="button"
                     key={project.id}
                     className={`project-item ${project.id === selectedProjectId ? "selected" : ""}`}
                     onClick={() => setSelectedProjectId(project.id)}
@@ -556,8 +561,8 @@ export function ProjectSidebar({
               </ContainedScrollArea>
             </details>
           ) : null}
-        </section>
-      </aside>
+        </Card>
+      </Panel>
 
       {/* ── Create Project Modal ── */}
       <Modal
@@ -584,9 +589,9 @@ export function ProjectSidebar({
             <AutoGrowTextarea value={projectForm.notes} onChange={(event) => setProjectForm({ ...projectForm, notes: event.target.value })} rows={3} placeholder="可留空，系统会补一段选题判断。" />
           </label>
           {!projectForm.topic.trim() ? <p className="subtle action-hint">先补一个标题，按钮就会解锁。</p> : null}
-          <button className="primary-button" onClick={createProject} disabled={isPending || !projectForm.topic.trim()}>
+          <Button type="button" variant="primary" onClick={createProject} disabled={isPending || !projectForm.topic.trim()}>
             新建项目并自动写简报
-          </button>
+          </Button>
         </div>
       </Modal>
 
@@ -647,9 +652,9 @@ export function ProjectSidebar({
               <AutoGrowTextarea className="cocreation-auto-field" value={coCreationForm.avoidAngles} onChange={(event) => setCoCreationForm({ ...coCreationForm, avoidAngles: event.target.value })} rows={1} />
             </label>
             {!coCreationForm.sector.trim() ? <p className="subtle action-hint">先填板块或片区，才能生成候选角度。</p> : null}
-            <button className={hasCoCreationOutput ? "secondary-button" : "primary-button"} onClick={runTopicCoCreation} disabled={isPending || !coCreationForm.sector.trim()}>
+            <Button type="button" variant={hasCoCreationOutput ? "secondary" : "primary"} onClick={runTopicCoCreation} disabled={isPending || !coCreationForm.sector.trim()}>
               {hasCoCreationOutput ? "重新生成候选池" : "生成选题候选池"}
-            </button>
+            </Button>
           </div>
         </details>
 
@@ -684,9 +689,9 @@ export function ProjectSidebar({
                 <span>当前选择</span>
                 <strong>{selectedCoCreationAngle?.title ?? "先选择一个推荐角度"}</strong>
               </div>
-              <button className="primary-button" onClick={() => selectedCoCreationAngle ? void createProjectFromCandidate(selectedCoCreationAngle) : undefined} disabled={isPending || !selectedCoCreationAngle}>
+              <Button type="button" variant="primary" onClick={() => selectedCoCreationAngle ? void createProjectFromCandidate(selectedCoCreationAngle) : undefined} disabled={isPending || !selectedCoCreationAngle}>
                 用选中角度立项
-              </button>
+              </Button>
             </div>
 
             <h3>推荐角度 ({visibleRecommendedAngles.length} / {recommendedAngles.length})</h3>
@@ -707,9 +712,9 @@ export function ProjectSidebar({
               <section className="stack">
                 <div className="cocreation-more-head">
                   <h3>更多角度 ({overflowAngles.length})</h3>
-                  <button type="button" className="secondary-button" onClick={() => setShowAngleLonglist((value) => !value)}>
+                  <Button type="button" variant="secondary" onClick={() => setShowAngleLonglist((value) => !value)}>
                     {showAngleLonglist ? "收起更多角度" : "展开更多角度"}
-                  </button>
+                  </Button>
                 </div>
 
                 {showAngleLonglist ? (
@@ -777,7 +782,7 @@ export function ProjectSidebar({
                               }
                             />
                             <strong>{card.sourceTitle}</strong>
-                            <span className="status-chip cocreation-filter-chip">{card.extractStatus}</span>
+                            <Chip className="cocreation-filter-chip">{card.extractStatus}</Chip>
                           </label>
                           <p>{card.summary || "暂无摘要"}</p>
                           <p><strong>关键判断：</strong>{card.keyClaims.join(" / ") || "暂无"}</p>
@@ -802,7 +807,7 @@ export function ProjectSidebar({
                         <article className="status-block stack compact-editor-card" key={`${signal.title}-${index}`}>
                           <div className="project-item-meta">
                             <strong>{signal.title}</strong>
-                            <span className="status-chip cocreation-filter-chip">{signal.signalType}</span>
+                            <Chip className="cocreation-filter-chip">{signal.signalType}</Chip>
                           </div>
                           <p>{signal.summary}</p>
                           <p><strong>为什么重要：</strong>{signal.whyItMatters}</p>
@@ -824,18 +829,18 @@ export function ProjectSidebar({
                       <div className="cocreation-filter-row">
                         <strong>已覆盖：</strong>
                         {coCreationResult.coverageSummary.includedTypes.map((type) => (
-                          <span key={type} className="status-chip cocreation-filter-chip">
+                          <Chip key={type} className="cocreation-filter-chip">
                             {TOPIC_ANGLE_TYPE_LABELS[type]}
-                          </span>
+                          </Chip>
                         ))}
                       </div>
                       {coCreationResult.coverageSummary.missingTypes.length > 0 ? (
                         <div className="cocreation-filter-row">
                           <strong>尚缺：</strong>
                           {coCreationResult.coverageSummary.missingTypes.map((type) => (
-                            <span key={type} className="status-chip status-chip-warn cocreation-filter-chip">
+                            <Chip key={type} tone="warning" className="cocreation-filter-chip">
                               {TOPIC_ANGLE_TYPE_LABELS[type]}
-                            </span>
+                            </Chip>
                           ))}
                         </div>
                       ) : null}
@@ -901,7 +906,7 @@ function TopicAngleCard({
           <strong className="cocreation-angle-title" title={angle.title}>{angle.title}</strong>
         </div>
         <div className="project-item-meta">
-          <span className="status-chip cocreation-filter-chip">{angle.angleTypeLabel}</span>
+          <Chip className="cocreation-filter-chip">{angle.angleTypeLabel}</Chip>
           <span className="project-stage-pill">{angle.articleType}</span>
         </div>
       </div>
@@ -928,9 +933,9 @@ function TopicAngleCard({
           <p><strong>建议下一步：</strong>{angle.recommendedNextStep}</p>
         </div>
       </details>
-      <button className="secondary-button cocreation-select-button" type="button" onClick={() => onChoose(angle.id)} disabled={isPending}>
+      <Button variant="secondary" className="cocreation-select-button" type="button" onClick={() => onChoose(angle.id)} disabled={isPending}>
         {isSelected ? "已选中" : "选中角度"}
-      </button>
+      </Button>
     </article>
   );
 }

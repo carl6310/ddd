@@ -3,9 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectBundle, SourceCard } from "@/lib/types";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { InlineTextEdit, InlineTextAreaEdit } from "@/components/ui/inline-edit";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { AccordionCard } from "@/components/ui/accordion-card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Card, Panel, Surface } from "@/components/ui/surface";
 import { canPreparePublish } from "@/lib/workflow";
 import { classifyEditorialFeedbackEvents } from "@/lib/editorial-feedback/classifier";
 
@@ -153,39 +157,39 @@ export function DraftsTab({
 
   return (
     <>
-      <section className="card stack section-shell">
+      <Surface className="stack section-shell">
         <div className="section-shell-compact-head">
           <h2>{surfaceTitle}</h2>
-          <div className="section-subnav">
-            <button className={`section-subnav-button ${activeSection === "sector-model" ? "active" : ""}`} onClick={() => setActiveSection("sector-model")}>
+          <div className="section-subnav" role="tablist" aria-label={`${surfaceTitle}阶段视图`}>
+            <button type="button" role="tab" aria-selected={activeSection === "sector-model"} className={`section-subnav-button ${activeSection === "sector-model" ? "active" : ""}`} onClick={() => setActiveSection("sector-model")}>
               板块建模
             </button>
-            <button className={`section-subnav-button ${activeSection === "outline" ? "active" : ""}`} onClick={() => setActiveSection("outline")}>
+            <button type="button" role="tab" aria-selected={activeSection === "outline"} className={`section-subnav-button ${activeSection === "outline" ? "active" : ""}`} onClick={() => setActiveSection("outline")}>
               段落提纲
             </button>
-            <button className={`section-subnav-button ${activeSection === "drafts" ? "active" : ""}`} onClick={() => setActiveSection("drafts")}>
+            <button type="button" role="tab" aria-selected={activeSection === "drafts"} className={`section-subnav-button ${activeSection === "drafts" ? "active" : ""}`} onClick={() => setActiveSection("drafts")}>
               双稿编辑
             </button>
-            <button className={`section-subnav-button ${activeSection === "publish-prep" ? "active" : ""}`} onClick={() => setActiveSection("publish-prep")}>
+            <button type="button" role="tab" aria-selected={activeSection === "publish-prep"} className={`section-subnav-button ${activeSection === "publish-prep" ? "active" : ""}`} onClick={() => setActiveSection("publish-prep")}>
               发布整理
             </button>
           </div>
         </div>
 
         {activeSection === "sector-model" ? (
-          <section className="stack section-panel writing-form-stage sector-model-stage">
+          <Panel className="stack section-panel writing-form-stage sector-model-stage">
             <div className="section-panel-header">
               <h3>板块建模</h3>
-              {selectedBundle.sectorModel ? <span className="badge">{selectedBundle.sectorModel.zones.length} 个片区</span> : null}
+              {selectedBundle.sectorModel ? <Chip tone="accent">{selectedBundle.sectorModel.zones.length} 个片区</Chip> : null}
             </div>
             {selectedBundle.sectorModel ? (
               <div className="stack">
                 {draftMessage ? <p className="subtle">{draftMessage}</p> : null}
-                <article className="writing-hero-panel">
+                <Card className="writing-hero-panel">
                   <span>板块主判断</span>
                   <strong>{selectedBundle.sectorModel.summaryJudgement || "还没有总判断"}</strong>
                   <p>{selectedBundle.sectorModel.spatialBackbone || "补齐空间骨架后，这里会成为写作阶段的主画布摘要。"}</p>
-                </article>
+                </Card>
                 <div className="workspace-pane-grid">
                   <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
                     <label>
@@ -238,14 +242,14 @@ export function DraftsTab({
                           })
                         } rows={3} />
                     </label>
-                    <button onClick={saveSectorModel} disabled={isPending}>
+                    <Button type="button" variant="secondary" size="md" onClick={saveSectorModel} disabled={isPending}>
                       保存板块建模
-                    </button>
+                    </Button>
                   </ContainedScrollArea>
                   <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
                     <div className="section-panel-header">
                       <h3>片区列表</h3>
-                      <span className="badge">{selectedBundle.sectorModel.zones.length} 个片区</span>
+                      <Chip tone="accent">{selectedBundle.sectorModel.zones.length} 个片区</Chip>
                     </div>
                     <div className="zone-grid zone-grid-scroll">
                   {selectedBundle.sectorModel.zones.map((zone, index) => (
@@ -304,34 +308,36 @@ export function DraftsTab({
                 </div>
               </div>
             ) : (
-              <div className="empty-state stack">
+              <EmptyState className="stack" title="还没有板块建模">
                 <p>还没有板块建模。</p>
-                <button
-                  className="primary-button"
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
                   onClick={() => void runProjectStep("sector-model", "板块建模已生成。")}
                   disabled={isPending || !selectedBundle.researchBrief || selectedBundle.sourceCards.length === 0}
                 >
                   生成板块建模
-                </button>
-              </div>
+                </Button>
+              </EmptyState>
             )}
-          </section>
+          </Panel>
         ) : null}
 
         {activeSection === "outline" ? (
-          <section className="stack section-panel writing-form-stage outline-stage">
+          <Panel className="stack section-panel writing-form-stage outline-stage">
             <div className="section-panel-header">
               <h3>段落级提纲</h3>
-              {selectedBundle.outlineDraft ? <span className="badge">{selectedBundle.outlineDraft.sections.length} 段</span> : null}
+              {selectedBundle.outlineDraft ? <Chip tone="accent">{selectedBundle.outlineDraft.sections.length} 段</Chip> : null}
             </div>
             {selectedBundle.outlineDraft ? (
               <div className="stack">
                 {draftMessage ? <p className="subtle">{draftMessage}</p> : null}
-                <article className="writing-hero-panel">
+                <Card className="writing-hero-panel">
                   <span>段落任务书</span>
                   <strong>{selectedBundle.outlineDraft.hook || "还没有开头钩子"}</strong>
                   <p>{selectedBundle.outlineDraft.closing || "结尾收束会决定整篇文章最后落在判断、行动还是情绪回收上。"}</p>
-                </article>
+                </Card>
                 <div className="workspace-pane-grid">
                   <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
                     <label>
@@ -350,14 +356,14 @@ export function DraftsTab({
                           })
                         } rows={4} />
                     </label>
-                    <button onClick={saveOutlineDraft} disabled={isPending}>
+                    <Button type="button" variant="secondary" size="md" onClick={saveOutlineDraft} disabled={isPending}>
                       保存段落提纲
-                    </button>
+                    </Button>
                   </ContainedScrollArea>
                   <ContainedScrollArea className="workspace-pane workspace-pane-scroll stack">
                     <div className="section-panel-header">
                       <h3>段落列表</h3>
-                      <span className="badge">{selectedBundle.outlineDraft.sections.length} 段</span>
+                      <Chip tone="accent">{selectedBundle.outlineDraft.sections.length} 段</Chip>
                     </div>
                     <ContainedScrollArea className="outline-list editor-scroll-stack">
                   {selectedBundle.outlineDraft.sections.map((section, index) => (
@@ -591,25 +597,27 @@ export function DraftsTab({
                 </div>
               </div>
             ) : (
-              <div className="empty-state stack">
+              <EmptyState className="stack" title="还没有提纲">
                 <p>还没有提纲。</p>
-                <button
-                  className="primary-button"
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
                   onClick={() => void runProjectStep("outline", "提纲已生成。")}
                   disabled={isPending || !selectedBundle.sectorModel}
                 >
                   生成提纲
-                </button>
-              </div>
+                </Button>
+              </EmptyState>
             )}
-          </section>
+          </Panel>
         ) : null}
 
         {activeSection === "drafts" ? (
-          <section className="stack section-panel draft-editor-stage">
+          <Panel className="stack section-panel draft-editor-stage">
             <div className="section-panel-header">
               <h3>初稿与人工改写</h3>
-              {selectedBundle.articleDraft ? <span className="badge">双稿已就绪</span> : null}
+              {selectedBundle.articleDraft ? <Chip tone="success">双稿已就绪</Chip> : null}
             </div>
             {draftMessage ? <p className="subtle">{draftMessage}</p> : null}
             {selectedBundle.articleDraft ? (
@@ -630,7 +638,10 @@ export function DraftsTab({
                         )
                       } rows={18} />
                   </label>
-                  <button
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="lg"
                     className="draft-save-button"
                     onClick={() => {
                       const nextEditedMarkdown = selectedBundle.articleDraft?.editedMarkdown || selectedBundle.articleDraft?.narrativeMarkdown || "";
@@ -649,9 +660,9 @@ export function DraftsTab({
                     disabled={isPending}
                   >
                     保存人工改写稿
-                  </button>
+                  </Button>
                   {selectedBundle.editorialFeedbackEvents.length > 0 ? (
-                    <article className="status-block draft-feedback-panel">
+                    <Card className="status-block draft-feedback-panel">
                       <h3>编辑反馈回路</h3>
                       <ul className="compact-list">
                         {selectedBundle.editorialFeedbackEvents.slice(0, 6).map((event) => (
@@ -661,7 +672,7 @@ export function DraftsTab({
                           </li>
                         ))}
                       </ul>
-                    </article>
+                    </Card>
                   ) : null}
                 </div>
                 <section className="workspace-pane draft-preview-pane">
@@ -673,15 +684,19 @@ export function DraftsTab({
                     <div className="draft-preview-tabs" role="tablist" aria-label="初稿预览版本">
                       <button
                         type="button"
+                        role="tab"
                         className={draftPreviewMode === "narrative" ? "active" : ""}
                         onClick={() => setDraftPreviewMode("narrative")}
+                        aria-selected={draftPreviewMode === "narrative"}
                       >
                         成文版
                       </button>
                       <button
                         type="button"
+                        role="tab"
                         className={draftPreviewMode === "analysis" ? "active" : ""}
                         onClick={() => setDraftPreviewMode("analysis")}
+                        aria-selected={draftPreviewMode === "analysis"}
                       >
                         分析版
                       </button>
@@ -695,66 +710,71 @@ export function DraftsTab({
                 </section>
               </div>
             ) : (
-              <div className="empty-state stack">
+              <EmptyState className="stack" title="还没有初稿">
                 <p>还没有初稿。</p>
-                <button
-                  className="primary-button"
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
                   onClick={() => void runProjectStep("drafts", "双稿初稿已生成。")}
                   disabled={isPending || !selectedBundle.sectorModel || !selectedBundle.outlineDraft || selectedBundle.sourceCards.length === 0}
                 >
                   生成双稿
-                </button>
-              </div>
+                </Button>
+              </EmptyState>
             )}
-          </section>
+          </Panel>
         ) : null}
 
         {activeSection === "publish-prep" ? (
-          <section className="stack section-panel publish-prep-stage">
+          <Panel className="stack section-panel publish-prep-stage">
             <div className="section-panel-header">
               <h3>发布前整理</h3>
               <div className="action-row publish-action-row">
                 {selectedBundle.articleDraft ? (
-                  <a className="primary-button publish-export-button" href={exportHref} target="_blank" rel="noreferrer">
+                  <ButtonLink variant="primary" size="lg" className="publish-export-button" href={exportHref} target="_blank" rel="noreferrer">
                     {selectedBundle.publishPackage ? "导出 Markdown" : "导出当前 Markdown"}
-                  </a>
+                  </ButtonLink>
                 ) : null}
-                {selectedBundle.publishPackage ? <span className="badge">{selectedBundle.publishPackage.titleOptions.length} 个标题候选</span> : null}
-                <button
-                  className="secondary-button"
+                {selectedBundle.publishPackage ? <Chip tone="accent">{selectedBundle.publishPackage.titleOptions.length} 个标题候选</Chip> : null}
+                <Button
+                  variant="secondary"
+                  size="md"
                   onClick={() => void generatePublishPrep()}
                   disabled={isPending || !canPublish}
                   type="button"
                 >
                   {selectedBundle.publishPackage ? "重新生成发布前整理" : "生成发布前整理"}
-                </button>
+                </Button>
               </div>
             </div>
             {selectedBundle.publishPackage ? (
               <div className="stack">
-                <article className="publish-command-strip">
+                <Card className="publish-command-strip">
                   <div>
                     <strong>发布包已就绪</strong>
                     <p>这里集中处理标题、摘要、配图位和 Markdown 导出；正文改过后先重跑检查，再重新生成发布整理。</p>
                   </div>
                   <div className="action-row">
-                    <button
-                      className="secondary-button"
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="md"
                       onClick={() => void runProjectStep("review", "质检报告已更新。")}
                       disabled={isPending || !selectedBundle.articleDraft}
                     >
                       重新检查
-                    </button>
-                    <button className="secondary-button" onClick={() => void generatePublishPrep()} disabled={isPending || !canPublish} type="button">
+                    </Button>
+                    <Button variant="secondary" size="md" onClick={() => void generatePublishPrep()} disabled={isPending || !canPublish} type="button">
                       重新整理
-                    </button>
-                    <a className="primary-button publish-export-button" href={exportHref} target="_blank" rel="noreferrer">
+                    </Button>
+                    <ButtonLink variant="primary" size="lg" className="publish-export-button" href={exportHref} target="_blank" rel="noreferrer">
                       导出 Markdown
-                    </a>
+                    </ButtonLink>
                   </div>
-                </article>
+                </Card>
                 {selectedBundle.publishPackage.qualityGate ? (
-                  <article className="status-block">
+                  <Card className="status-block">
                     <h3>写作质量门槛</h3>
                     <p className="subtle">当前模式：{selectedBundle.publishPackage.qualityGate.mode}，会明确提醒哪一层必须先修。</p>
                     {selectedBundle.publishPackage.qualityGate.mustFix.length > 0 ? (
@@ -796,10 +816,10 @@ export function DraftsTab({
                         </ul>
                       </>
                     ) : null}
-                  </article>
+                  </Card>
                 ) : null}
                 {selectedBundle.reviewReport?.qualityPyramid?.length ? (
-                  <article className="status-block">
+                  <Card className="status-block">
                     <h3>质量金字塔</h3>
                     <ul className="compact-list">
                       {selectedBundle.reviewReport.qualityPyramid.map((layer) => (
@@ -809,9 +829,9 @@ export function DraftsTab({
                         </li>
                       ))}
                     </ul>
-                  </article>
+                  </Card>
                 ) : null}
-                <article className="status-block">
+                <Card className="status-block">
                   <h3>标题候选</h3>
                   <ul className="compact-list">
                     {selectedBundle.publishPackage.titleOptions.map((option) => (
@@ -821,12 +841,12 @@ export function DraftsTab({
                       </li>
                     ))}
                   </ul>
-                </article>
-                <article className="status-block">
+                </Card>
+                <Card className="status-block">
                   <h3>摘要</h3>
                   <p>{selectedBundle.publishPackage.summary}</p>
-                </article>
-                <article className="status-block">
+                </Card>
+                <Card className="status-block">
                   <h3>配图位</h3>
                   <ul className="compact-list">
                     {selectedBundle.publishPackage.imageCues.map((cue) => (
@@ -841,19 +861,22 @@ export function DraftsTab({
                       </li>
                     ))}
                   </ul>
-                </article>
+                </Card>
                 <div className="action-row publish-review-action-row">
-                  <button
-                    className="secondary-button publish-review-button"
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    className="publish-review-button"
                     onClick={() => void runProjectStep("review", "已请求全面质量评审。")}
                     disabled={isPending}
                   >
                     请求人工质量评审
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
-              <div className="empty-state stack">
+              <EmptyState className="stack" title={canPublish ? "可以进入发布整理" : "还不能生成发布整理"}>
                 {canPublish ? (
                   <>
                     <p>已经可以进入发布前整理了。</p>
@@ -863,28 +886,32 @@ export function DraftsTab({
                   <>
                     <p>现在还不能生成发布前整理。</p>
                     <div className="action-row">
-                      <button
-                        className="secondary-button"
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
                         onClick={onOpenVitalityCheck}
                         disabled={isPending}
                       >
                         去看发布前检查
-                      </button>
-                      <button
-                        className="secondary-button"
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
                         onClick={() => void runProjectStep("review", "质检报告已更新。")}
                         disabled={isPending || !selectedBundle.articleDraft}
                       >
                         重新检查
-                      </button>
+                      </Button>
                     </div>
                   </>
                 )}
-              </div>
+              </EmptyState>
             )}
-          </section>
+          </Panel>
         ) : null}
-      </section>
+      </Surface>
     </>
   );
 }

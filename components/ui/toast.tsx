@@ -14,7 +14,7 @@ export function Toast({ message, kind, onClose }: { message: string; kind: Toast
   if (!message) return null;
 
   return (
-    <div className={`toast-container toast-${kind}`}>
+    <div className={`toast-container toast-${kind}`} role={kind === "error" ? "alert" : "status"} aria-live={kind === "error" ? "assertive" : "polite"}>
       <div className="toast-content">
         <span className="toast-icon">
           {kind === "success" && (
@@ -29,7 +29,7 @@ export function Toast({ message, kind, onClose }: { message: string; kind: Toast
         </span>
         <span className="toast-text">{message}</span>
       </div>
-      <button className="toast-close" onClick={onClose} aria-label="Close">
+      <button type="button" className="toast-close" onClick={onClose} aria-label="关闭提示">
          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>

@@ -1,6 +1,9 @@
 "use client";
 
 import type { ProjectBundle, ReviewSeverity, VitalityCheckEntry } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { Panel } from "@/components/ui/surface";
 import { formatProjectStage } from "@/lib/project-stage-labels";
 import { canPreparePublish } from "@/lib/workflow";
 
@@ -62,7 +65,7 @@ export function ReviewSidebar({
   const primaryRisk = riskItems[0] ?? null;
 
   return (
-    <aside className={`status-bar inspector-panel status-bar-${nextAction.tone}`} aria-label="项目状态面板">
+    <Panel as="aside" className={`status-bar inspector-panel status-bar-${nextAction.tone}`} aria-label="项目状态面板">
       <div className="status-bar-top">
         <div className="status-bar-info">
           <div className="status-bar-head">
@@ -77,9 +80,10 @@ export function ReviewSidebar({
           <p className="status-bar-title">{nextAction.title}</p>
           <p className="status-bar-copy">{nextAction.reason}</p>
         </div>
-        <button
+        <Button
           type="button"
-          className="primary-button status-bar-cta"
+          variant="primary"
+          className="status-bar-cta"
           onClick={() => {
             if (nextAction.executeStep) {
               void onExecute(nextAction.executeStep);
@@ -90,27 +94,37 @@ export function ReviewSidebar({
           disabled={isPending}
         >
           {nextAction.ctaLabel}
-        </button>
+        </Button>
       </div>
       <div className="status-bar-bottom">
         <div className="status-bar-meta-group">
-          <span className="status-chip">{formatProjectStage(selectedBundle.project.stage)}</span>
-          <span className="status-chip">{activeViewLabel}</span>
+          <Chip>{formatProjectStage(selectedBundle.project.stage)}</Chip>
+          <Chip>{activeViewLabel}</Chip>
         </div>
         <div className="status-bar-meta-group">
           {selectedBundle.reviewReport?.rewriteIntents?.length ? (
-            <span className="status-chip status-chip-warn">待改段落：{selectedBundle.reviewReport.rewriteIntents.length}</span>
+            <Chip tone="warning">待改段落：{selectedBundle.reviewReport.rewriteIntents.length}</Chip>
           ) : null}
           {primaryRisk ? (
-            <span className={`status-chip status-chip-${primaryRisk.status}`}>风险：{primaryRisk.title}</span>
+            <Chip tone={getRiskChipTone(primaryRisk.status)}>风险：{primaryRisk.title}</Chip>
           ) : (
-            <span className="status-chip status-chip-pass">当前无硬阻塞</span>
+            <Chip tone="success">当前无硬阻塞</Chip>
           )}
         </div>
         <small className="status-bar-target">{nextAction.targetLabel}</small>
       </div>
-    </aside>
+    </Panel>
   );
+}
+
+function getRiskChipTone(status: ReviewSeverity) {
+  if (status === "fail") {
+    return "danger";
+  }
+  if (status === "warn") {
+    return "warning";
+  }
+  return "success";
 }
 
 function getNextAction(selectedBundle: ProjectBundle, activeViewLabel: string) {

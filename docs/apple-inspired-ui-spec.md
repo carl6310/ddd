@@ -13,8 +13,36 @@
 - Buttons: https://developer.apple.com/design/human-interface-guidelines/buttons
 - Sheets: https://developer.apple.com/design/human-interface-guidelines/sheets
 - Popovers: https://developer.apple.com/design/human-interface-guidelines/popovers
+- Accessibility: https://developer.apple.com/design/human-interface-guidelines/accessibility
+- Text Fields: https://developer.apple.com/design/human-interface-guidelines/text-fields
+- Lists and Tables: https://developer.apple.com/design/human-interface-guidelines/lists-and-tables
+- Search Fields: https://developer.apple.com/design/human-interface-guidelines/search-fields
+- Materials: https://developer.apple.com/design/human-interface-guidelines/ios/visual-design/materials
 
 ---
+
+## 0. HIG Coverage Matrix
+
+| HIG 主题 | Apple 重点 | 当前项目状态 | 本项目执行口径 |
+| --- | --- | --- | --- |
+| Layout | 清晰视觉层级、阅读顺序、对齐、安全区域 | 已有三栏和基础 spacing，但 safe area / 内容宽度还不够硬 | 以桌面 web 转译 safe area：外边距、主列宽度、长文宽度、表单宽度写入 token |
+| Color | 语义色、一致状态含义、对比度、不要只靠颜色 | 基础色已收敛，高对比模式未完整规范 | 使用语义 token；状态必须配文字；补 `prefers-contrast: more` |
+| Typography | 可读字号、字重、行高、文字放大后不截断 | 有字号 token，但 line-height / weight 边界弱 | 标题、正文、长文、meta 全部有 size / weight / line-height |
+| Accessibility | 键盘可达、focus、对比度、状态多通道表达 | Modal / Toast / Tab 已补部分语义 | 增加完整 QA 文档和验收路径 |
+| Buttons | 按钮可含文字/图标，主次清楚，动作明确 | variant 已有，size 之前不硬 | `sm/md/lg` 尺寸化；主操作用 `lg`，工具操作用 `sm/md` |
+| Sheets | 临时任务、短流程、明确关闭和动作 | Modal 已是基础 sheet，但等级未明确 | Modal 增加 `kind` / `size`；长期主流程不得放入 sheet |
+| Popovers | 少量临时功能、一次一个、外部关闭 | 之前只有文档，没有组件入口 | 新增轻量 `Popover`，只承载小筛选/说明/临时设置 |
+| Text fields | label、hint、尺寸匹配输入量、tab 顺序 | 表单样式分散，部分字段宽高不一致 | 统一 Field 规则；长文本用 textarea，短输入用 input |
+| Lists / tables | 列表便于扫描、选中态清楚、行文简洁 | 项目列表、资料卡、任务列表风格仍有局部差异 | 列表项统一 title / meta / body / action |
+| Search | 搜索入口位置和搜索范围要匹配 | 左栏已有项目搜索，资料搜索规则未硬 | 左栏搜索只过滤项目；资料区搜索只过滤资料/证据 |
+| Sidebars | 侧边栏用于导航和来源切换，降低视觉权重 | 左栏已 Finder 化，但仍有局部卡片感 | 左栏保持低权重，不放大面积主按钮堆叠 |
+| Materials | 控件层与内容层分离，材质服务层级 | 未采用 Liquid Glass，也不应照搬 | 转译为 content layer / control layer / floating layer，不做玻璃拟态 |
+
+状态定义：
+
+- 已完成：基础规范和组件已经有约束。
+- 进行中：已写入本规范，但仍需逐页迁移。
+- 不适用：Apple 原生平台特性不直接复制，只转译原则。
 
 ## 1. North Star
 
@@ -250,6 +278,57 @@ Inspector 不放在主工作区前面。
 - hit area 至少 44px 高。
 - 文案用动词开头。
 - 同一组选项按钮保持同尺寸，用样式区分主次，不用大小区分。
+- `Button size="sm"`：工具栏、列表行内操作、刷新。
+- `Button size="md"`：普通表单动作、次操作。
+- `Button size="lg"`：主操作、生成、保存、导出。
+- primary 默认视觉上应达到 `lg` 强度；不得用小号 primary 做高频主操作。
+
+---
+
+## 8.1 Text Fields
+
+规则：
+
+- 每个输入必须有可见 label；placeholder 只做例子，不替代 label。
+- 短输入使用 input，长段落使用 textarea。
+- 字段宽度和预期输入量匹配：短字段不拉满超宽屏，长文编辑不超过 `--longform-max-width`。
+- 多字段表单优先纵向堆叠，label 与字段保持一致间距。
+- Tab 顺序必须符合视觉顺序。
+- 错误提示放在字段附近，说明原因和修复方式。
+
+---
+
+## 8.2 Lists, Tables, Search
+
+列表规则：
+
+- 项目列表、资料列表、任务列表统一结构：title / meta / body / actions。
+- 选中态必须有背景或边框变化，不只靠文字颜色。
+- 列表行内动作使用 `sm` 或 `md`，不出现多个同级强按钮。
+- 长文本优先截断到摘要，详情进入展开或独立区域。
+
+搜索规则：
+
+- 左侧 search 只过滤项目导航。
+- 资料区 search 只过滤资料卡和证据，不做全局搜索。
+- 搜索框靠近它影响的列表。
+- 清空搜索后必须回到完整列表。
+
+---
+
+## 8.3 Materials
+
+本项目不复制 Liquid Glass。转译方式：
+
+- Content layer：正文、资料、项目摘要，使用白色或浅灰 surface。
+- Control layer：Tab、按钮、侧边栏控件，视觉上轻浮于内容但不抢内容。
+- Floating layer：Sheet、Popover、Toast，允许轻阴影和更高 z-index。
+
+禁止：
+
+- 在正文层使用玻璃拟态。
+- 用透明叠色制造不可读材质。
+- 让控件层和内容层颜色混在一起，导致扫描困难。
 
 ---
 

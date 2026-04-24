@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import type { JobStatus, JobStep } from "@/lib/jobs/types";
 import type { ProjectQueueSummary } from "@/hooks/use-job-polling";
@@ -118,7 +119,7 @@ export function TaskCenterModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="任务中心" description="查看后台任务队列；排队中的任务可以删除。" wide>
+    <Modal open={open} onClose={onClose} title="任务中心" description="查看后台任务队列；排队中的任务可以删除。" size="lg">
       <div className="task-center stack">
         <div className="task-center-summary">
           <div>
@@ -145,9 +146,9 @@ export function TaskCenterModal({
 
         <div className="task-center-head">
           <h3>最近任务</h3>
-          <button type="button" className="secondary-button" onClick={() => void loadJobs()} disabled={isLoading}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => void loadJobs()} disabled={isLoading}>
             {isLoading ? "刷新中…" : "刷新"}
-          </button>
+          </Button>
         </div>
 
         <div className="task-center-list">
@@ -171,23 +172,23 @@ export function TaskCenterModal({
                 </div>
                 <div className="task-center-item-actions">
                   {job.status === "queued" ? (
-                    <button
+                    <Button
                       type="button"
-                      className="danger-button"
+                      variant="danger"
                       onClick={() => void deleteQueuedJob(job)}
                       disabled={deletingJobId === job.id}
                     >
                       {deletingJobId === job.id ? "删除中…" : "删除"}
-                    </button>
+                    </Button>
                   ) : job.status === "failed" ? (
-                    <button
+                    <Button
                       type="button"
-                      className="secondary-button"
+                      variant="secondary"
                       onClick={() => void retryFailedJob(job)}
                       disabled={retryingJobId === job.id}
                     >
                       {retryingJobId === job.id ? "重试中…" : "重试"}
-                    </button>
+                    </Button>
                   ) : (
                     <span className="task-center-action-note">{job.status === "running" ? "运行中不可删除" : "历史记录"}</span>
                   )}

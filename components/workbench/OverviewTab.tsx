@@ -6,8 +6,11 @@ import { getTopicReaderLens } from "@/lib/topic-meta";
 import { canPreparePublish } from "@/lib/workflow";
 import { formatProjectStage } from "@/lib/project-stage-labels";
 import { InlineTextAreaEdit } from "@/components/ui/inline-edit";
+import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { AccordionCard } from "@/components/ui/accordion-card";
+import { Card, Panel, Surface } from "@/components/ui/surface";
 import { buildWritingQualitySnapshot } from "@/lib/writing-quality/summary";
 
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
@@ -244,10 +247,28 @@ export function OverviewTab({
   const vitalityGuidance = buildVitalityGuidance(vitalityIssues, selectedBundle.reviewReport);
   const writingQuality = buildWritingQualitySnapshot(selectedBundle);
   const topicReaderLens = getTopicReaderLens(selectedBundle.project.topicMeta);
+  const writingQualityMetrics = [
+    {
+      label: "总体质量分",
+      value: writingQuality.overallScore ?? "n/a",
+    },
+    {
+      label: "引用覆盖率",
+      value: writingQuality.citationCoverage !== null ? `${Math.round(writingQuality.citationCoverage * 100)}%` : "n/a",
+    },
+    {
+      label: "分段证据覆盖",
+      value: writingQuality.sectionEvidenceCoverage !== null ? `${Math.round(writingQuality.sectionEvidenceCoverage * 100)}%` : "n/a",
+    },
+    {
+      label: "编辑反馈事件",
+      value: writingQuality.editorialEventCount,
+    },
+  ];
 
   return (
     <>
-      <section className="card stack project-summary-card">
+      <Card as="section" className="stack project-summary-card">
         <div className="project-summary-top">
           <div className="project-summary-title">
             <h2>{selectedBundle.project.topic}</h2>
@@ -256,7 +277,7 @@ export function OverviewTab({
             </p>
           </div>
           <div className="badge-cluster">
-            <span className="badge">{formatProjectStage(selectedBundle.project.stage)}</span>
+            <Chip tone="accent">{formatProjectStage(selectedBundle.project.stage)}</Chip>
             <a className="link-button" href={`/api/projects/${selectedBundle.project.id}/export/markdown`} target="_blank" rel="noreferrer">
               导出 Markdown
             </a>
@@ -288,15 +309,15 @@ export function OverviewTab({
             </p>
           </div>
         </div>
-      </section>
+      </Card>
 
       {highlightedStep ? (
-        <section className="card stack workflow-strip-card">
+        <Card as="section" className="stack workflow-strip-card">
           <div className="workflow-strip-head">
             <h2>下一步操作</h2>
-            <span className={`workflow-status-chip workflow-status-${highlightedStep.status}`}>
+            <Chip className={`workflow-status-chip workflow-status-${highlightedStep.status}`} tone={highlightedStep.status === "complete" ? "success" : highlightedStep.status === "blocked" ? "warning" : "accent"}>
               {highlightedStep.status === "complete" ? "已完成" : highlightedStep.status === "current" ? "当前" : highlightedStep.status === "ready" ? "可执行" : "待解锁"}
-            </span>
+            </Chip>
           </div>
           <div className="workflow-strip-body">
             <p>{highlightedStep.label}</p>
@@ -309,33 +330,42 @@ export function OverviewTab({
               </span>
             ))}
           </div>
-        </section>
+        </Card>
       ) : null}
 
-      <section className="card stack section-shell">
+      <Surface className="stack section-shell">
         <div className="card-header">
           <div>
             <h2>判断</h2>
             <p className="subtle">先看摘要，只有需要修改时才进入编辑态，避免把首页变成一张长表单。</p>
           </div>
         </div>
-        <div className="surface-toggle">
+        <div className="surface-toggle" role="tablist" aria-label="判断视图">
           <button
+            type="button"
+            role="tab"
             className={`section-subnav-button ${surface === "dashboard" ? "active" : ""}`}
             onClick={() => {
               setLocalSurface("dashboard");
               setFocusedSection(null);
             }}
+            aria-selected={surface === "dashboard"}
           >
             当前概览
           </button>
-          <button className={`section-subnav-button ${surface === "editor" ? "active" : ""}`} onClick={() => setLocalSurface("editor")}>
+          <button
+            type="button"
+            role="tab"
+            className={`section-subnav-button ${surface === "editor" ? "active" : ""}`}
+            onClick={() => setLocalSurface("editor")}
+            aria-selected={surface === "editor"}
+          >
             进入编辑
           </button>
         </div>
 
         {surface === "dashboard" ? (
-          <section className="stack section-panel overview-dashboard-stage">
+          <Panel className="stack section-panel overview-dashboard-stage">
             <div className="editor-overview-grid">
               <EditorStatCard label="选题判断" value={`${thinkCardCompletion}/17`} note="ThinkCard 主判断、原型、读者画像、创作锚点和 HKR 已填字段。" />
               <EditorStatCard label="表达策略" value={`${styleCoreCompletion}/25`} note="StyleCore 风格动作、限制条件、anti-fabrication 和具体性要求目前已填字段。" />
@@ -382,7 +412,7 @@ export function OverviewTab({
             </div>
             <CompatibilityDiagnostics selectedBundle={selectedBundle} compact />
             {selectedBundle.project.topicMeta.signalBrief ? (
-              <article className="status-block">
+              <Card className="status-block">
                 <h3>信号简报</h3>
                 <ul className="compact-list">
                   {selectedBundle.project.topicMeta.signalBrief.signals.slice(0, 4).map((signal) => (
@@ -392,10 +422,10 @@ export function OverviewTab({
                     </li>
                   ))}
                 </ul>
-              </article>
+              </Card>
             ) : null}
             {selectedBundle.project.topicMeta.topicScorecard ? (
-              <article className="status-block">
+              <Card className="status-block">
                 <h3>选题评分</h3>
                 <ul className="compact-list">
                   <li>
@@ -414,10 +444,10 @@ export function OverviewTab({
                     <span>{selectedBundle.project.topicMeta.topicScorecard.signalCoverageSummary}</span>
                   </li>
                 </ul>
-              </article>
+              </Card>
             ) : null}
             {selectedBundle.reviewReport?.qualityPyramid?.length ? (
-              <article className="status-block">
+              <Card className="status-block">
                 <h3>质量金字塔</h3>
                 <ul className="compact-list">
                   {selectedBundle.reviewReport.qualityPyramid.map((layer) => (
@@ -427,67 +457,64 @@ export function OverviewTab({
                     </li>
                   ))}
                 </ul>
-              </article>
+              </Card>
             ) : null}
-            <article className="status-block">
-              <h3>写作质量</h3>
-              <ul className="compact-list">
-                <li>
-                  <strong>总体质量分</strong>
-                  <span>{writingQuality.overallScore ?? "n/a"}</span>
-                </li>
-                <li>
-                  <strong>引用覆盖率</strong>
-                  <span>{writingQuality.citationCoverage !== null ? `${Math.round(writingQuality.citationCoverage * 100)}%` : "n/a"}</span>
-                </li>
-                <li>
-                  <strong>分段证据覆盖</strong>
-                  <span>{writingQuality.sectionEvidenceCoverage !== null ? `${Math.round(writingQuality.sectionEvidenceCoverage * 100)}%` : "n/a"}</span>
-                </li>
-                <li>
-                  <strong>编辑反馈事件</strong>
-                  <span>{writingQuality.editorialEventCount}</span>
-                </li>
-                <li>
-                  <strong>质量门槛</strong>
-                  <span>{writingQuality.qualityGate.overallStatus} / {writingQuality.qualityGate.mode}</span>
-                </li>
-              </ul>
+            <Card className="status-block writing-quality-card">
+              <div className="quality-card-head">
+                <div>
+                  <h3>写作质量</h3>
+                  <p>把质量分、证据覆盖和人工编辑反馈合在一起看，避免被单个数字误导。</p>
+                </div>
+                <Chip tone={getQualityGateTone(writingQuality.qualityGate.overallStatus)}>
+                  {formatQualityGateLabel(writingQuality.qualityGate.overallStatus, writingQuality.qualityGate.mode)}
+                </Chip>
+              </div>
+              <div className="quality-metric-grid">
+                {writingQualityMetrics.map((metric) => (
+                  <div className="quality-metric" key={metric.label}>
+                    <span>{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                  </div>
+                ))}
+              </div>
               {writingQuality.notes.length ? (
-                <ul className="compact-list compact-inline-list">
+                <div className="quality-note-panel">
+                  <strong>当前提示</strong>
+                  <ul>
                   {writingQuality.notes.slice(0, 6).map((note) => (
                     <li key={note}>
-                      <span>{note}</span>
+                      <span>{formatQualityNote(note)}</span>
                     </li>
                   ))}
-                </ul>
+                  </ul>
+                </div>
               ) : null}
-            </article>
-          </section>
+            </Card>
+          </Panel>
         ) : null}
 
         {surface === "editor" ? (
-          <div className="section-subnav">
-            <button className={`section-subnav-button ${activeEditorSection === "think-card" ? "active" : ""}`} onClick={() => setLocalEditorSection("think-card")}>
+          <div className="section-subnav" role="tablist" aria-label="创作策略编辑区">
+            <button type="button" role="tab" aria-selected={activeEditorSection === "think-card"} className={`section-subnav-button ${activeEditorSection === "think-card" ? "active" : ""}`} onClick={() => setLocalEditorSection("think-card")}>
             选题判断
           </button>
-          <button className={`section-subnav-button ${activeEditorSection === "style-core" ? "active" : ""}`} onClick={() => setLocalEditorSection("style-core")}>
+          <button type="button" role="tab" aria-selected={activeEditorSection === "style-core"} className={`section-subnav-button ${activeEditorSection === "style-core" ? "active" : ""}`} onClick={() => setLocalEditorSection("style-core")}>
             表达策略
           </button>
-          <button className={`section-subnav-button ${activeEditorSection === "vitality" ? "active" : ""}`} onClick={() => setLocalEditorSection("vitality")}>
+          <button type="button" role="tab" aria-selected={activeEditorSection === "vitality"} className={`section-subnav-button ${activeEditorSection === "vitality" ? "active" : ""}`} onClick={() => setLocalEditorSection("vitality")}>
             VitalityCheck
           </button>
           </div>
         ) : null}
 
         {surface === "editor" && activeEditorSection === "think-card" ? (
-          <section className="stack section-panel">
+          <Panel className="stack section-panel">
             <div className="section-panel-header">
               <div className="stack section-header-copy">
                 <h3>选题判断</h3>
                 <p className="subtle">ThinkCard 是这篇文章的主命题来源。</p>
               </div>
-              <span className="badge">{selectedBundle.project.thinkCard.topicVerdict}</span>
+              <Chip tone="accent">{selectedBundle.project.thinkCard.topicVerdict}</Chip>
             </div>
             <div className="editor-overview-grid">
               <EditorStatCard label="完成度" value={`${thinkCardCompletion}/17`} note="先把主判断、原型、读者画像、创作锚点和 HKR 补完整。" />
@@ -548,20 +575,20 @@ export function OverviewTab({
                 />
               </AccordionCard>
             </div>
-            <button onClick={saveProjectFrame} disabled={isPending}>
+            <Button type="button" variant="secondary" size="md" onClick={saveProjectFrame} disabled={isPending}>
               保存选题判断
-            </button>
-          </section>
+            </Button>
+          </Panel>
         ) : null}
 
         {surface === "editor" && activeEditorSection === "style-core" ? (
-          <section className="stack section-panel">
+          <Panel className="stack section-panel">
             <div className="section-panel-header">
               <div className="stack section-header-copy">
                 <h3>表达策略</h3>
                 <p className="subtle">StyleCore 是后续提纲、初稿和修稿的写法约束。</p>
               </div>
-              <span className="badge">StyleCore</span>
+              <Chip tone="accent">StyleCore</Chip>
             </div>
             <div className="editor-overview-grid">
               <EditorStatCard label="完成度" value={`${styleCoreCompletion}/25`} note="先补齐推进、动作资产、作者站位和 anti-fabrication 规则。" />
@@ -646,44 +673,45 @@ export function OverviewTab({
                 <TextAreaField label="Unsupported scene detector" value={selectedBundle.project.styleCore.unsupportedSceneDetector} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { unsupportedSceneDetector: value })} />
               </AccordionCard>
             </div>
-            <button onClick={saveProjectFrame} disabled={isPending}>
+            <Button type="button" variant="secondary" size="md" onClick={saveProjectFrame} disabled={isPending}>
               保存表达策略
-            </button>
-          </section>
+            </Button>
+          </Panel>
         ) : null}
 
         {surface === "editor" && activeEditorSection === "compatibility" ? (
-          <section className="stack section-panel">
+          <Panel className="stack section-panel">
             <div className="section-panel-header">
               <div className="stack section-header-copy">
                 <h3>系统映射</h3>
                 <p className="subtle">旧链路诊断，只读查看。</p>
               </div>
-              <span className="badge">只读</span>
+              <Chip>只读</Chip>
             </div>
             <CompatibilityDiagnostics selectedBundle={selectedBundle} />
-          </section>
+          </Panel>
         ) : null}
 
         {surface === "editor" && activeEditorSection === "vitality" ? (
-          <section className="stack section-panel">
+          <Panel className="stack section-panel">
             <div className="section-panel-header">
               <div className="stack section-header-copy">
                 <h3>VitalityCheck</h3>
                 <p className="subtle">你改完正文后，点右侧按钮重新检查，不需要重新生成整套流程。</p>
               </div>
               <div className="action-row">
-                <span className={`badge status-${selectedBundle.project.vitalityCheck.overallStatus}`}>
+                <Chip className={`status-${selectedBundle.project.vitalityCheck.overallStatus}`} tone={selectedBundle.project.vitalityCheck.overallStatus === "pass" ? "success" : selectedBundle.project.vitalityCheck.overallStatus === "fail" ? "danger" : "warning"}>
                   {selectedBundle.project.vitalityCheck.overallStatus}
-                </span>
-                <button
+                </Chip>
+                <Button
                   type="button"
-                  className="secondary-button"
+                  variant="secondary"
+                  size="md"
                   onClick={() => void runProjectStep("review", "质检报告已更新。")}
                   disabled={isPending || !hasDrafts}
                 >
                   重新检查
-                </button>
+                </Button>
               </div>
             </div>
             <div className="editor-overview-grid">
@@ -692,25 +720,25 @@ export function OverviewTab({
               <EditorStatCard label="是否硬阻塞" value={selectedBundle.project.vitalityCheck.hardBlocked ? "是" : "否"} note={selectedBundle.project.vitalityCheck.hardBlocked ? "先不要进发布整理。" : "可以继续润色或进入下一步。"} />
             </div>
             <ContainedScrollArea className="vitality-scroll-panel">
-              <article className="status-block compact-status-block">
+              <Card className="status-block compact-status-block">
                 <h3>当前不达标的是哪些</h3>
                 <p>{selectedBundle.project.vitalityCheck.overallVerdict}</p>
                 <div className="vitality-issue-strip">
                   {vitalityIssues.map((entry) => (
-                    <span key={entry.key} className={`status-chip status-chip-${entry.status}`}>
+                    <Chip key={entry.key} tone={entry.status === "fail" ? "danger" : "warning"}>
                       {entry.title}
-                    </span>
+                    </Chip>
                   ))}
                 </div>
-              </article>
+              </Card>
 
               <div className="vitality-guidance-list">
                 {vitalityGuidance.map((item) => (
-                  <article className="status-block compact-status-block vitality-guidance-card" key={item.key}>
+                  <Card className="status-block compact-status-block vitality-guidance-card" key={item.key}>
                     <div className="vitality-guidance-head">
                       <div>
                         <h3>{item.title}</h3>
-                        <span className={`status-chip status-chip-${item.status}`}>{item.status}</span>
+                        <Chip tone={item.status === "fail" ? "danger" : "warning"}>{item.status}</Chip>
                       </div>
                     </div>
                     <p className="subtle">{item.why}</p>
@@ -748,12 +776,12 @@ export function OverviewTab({
                         </ul>
                       </div>
                     ) : null}
-                  </article>
+                  </Card>
                 ))}
               </div>
 
               {selectedBundle.reviewReport?.revisionSuggestions?.length ? (
-                <article className="status-block compact-status-block">
+                <Card className="status-block compact-status-block">
                   <h3>模型给你的补充修稿建议</h3>
                   <ul className="compact-list compact-inline-list">
                     {selectedBundle.reviewReport.revisionSuggestions.slice(0, 6).map((tip) => (
@@ -762,11 +790,11 @@ export function OverviewTab({
                       </li>
                     ))}
                   </ul>
-                </article>
+                </Card>
               ) : null}
 
               {selectedBundle.reviewReport?.rewriteIntents?.length ? (
-                <article className="status-block compact-status-block">
+                <Card className="status-block compact-status-block">
                   <h3>定位式返工建议</h3>
                   <ul className="compact-list compact-inline-list">
                     {selectedBundle.reviewReport.rewriteIntents.slice(0, 6).map((intent) => (
@@ -778,11 +806,11 @@ export function OverviewTab({
                       </li>
                     ))}
                   </ul>
-                </article>
+                </Card>
               ) : null}
 
               {selectedBundle.reviewReport?.paragraphFlags?.length ? (
-                <article className="status-block compact-status-block">
+                <Card className="status-block compact-status-block">
                   <h3>最卡的段落</h3>
                   <ul className="compact-list compact-inline-list">
                     {selectedBundle.reviewReport.paragraphFlags.slice(0, 4).map((flag) => (
@@ -793,11 +821,11 @@ export function OverviewTab({
                       </li>
                     ))}
                   </ul>
-                </article>
+                </Card>
               ) : null}
 
               {vitalityPassed.length ? (
-                <details className="status-block">
+                <details className="ui-card status-block">
                   <summary>已达标项（{vitalityPassed.length}）</summary>
                   <ul className="compact-list compact-inline-list mt-3">
                     {vitalityPassed.map((entry) => (
@@ -810,9 +838,9 @@ export function OverviewTab({
                 </details>
               ) : null}
             </ContainedScrollArea>
-          </section>
+          </Panel>
         ) : null}
-      </section>
+      </Surface>
     </>
   );
 }
@@ -894,6 +922,44 @@ function updateStyleCoreField(
           },
         }
       : current,
+  );
+}
+
+function getQualityGateTone(status: string) {
+  if (status === "fail") {
+    return "danger";
+  }
+  if (status === "warn" || status === "warn-only") {
+    return "warning";
+  }
+  return "success";
+}
+
+function formatQualityGateLabel(status: string, mode: string) {
+  const statusLabel: Record<string, string> = {
+    fail: "未达标",
+    warn: "需留意",
+    pass: "已达标",
+  };
+  const modeLabel: Record<string, string> = {
+    "warn-only": "仅提醒",
+    "soft-block": "建议先修",
+    "hard-block": "暂缓发布",
+  };
+  return `${statusLabel[status] ?? status} / ${modeLabel[mode] ?? mode}`;
+}
+
+function formatQualityNote(note: string) {
+  const artifactLabels: Record<string, string> = {
+    article_draft: "正文初稿",
+    review_report: "发布前检查",
+    outline_draft: "段落提纲",
+    source_cards: "资料卡",
+    project_bundle: "项目数据包",
+  };
+  return Object.entries(artifactLabels).reduce(
+    (current, [key, label]) => current.replaceAll(key, label),
+    note,
   );
 }
 
@@ -979,9 +1045,9 @@ function OverviewQuickCard({
         <p className="subtle">{description}</p>
         <small>{meta}</small>
       </div>
-      <button type="button" className="secondary-button" onClick={onOpen}>
+      <Button type="button" variant="secondary" size="md" onClick={onOpen}>
         进入编辑
-      </button>
+      </Button>
     </article>
   );
 }

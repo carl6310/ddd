@@ -1,9 +1,10 @@
 "use client";
 
 import type { JobStatus } from "@/lib/jobs/types";
+import { Chip } from "@/components/ui/chip";
 
 export function JobStatusChip({ status }: { status: JobStatus }) {
-  return <span className={`badge job-status-chip job-status-chip-${status}`}>{getStatusLabel(status)}</span>;
+  return <Chip className={`job-status-chip job-status-chip-${status}`}>{getStatusLabel(status)}</Chip>;
 }
 
 function getStatusLabel(status: JobStatus) {

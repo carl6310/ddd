@@ -2,7 +2,15 @@
 
 本手册定义上海板块写作工作台的产品布局、视觉语言、组件语义和后续重构标准。
 
-更具体的 Apple-like 数值规范见：[Apple-Inspired UI Specification](./apple-inspired-ui-spec.md)。后续新增 UI 以该文件的 token、圆角、字号、弹窗等级和验收清单为准。
+更具体的 Apple-like 数值规范见：
+
+- [Apple-Inspired UI Specification](./apple-inspired-ui-spec.md)
+- [Layout And Size Spec](./design/layout-size-spec.md)
+- [Typography Spec](./design/typography-spec.md)
+- [Modal, Panel And Floating Layer Spec](./design/modal-panel-spec.md)
+- [Accessibility QA Spec](./design/accessibility-qa-spec.md)
+
+后续新增 UI 以这些文件的 token、圆角、字号、弹窗等级和验收清单为准。
 
 它不是 Apple Human Interface Guidelines 的照搬版，而是把 Apple 的核心原则转译到当前项目：
 

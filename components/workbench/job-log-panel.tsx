@@ -32,10 +32,26 @@ export function JobLogPanel({
         : job.status === "running"
           ? "running"
           : "info";
+  const detailId = `job-toast-detail-${job.id}`;
+  const toggleExpanded = () => setExpanded((value) => !value);
 
   return (
     <section className={`job-toast job-toast-${statusTone}`}>
-      <div className="job-toast-bar" onClick={() => setExpanded((v) => !v)} role="button" tabIndex={0}>
+      <div
+        className="job-toast-bar"
+        onClick={toggleExpanded}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleExpanded();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-controls={detailId}
+        aria-label={`${getStepLabel(job.step)}：${job.progressMessage || getStatusCopy(job)}`}
+      >
         <div className="job-toast-icon">
           {statusTone === "error" ? "✕" : statusTone === "success" ? "✓" : statusTone === "running" ? "⟳" : "◷"}
         </div>
@@ -58,14 +74,14 @@ export function JobLogPanel({
               {isRetrying ? "重试中…" : "重试"}
             </button>
           ) : null}
-          <button type="button" className="job-toast-expand-btn" aria-label={expanded ? "收起" : "展开"}>
+          <button type="button" className="job-toast-expand-btn" aria-label={expanded ? "收起任务详情" : "展开任务详情"}>
             {expanded ? "▴" : "▾"}
           </button>
         </div>
       </div>
 
       {expanded ? (
-        <div className="job-toast-detail">
+        <div className="job-toast-detail" id={detailId}>
           {job.status === "queued" ? (
             <p className="job-toast-queue-meta">
               前面还有 {job.queueAheadCount ?? 0} 个任务，当前全局队列共 {queueSummary.activeCount} 个任务

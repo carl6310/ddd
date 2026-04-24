@@ -4,6 +4,10 @@
 
 - [Shanghai Writing Workbench Design System](./workbench-design-system.md)
 - [Apple-Inspired UI Specification](./apple-inspired-ui-spec.md)
+- [Layout And Size Spec](./design/layout-size-spec.md)
+- [Typography Spec](./design/typography-spec.md)
+- [Modal, Panel And Floating Layer Spec](./design/modal-panel-spec.md)
+- [Accessibility QA Spec](./design/accessibility-qa-spec.md)
 
 本项目是本地写作工作台，不是营销站，也不是通用后台。界面目标是让作者长时间阅读、判断、改写时保持稳定、清晰和低负担。
 
@@ -11,8 +15,9 @@
 
 - 页面只保留三层导航：项目列表、顶部主流程、当前工作区子导航。
 - 同一个视口内避免超过两个主要阅读/编辑面板。
-- 主要内容区优先使用 2 栏布局：左侧参考/生成结果，右侧当前编辑对象。
+- 主要内容区按任务选择布局：资料和摘要可用 2 栏，长文写作和双稿编辑必须保持单列焦点。
 - 信息解释文字只放在关键状态和空状态里，不在每个面板重复说明功能。
+- 桌面 safe area 遵守页面外边距 24-32px、三栏 gap 20px、主内容不贴边。
 
 ## 2. 框与卡片
 
@@ -24,6 +29,7 @@
 - 普通页面区域不新增 `linear-gradient`；状态提示只用低饱和纯色背景。
 - JSX 里不写布局型 inline style，新增视觉样式必须进入 CSS class。
 - 新增大区优先使用 `ui-stage-surface / ui-panel / ui-card / ui-callout / ui-sheet` 语义 class。
+- 新增浮层使用 `Modal kind/size` 或 `Popover`，不临时写一套浮层。
 
 ## 3. 滚动规则
 
@@ -43,6 +49,7 @@
 
 - 主操作使用 primary button，每个区域最多 1 个。
 - 次操作使用 secondary button，例如重新生成、重新检查。
+- 主操作使用 `size="lg"`；工具栏和列表行内操作使用 `size="sm"` 或 `size="md"`。
 - 导航按钮只改变视图，不触发后台任务。
 - 保存按钮必须与后端必填规则一致，不能出现“按钮可点但必失败”。
 
@@ -50,11 +57,13 @@
 
 - 工作区基础间距 16px，重要区块之间 20-24px。
 - 同一行的 badge、chip、button 使用同一高度和圆角。
+- 字号、字重、行高遵守 typography token，不新增随机字号。
 - 用留白和标题组织信息，不靠更多边框堆层级。
 - hover 只做轻量反馈，不做明显位移。
 - 同一视口内强状态色不超过 2 种；状态不能比正文内容更抢眼。
 - Tab、空状态、关键 surface 可使用 150-200ms opacity / background 轻过渡。
 - 必须尊重 `prefers-reduced-motion`。
+- 必须尊重 `prefers-contrast: more`。
 
 ## 7. 验收清单
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 interface ModalProps {
   open: boolean;
@@ -8,17 +8,30 @@ interface ModalProps {
   title: string;
   description?: string;
   children: ReactNode;
+  kind?: "sheet" | "alert";
+  size?: "sm" | "md" | "lg";
   wide?: boolean;
 }
 
-export function Modal({ open, onClose, title, description, children, wide }: ModalProps) {
+export function Modal({ open, onClose, title, description, children, kind = "sheet", size = "md", wide }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const previouslyFocusedElement = useRef<HTMLElement | null>(null);
+  const modalSize = wide ? "lg" : size;
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      previouslyFocusedElement.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       dialog.showModal();
+      requestAnimationFrame(() => {
+        const focusTarget = dialog.querySelector<HTMLElement>(
+          "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+        );
+        focusTarget?.focus();
+      });
     } else if (!open && dialog.open) {
       dialog.close();
     }
@@ -27,7 +40,10 @@ export function Modal({ open, onClose, title, description, children, wide }: Mod
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const handleClose = () => onClose();
+    const handleClose = () => {
+      previouslyFocusedElement.current?.focus();
+      onClose();
+    };
     dialog.addEventListener("close", handleClose);
     return () => dialog.removeEventListener("close", handleClose);
   }, [onClose]);
@@ -50,14 +66,17 @@ export function Modal({ open, onClose, title, description, children, wide }: Mod
   return (
     <dialog
       ref={dialogRef}
-      className={`modal-dialog ${wide ? "modal-dialog-wide" : ""}`}
+      className={`modal-dialog modal-dialog-${kind} modal-dialog-${modalSize}`}
       onClick={handleBackdropClick}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      aria-modal="true"
     >
       <div className="modal-content">
         <div className="modal-header">
           <div>
-            <h2 className="modal-title">{title}</h2>
-            {description ? <p className="modal-description">{description}</p> : null}
+            <h2 className="modal-title" id={titleId}>{title}</h2>
+            {description ? <p className="modal-description" id={descriptionId}>{description}</p> : null}
           </div>
           <button type="button" className="modal-close-btn" onClick={onClose} aria-label="关闭">
             ✕
