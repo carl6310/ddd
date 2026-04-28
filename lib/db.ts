@@ -195,6 +195,7 @@ function initialise(db: SQLiteDatabaseSync) {
       gaps_json TEXT NOT NULL,
       freshness_note TEXT NOT NULL,
       generated_at TEXT NOT NULL,
+      input_hash TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -376,6 +377,7 @@ function initialise(db: SQLiteDatabaseSync) {
   ensureColumn(db, "source_cards", "reliability_note", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "topic_discovery_sessions", "raw_materials", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "topic_discovery_sessions", "avoid_angles", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "signal_briefs", "input_hash", "TEXT NOT NULL DEFAULT ''");
 }
 
 function ensureColumn(db: SQLiteDatabaseSync, tableName: string, columnName: string, definition: string) {

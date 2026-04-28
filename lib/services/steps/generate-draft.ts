@@ -67,6 +67,7 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
   );
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    let structuralRewriteApplied = false;
     let review = runDeterministicReview({
       articleType: project.articleType,
       thesis: project.thesis,
@@ -104,6 +105,7 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
         review,
         context,
       });
+      structuralRewriteApplied = true;
       review = runDeterministicReview({
         articleType: project.articleType,
         thesis: project.thesis,
@@ -169,6 +171,13 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
 
     if (!shouldPolish) {
       break;
+    }
+
+    if (structuralRewriteApplied) {
+      context.log("info", "draft_polisher_deferred_after_structural_rewrite", "结构性重写已完成，本轮跳过完整润色，避免在结构未稳定前重复消耗。", {
+        attempt: attempt + 1,
+      });
+      continue;
     }
 
     context.setProgress("calling_llm", `正在优化正文，第 ${attempt + 1} 轮。`);

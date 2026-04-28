@@ -6,7 +6,7 @@ import {
   generateSignalBriefForSession,
   generateTopicAnglesForSession,
 } from "@/lib/topic-discovery";
-import type { TopicDiscoveryJobLog, TopicDiscoveryJobRun, TopicDiscoveryJobStatus, TopicDiscoveryJobStep } from "@/lib/types";
+import type { TopicDiscoveryDepth, TopicDiscoveryJobLog, TopicDiscoveryJobRun, TopicDiscoveryJobStatus, TopicDiscoveryJobStep } from "@/lib/types";
 
 function mapJob(row: Record<string, unknown>): TopicDiscoveryJobRun {
   return {
@@ -60,7 +60,8 @@ export function enqueueTopicDiscoveryJob(input: {
 }): { job: TopicDiscoveryJobRun; deduped: boolean } {
   return withImmediateTransaction(() => {
     const db = getDb();
-    const dedupeKey = `session:${input.sessionId}:step:${input.step}`;
+    const depth = input.step === "topic-discovery-cocreate" ? normalizeTopicDiscoveryDepth(input.payload?.depth) : null;
+    const dedupeKey = depth ? `session:${input.sessionId}:step:${input.step}:depth:${depth}` : `session:${input.sessionId}:step:${input.step}`;
     const existing = db
       .prepare("SELECT * FROM topic_discovery_job_runs WHERE dedupe_key = ? AND status IN ('queued', 'running') LIMIT 1")
       .get(dedupeKey) as Record<string, unknown> | undefined;
@@ -79,7 +80,7 @@ export function enqueueTopicDiscoveryJob(input: {
           created_at, started_at, heartbeat_at, finished_at
         ) VALUES (?, ?, ?, 'queued', ?, ?, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL, NULL)
       `,
-    ).run(id, input.sessionId, input.step, dedupeKey, stringifyJson(input.payload ?? {}), now);
+    ).run(id, input.sessionId, input.step, dedupeKey, stringifyJson(depth ? { ...(input.payload ?? {}), depth } : (input.payload ?? {})), now);
 
     appendTopicDiscoveryJobLog(id, "info", "job_enqueued", "任务已入队。");
     const job = getTopicDiscoveryJob(id);
@@ -246,7 +247,7 @@ export async function runTopicDiscoveryJobNow(jobId: string) {
         result = { signalBrief: await generateSignalBriefForSession(job.sessionId) };
         break;
       case "topic-discovery-cocreate":
-        result = { result: await generateTopicAnglesForSession(job.sessionId) };
+        result = { result: await generateTopicAnglesForSession(job.sessionId, { depth: normalizeTopicDiscoveryDepth(job.payload.depth) }) };
         break;
     }
 
@@ -263,6 +264,10 @@ export async function runTopicDiscoveryJobNow(jobId: string) {
   } finally {
     clearInterval(heartbeatTimer);
   }
+}
+
+function normalizeTopicDiscoveryDepth(value: unknown): TopicDiscoveryDepth {
+  return value === "full" ? "full" : "fast";
 }
 
 function formatTopicDiscoveryProgress(step: TopicDiscoveryJobStep) {

@@ -741,14 +741,15 @@ export function saveSignalBrief(brief: PersistedSignalBrief): PersistedSignalBri
   const now = nowIso();
   db.prepare(
     `
-      INSERT INTO signal_briefs (session_id, queries_json, signals_json, gaps_json, freshness_note, generated_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO signal_briefs (session_id, queries_json, signals_json, gaps_json, freshness_note, generated_at, input_hash, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         queries_json = excluded.queries_json,
         signals_json = excluded.signals_json,
         gaps_json = excluded.gaps_json,
         freshness_note = excluded.freshness_note,
         generated_at = excluded.generated_at,
+        input_hash = excluded.input_hash,
         updated_at = excluded.updated_at
     `,
   ).run(
@@ -758,6 +759,7 @@ export function saveSignalBrief(brief: PersistedSignalBrief): PersistedSignalBri
     stringifyJson(brief.gaps),
     brief.freshnessNote,
     brief.generatedAt,
+    brief.inputHash ?? "",
     now,
     now,
   );
@@ -775,43 +777,54 @@ export function listTopicAngleCandidates(sessionId: string): TopicAngle[] {
 export function replaceTopicAngleCandidates(sessionId: string, angles: TopicAngle[]): TopicAngle[] {
   const db = getDb();
   const now = nowIso();
-  db.prepare("DELETE FROM topic_angle_candidates WHERE session_id = ?").run(sessionId);
-  const statement = db.prepare(
-    `
-      INSERT INTO topic_angle_candidates (
-        id, session_id, title, angle_type, core_judgement, counter_intuition, reader_value, why_now,
-        hkr_json, reader_lens_json, signal_refs_json, pre_source_refs_json, needed_evidence_json,
-        risk_of_misfire, recommended_next_step, is_recommended, rank, angle_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-  );
-
-  for (const [index, angle] of angles.entries()) {
-    statement.run(
-      angle.id,
-      sessionId,
-      angle.title,
-      angle.angleType,
-      angle.coreJudgement,
-      angle.counterIntuition,
-      angle.readerValue,
-      angle.whyNow,
-      stringifyJson(angle.hkr),
-      stringifyJson(angle.readerLens),
-      stringifyJson(angle.signalRefs),
-      stringifyJson(angle.sourceBasis),
-      stringifyJson(angle.neededEvidence),
-      angle.riskOfMisfire,
-      angle.recommendedNextStep,
-      index < 6 ? 1 : 0,
-      index,
-      stringifyJson(angle),
-      now,
-      now,
+  const persistedAngles = angles.map((angle, index) => ({
+    ...angle,
+    id: `${sessionId}_angle_${index + 1}`,
+  }));
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.prepare("DELETE FROM topic_angle_candidates WHERE session_id = ?").run(sessionId);
+    const statement = db.prepare(
+      `
+        INSERT INTO topic_angle_candidates (
+          id, session_id, title, angle_type, core_judgement, counter_intuition, reader_value, why_now,
+          hkr_json, reader_lens_json, signal_refs_json, pre_source_refs_json, needed_evidence_json,
+          risk_of_misfire, recommended_next_step, is_recommended, rank, angle_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
     );
+
+    for (const [index, angle] of persistedAngles.entries()) {
+      statement.run(
+        angle.id,
+        sessionId,
+        angle.title,
+        angle.angleType,
+        angle.coreJudgement,
+        angle.counterIntuition,
+        angle.readerValue,
+        angle.whyNow,
+        stringifyJson(angle.hkr),
+        stringifyJson(angle.readerLens),
+        stringifyJson(angle.signalRefs),
+        stringifyJson(angle.sourceBasis),
+        stringifyJson(angle.neededEvidence),
+        angle.riskOfMisfire,
+        angle.recommendedNextStep,
+        index < 6 ? 1 : 0,
+        index,
+        stringifyJson(angle),
+        now,
+        now,
+      );
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
   }
 
-  return angles;
+  return persistedAngles;
 }
 
 export function getTopicDiscoveryBundle(sessionId: string): TopicDiscoveryBundle | null {
@@ -965,6 +978,7 @@ function mapPersistedSignalBrief(row: Record<string, unknown>): PersistedSignalB
     gaps: parseJson<string[]>(String(row.gaps_json ?? "[]"), []),
     freshnessNote: String(row.freshness_note ?? ""),
     generatedAt: String(row.generated_at),
+    inputHash: String(row.input_hash ?? ""),
   };
 }
 

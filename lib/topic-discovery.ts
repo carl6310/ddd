@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { buildCardsFromLegacy, deriveLegacyFrames } from "@/lib/author-cards";
 import { runStructuredTask } from "@/lib/llm";
 import {
@@ -27,6 +28,7 @@ import type {
   SignalProviderMode,
   TopicAngle,
   TopicCoCreationResult,
+  TopicDiscoveryDepth,
   TopicDiscoverySession,
 } from "@/lib/types";
 
@@ -103,6 +105,12 @@ export async function generateSignalBriefForSession(sessionId: string) {
   }
 
   const preSourceCards = listPreSourceCards(sessionId);
+  const inputHash = buildSignalBriefInputHash(session, preSourceCards);
+  const existing = getSignalBrief(sessionId);
+  if (existing?.inputHash === inputHash) {
+    updateTopicDiscoverySession(sessionId, { status: "draft" });
+    return existing;
+  }
   updateTopicDiscoverySession(sessionId, { status: "running" });
 
   const signalBundle = await buildSignalBrief({
@@ -119,13 +127,14 @@ export async function generateSignalBriefForSession(sessionId: string) {
     gaps: signalBundle.signalBrief.gaps,
     freshnessNote: signalBundle.signalBrief.freshnessNote,
     generatedAt: nowIso(),
+    inputHash,
   };
   saveSignalBrief(persisted);
   updateTopicDiscoverySession(sessionId, { status: "draft" });
   return persisted;
 }
 
-export async function generateTopicAnglesForSession(sessionId: string) {
+export async function generateTopicAnglesForSession(sessionId: string, options: { depth?: TopicDiscoveryDepth } = {}) {
   const session = getTopicDiscoverySession(sessionId);
   if (!session) {
     throw new Error("选题发现会话不存在。");
@@ -133,15 +142,16 @@ export async function generateTopicAnglesForSession(sessionId: string) {
 
   const preSourceCards = listPreSourceCards(sessionId);
   const signalBrief = getSignalBrief(sessionId);
+  const depth = options.depth ?? "fast";
   updateTopicDiscoverySession(sessionId, { status: "running" });
 
   const rawResult = await runStructuredTask<{ sector: string; candidateAngles: TopicAngle[]; materialInsights?: TopicCoCreationResult["materialInsights"] }>(
-    "topic_cocreate",
+    depth === "fast" ? "topic_cocreate_fast" : "topic_cocreate",
     {
       sector: session.sector,
       currentIntuition: buildSessionIntuitionText(session, preSourceCards),
       rawMaterials: buildSessionRawMaterials(session, preSourceCards),
-      signalBrief: signalBrief
+      signalBrief: depth === "full" && signalBrief
         ? {
             queries: signalBrief.queries,
             signals: signalBrief.signals,
@@ -158,12 +168,39 @@ export async function generateTopicAnglesForSession(sessionId: string) {
     sector: session.sector,
     rawAngles: rawResult.candidateAngles ?? [],
     sourceBasis: preSourceCards.filter((card) => card.extractStatus === "ready").map((card) => card.sourceTitle).slice(0, 3),
+    recommendedCount: 6,
+    longlistCount: depth === "fast" ? 8 : 16,
     materialInsights: rawResult.materialInsights,
   });
 
   replaceTopicAngleCandidates(sessionId, result.angleLonglist);
   updateTopicDiscoverySession(sessionId, { status: "ready" });
   return buildTopicAngleResult(session, listTopicAngleCandidates(sessionId));
+}
+
+export function buildSignalBriefInputHash(session: TopicDiscoverySession, cards: PreSourceCard[]) {
+  const payload = {
+    sector: session.sector,
+    intuition: session.intuition,
+    focusPoints: session.focusPoints,
+    rawMaterials: session.rawMaterials,
+    avoidAngles: session.avoidAngles,
+    searchMode: session.searchMode,
+    cards: cards
+      .map((card) => ({
+        id: card.id,
+        url: card.url,
+        sourceTitle: card.sourceTitle,
+        summary: card.summary,
+        keyClaims: card.keyClaims,
+        signalTags: card.signalTags,
+        riskHints: card.riskHints,
+        extractStatus: card.extractStatus,
+        updatedAt: card.updatedAt,
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  };
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 
 export function buildTopicAngleResult(session: TopicDiscoverySession, topicAngles: TopicAngle[]): TopicCoCreationResult {

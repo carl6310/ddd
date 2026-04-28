@@ -1,7 +1,7 @@
 import { fail, ok } from "@/lib/api";
 import { getTopicDiscoverySession } from "@/lib/repository";
 import { enqueueTopicDiscoveryJob, listTopicDiscoveryJobs, reapStaleTopicDiscoveryJobs, runTopicDiscoveryJobNow } from "@/lib/topic-discovery-jobs";
-import type { TopicDiscoveryJobStep } from "@/lib/types";
+import type { TopicDiscoveryDepth, TopicDiscoveryJobStep } from "@/lib/types";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -29,7 +29,7 @@ export async function POST(request: Request, context: RouteContext) {
     }
     reapStaleJobsBeforeRead();
 
-    const body = (await request.json().catch(() => ({}))) as { step?: TopicDiscoveryJobStep };
+    const body = (await request.json().catch(() => ({}))) as { step?: TopicDiscoveryJobStep; depth?: TopicDiscoveryDepth };
     if (!body.step) {
       return fail("创建选题发现任务时必须给出 step。");
     }
@@ -37,6 +37,7 @@ export async function POST(request: Request, context: RouteContext) {
     const result = enqueueTopicDiscoveryJob({
       sessionId: id,
       step: body.step,
+      payload: body.step === "topic-discovery-cocreate" ? { depth: body.depth === "full" ? "full" : "fast" } : undefined,
     });
 
     // Run queued jobs immediately for v1; an atomic claim prevents duplicate execution on deduped clicks.

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+process.env.MODEL_MODE = "mock";
+
 const { buildPromptTask } = await import("../lib/prompt-engine.ts");
 const { runStructuredTask } = await import("../lib/llm.ts");
 const { buildCardsFromLegacy } = await import("../lib/author-cards.ts");

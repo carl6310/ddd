@@ -501,6 +501,7 @@ export interface ReviewReport {
   rewriteIntents: RewriteIntent[];
   continuityFlags?: ContinuityFlag[];
   structuralRewriteIntents?: StructuralRewriteIntent[];
+  deferredStructuralRewriteIntents?: StructuralRewriteIntent[];
   revisionSuggestions: string[];
   preservedPatterns: string[];
   missingPatterns: string[];
@@ -755,6 +756,7 @@ export interface PersistedSignalBrief {
   gaps: string[];
   freshnessNote: string;
   generatedAt: string;
+  inputHash?: string;
 }
 
 export interface TopicDiscoveryBundle {
@@ -767,9 +769,11 @@ export interface TopicDiscoveryBundle {
 
 export const TOPIC_DISCOVERY_JOB_STEPS = ["pre-source-extract", "signal-brief", "topic-discovery-cocreate"] as const;
 export const TOPIC_DISCOVERY_JOB_STATUSES = ["queued", "running", "succeeded", "failed"] as const;
+export const TOPIC_DISCOVERY_DEPTHS = ["fast", "full"] as const;
 
 export type TopicDiscoveryJobStep = (typeof TOPIC_DISCOVERY_JOB_STEPS)[number];
 export type TopicDiscoveryJobStatus = (typeof TOPIC_DISCOVERY_JOB_STATUSES)[number];
+export type TopicDiscoveryDepth = (typeof TOPIC_DISCOVERY_DEPTHS)[number];
 
 export interface TopicDiscoveryJobRun {
   id: string;

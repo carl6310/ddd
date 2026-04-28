@@ -23,7 +23,7 @@ import { isWritingMovesComplete } from "@/lib/writing-moves";
 const AI_CLICHES = [...AUTHOR_LANGUAGE_ASSETS.bannedPhrases, "赋能", "打造闭环"];
 const DISCOURSE_MARKERS = new Set(["首先", "其次", "最后"]);
 const TRANSITION_TOKENS = ["先说", "再看", "另外", "与此同时", "更关键的是", "回到", "问题在于", "但", "其实", "另一方面", "再往下", "最后"];
-const SCENE_TOKENS = ["通勤", "地铁", "早高峰", "晚高峰", "接娃", "买菜", "小区", "商场", "下班", "一家人", "首改", "改善"];
+const SCENE_TOKENS = ["通勤", "地铁", "早高峰", "晚高峰", "早上", "接娃", "接送", "买菜", "小区", "商场", "下班", "一家人", "买家", "带看", "看房", "首改", "改善"];
 const CULTURAL_LIFT_TOKENS = ["上海", "城市", "承接", "梯度", "系统", "更新", "代际", "放到更大", "更大的", "长期趋势"];
 const OPENING_ANCHOR_MARKERS = ["不是", "真正", "误解", "高估", "低估", "问题在于", "这次", "变化", "代价", "门槛", "确定性", "分化", "重估"];
 
@@ -227,21 +227,15 @@ export function runDeterministicReview(input: {
     evidenceIds: [],
   });
 
-  const unsupportedSceneCount = paragraphs.filter(
-    (paragraph) =>
-      hasSceneSignal(paragraph) &&
-      !/\[SC:[a-zA-Z0-9_-]+\]/.test(paragraph) &&
-      !paragraph.includes("待作者补") &&
-      !paragraph.includes("待作者确认"),
-  ).length;
+  const unsupportedSceneIssues = paragraphs.flatMap((paragraph) => classifyUnsupportedSceneIssues(paragraph, sourceCards));
   checks.push({
     key: "unsupported-scene",
     title: "Unsupported Scene",
-    status: unsupportedSceneCount === 0 ? "pass" : "fail",
+    status: unsupportedSceneIssues.length === 0 ? "pass" : "fail",
     detail:
-      unsupportedSceneCount === 0
+      unsupportedSceneIssues.length === 0
         ? "未发现像亲历但无证据支撑的场景段落。"
-        : `检测到 ${unsupportedSceneCount} 段场景像亲历但没有证据或待作者确认标记，必须改写。`,
+        : `检测到 unsupported scene：${Array.from(new Set(unsupportedSceneIssues)).join("；")}。必须改写为资料推断或待作者补。`,
     evidenceIds: [],
   });
 
@@ -474,6 +468,7 @@ export function runDeterministicReview(input: {
     rewriteIntents,
     continuityFlags,
     structuralRewriteIntents: buildStructuralRewriteIntents(continuityFlags),
+    deferredStructuralRewriteIntents: [],
     revisionSuggestions: buildRevisionSuggestions(checks),
     preservedPatterns: [
       contrarianSignal ? "反常识开头" : null,
@@ -1162,10 +1157,12 @@ function extractParagraphs(markdown: string): string[] {
   return markdown
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
+    .map((paragraph) => paragraph.replace(/^#{1,6}\s+[^\n]+\n+/, "").trim())
     .filter(Boolean)
     .filter((paragraph) => !paragraph.startsWith("#"))
     .filter((paragraph) => !paragraph.startsWith("- "))
-    .filter((paragraph) => !paragraph.startsWith(">"));
+    .filter((paragraph) => !paragraph.startsWith(">"))
+    .filter((paragraph) => !/^([-*_])(?:\s*\1){2,}\s*$/.test(paragraph));
 }
 
 function calculateTransitionCoverage(paragraphs: string[]): number {
@@ -1188,6 +1185,59 @@ function hasPersonalPosition(draft: string): boolean {
 
 function hasSceneSignal(draft: string): boolean {
   return SCENE_TOKENS.some((token) => draft.includes(token));
+}
+
+function classifyUnsupportedSceneIssues(paragraph: string, sourceCards: SourceCard[]): string[] {
+  if (!hasSceneSignal(paragraph) || hasSceneProvenanceMarker(paragraph)) {
+    return [];
+  }
+
+  const citedIds = Array.from(new Set(paragraph.match(/\[SC:([a-zA-Z0-9_-]+)\]/g)?.map((token) => token.slice(4, -1)) ?? []));
+  const citedCards = citedIds.length ? sourceCards.filter((card) => citedIds.includes(card.id)) : [];
+  const sourceText = (citedCards.length ? citedCards : sourceCards)
+    .map((card) => `${card.title}\n${card.summary}\n${card.evidence}\n${card.rawText}`)
+    .join("\n");
+  const issues: string[] = [];
+
+  const quoteMatches = Array.from(paragraph.matchAll(/[“「『]([^”」』]{4,80})[”」』]/g)).map((match) => match[1]);
+  if (quoteMatches.some((quote) => !sourceText.includes(quote))) {
+    issues.push("exact unsupported quote");
+  }
+
+  const unsupportedTimes = ["早上七点半", "七点半", "上午", "下午", "晚上", "早高峰", "晚高峰"].filter(
+    (token) => paragraph.includes(token) && !sourceText.includes(token),
+  );
+  const unsupportedActions = ["报春路", "接送孩子", "接娃", "买菜", "带看", "看房", "收工", "路过", "排队"].filter(
+    (token) => paragraph.includes(token) && !sourceText.includes(token),
+  );
+  if (unsupportedTimes.length || unsupportedActions.length || (!citedIds.length && hasSceneSignal(paragraph))) {
+    issues.push("exact unsupported time/place/action");
+  }
+
+  const unsupportedSensory = ["冒热气", "热气", "烟火气", "吵", "声音", "气味", "闻到", "灯光", "湿漉漉"].filter(
+    (token) => paragraph.includes(token) && !sourceText.includes(token),
+  );
+  if (unsupportedSensory.length) {
+    issues.push("sensory detail without source");
+  }
+
+  if (hasInferenceScene(paragraph) && !hasSourceInferenceMarker(paragraph)) {
+    issues.push("inferred scene written as firsthand");
+  }
+
+  return issues;
+}
+
+function hasSceneProvenanceMarker(paragraph: string) {
+  return paragraph.includes("待作者补") || paragraph.includes("待作者确认") || hasSourceInferenceMarker(paragraph);
+}
+
+function hasSourceInferenceMarker(paragraph: string) {
+  return ["从资料看", "从现有资料看", "更像", "需要实地确认"].some((token) => paragraph.includes(token));
+}
+
+function hasInferenceScene(paragraph: string) {
+  return ["像是", "你会看到", "走进去", "放进去", "眼前", "门口"].some((token) => paragraph.includes(token));
 }
 
 function hasCulturalLiftSignal(draft: string): boolean {
@@ -1303,7 +1353,23 @@ export function buildVitalityCheck(input: {
     createVitalityEntry("oral-tone", "口语化语感", soften(checkMap.get("oral-coverage")?.status), checkMap.get("oral-coverage")?.detail ?? "还没有确认口语化覆盖率。"),
   ];
 
-  return vitalityStatusFromEntries(entries);
+  const vitality = vitalityStatusFromEntries(entries);
+  const l1Failed = input.reviewReport.qualityPyramid?.some((layer) => layer.level === "L1" && layer.status === "fail") ?? false;
+  const l2Failed = input.reviewReport.qualityPyramid?.some((layer) => layer.level === "L2" && layer.status === "fail") ?? false;
+
+  if (!l1Failed && !l2Failed) {
+    return vitality;
+  }
+
+  return {
+    ...vitality,
+    overallStatus: l1Failed ? "fail" : vitality.overallStatus,
+    overallVerdict: l1Failed
+      ? "L1 写作安全检查未通过，暂时不能进入发布前整理。"
+      : "L2 结构推进检查未通过，建议先修结构再进入发布前整理。",
+    hardBlocked: l1Failed || vitality.hardBlocked,
+    semiBlocked: l1Failed || l2Failed || vitality.semiBlocked,
+  };
 }
 
 function buildQualityPyramid(checks: ReviewCheck[]) {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { runDeterministicReview } = await import("../lib/review.ts");
+const { buildVitalityCheck, runDeterministicReview } = await import("../lib/review.ts");
 const { MAX_STRUCTURAL_REWRITE_INTENTS_PER_PASS, selectStructuralRewriteCandidates } = await import("../lib/services/steps/generate-draft.ts");
 
 function buildReviewWithOpening(openingParagraph) {
@@ -1037,4 +1037,124 @@ test("weak transition rewrite advice rejects standalone bridge sentences", () =>
   assert.match(transitionIntent.suggestedRewriteMode, /不要补独立转场句/);
   assert.match(transitionIntent.suggestedRewriteMode, /上一节结尾和下一节开头/);
   assert.doesNotMatch(transitionIntent.suggestedRewriteMode, /补过渡句/);
+});
+
+test("horizontal rules are ignored by paragraph flags", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: "# 标题\n\n真正的问题不是标签，而是结构。[SC:sc_a]\n\n---\n\n## 第一段\n问题在于，结构会影响每天怎么选择。[SC:sc_a]\n\n回到开头，真正决定价值的是结构。",
+    },
+  });
+
+  assert.ok(!review.paragraphFlags.some((flag) => flag.preview.includes("---")));
+});
+
+test("unsupported scene allows author-needed and source-inference markers", () => {
+  const authorNeeded = runDeterministicReview({
+    ...baseReviewInput(),
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: "# 标题\n\n真正的问题不是标签，而是结构。[SC:sc_a]\n\n[待作者补：北广场早高峰体感]\n\n## 第一段\n从资料看，这里更像老城生活型片区，需要实地确认早高峰通勤的体感。[SC:sc_a]\n\n回到开头，真正决定价值的是结构。",
+    },
+  });
+
+  assert.equal(checkStatus(authorNeeded, "unsupported-scene"), "pass");
+});
+
+test("unsupported scene fails exact buyer quote not present in sources", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: "# 标题\n\n真正的问题不是标签，而是结构。[SC:sc_a]\n\n## 第一段\n早上七点半，报春路边有买家说“这里上学方便，所以我必须买”。[SC:sc_a]\n\n回到开头，真正决定价值的是结构。",
+    },
+  });
+
+  const sceneCheck = review.checks.find((check) => check.key === "unsupported-scene");
+  assert.equal(sceneCheck?.status, "fail");
+  assert.match(sceneCheck?.detail ?? "", /exact unsupported quote/);
+  assert.match(sceneCheck?.detail ?? "", /exact unsupported time\/place\/action/);
+});
+
+test("unsupported scene fails upgraded peak-hour pseudo-firsthand detail", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    sourceCards: [
+      {
+        id: "sc_a",
+        title: "交通资料",
+        summary: "早晚高峰拥堵。",
+        evidence: "早晚高峰拥堵。",
+        credibility: "高",
+        sourceType: "media",
+        supportLevel: "high",
+        claimType: "fact",
+        timeSensitivity: "timely",
+        intendedSection: "第一段",
+        reliabilityNote: "",
+        tags: [],
+        zone: "",
+        rawText: "早晚高峰拥堵。",
+        projectId: "p",
+        url: "",
+        note: "",
+        publishedAt: "",
+        createdAt: "",
+      },
+    ],
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: "# 标题\n\n真正的问题不是标签，而是结构。[SC:sc_a]\n\n## 第一段\n早上七点半，报春路电动车接送孩子的队伍把路口堵住，这就是这里每天的生活成本。[SC:sc_a]\n\n回到开头，真正决定价值的是结构。",
+    },
+  });
+
+  const sceneCheck = review.checks.find((check) => check.key === "unsupported-scene");
+  assert.equal(sceneCheck?.status, "fail");
+  assert.match(sceneCheck?.detail ?? "", /exact unsupported time\/place\/action/);
+});
+
+test("L1 failure hard blocks vitality and L2 failure semi blocks vitality", () => {
+  const l1Vitality = buildVitalityCheck({
+    sourceCards: [],
+    reviewReport: {
+      overallVerdict: "fail",
+      completionScore: 50,
+      globalScore: 50,
+      checks: [],
+      qualityPyramid: [{ level: "L1", title: "WritingLint", status: "fail", summary: "fail", mustFix: ["Unsupported Scene"], shouldFix: [], optionalPolish: [] }],
+      sectionScores: [],
+      paragraphFlags: [],
+      rewriteIntents: [],
+      revisionSuggestions: [],
+      preservedPatterns: [],
+      missingPatterns: [],
+    },
+  });
+  assert.equal(l1Vitality.hardBlocked, true);
+  assert.equal(l1Vitality.semiBlocked, true);
+
+  const l2Vitality = buildVitalityCheck({
+    sourceCards: [],
+    reviewReport: {
+      overallVerdict: "warn",
+      completionScore: 70,
+      globalScore: 70,
+      checks: [],
+      qualityPyramid: [{ level: "L2", title: "StructureFlow", status: "fail", summary: "fail", mustFix: ["转场失败"], shouldFix: [], optionalPolish: [] }],
+      sectionScores: [],
+      paragraphFlags: [],
+      rewriteIntents: [],
+      revisionSuggestions: [],
+      preservedPatterns: [],
+      missingPatterns: [],
+    },
+  });
+  assert.equal(l2Vitality.hardBlocked, false);
+  assert.equal(l2Vitality.semiBlocked, true);
 });
