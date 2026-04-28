@@ -3,50 +3,34 @@ import assert from "node:assert/strict";
 
 const { buildPromptTask } = await import("../lib/prompt-engine.ts");
 const { buildProjectMarkdown } = await import("../lib/markdown.ts");
+const { runStructuredTask } = await import("../lib/llm.ts");
+const { buildCardsFromLegacy } = await import("../lib/author-cards.ts");
+
+function projectFixture(patch = {}) {
+  const base = {
+    topic: "塘桥为什么涨不动",
+    thesis: "主判断",
+    articleType: "价值重估型",
+    topicMeta: {
+      signalMode: null,
+      signalBrief: null,
+      topicScorecard: null,
+      readerLens: [],
+      selectedAngleId: null,
+      selectedAngleTitle: null,
+    },
+  };
+  const cards = buildCardsFromLegacy(base);
+  return {
+    ...base,
+    ...cards,
+    ...patch,
+  };
+}
 
 test("outline writer prompt requires directive-style section fields", () => {
   const task = buildPromptTask("outline_writer", {
-    project: {
-      topic: "塘桥为什么涨不动",
-      thesis: "主判断",
-      articleType: "价值重估型",
-      hkrr: {},
-      thinkCard: {
-        materialDigest: "",
-        topicVerdict: "strong",
-        verdictReason: "",
-        coreJudgement: "",
-        counterIntuition: "",
-        readerPayoff: "",
-        decisionImplication: "",
-        excludedTakeaways: [],
-        hkr: { happy: "", knowledge: "", resonance: "", summary: "" },
-        rewriteSuggestion: "",
-        alternativeAngles: [],
-        aiRole: "",
-      },
-      styleCore: {
-        rhythm: "",
-        breakPattern: "",
-        knowledgeDrop: "",
-        personalView: "",
-        judgement: "",
-        counterView: "",
-        allowedMoves: [],
-        forbiddenMoves: [],
-        allowedMetaphors: [],
-        emotionCurve: "",
-        personalStake: "",
-        characterPortrait: "",
-        culturalLift: "",
-        sentenceBreak: "",
-        echo: "",
-        humbleSetup: "",
-        toneCeiling: "",
-        concretenessRequirement: "",
-        costSense: "",
-      },
-    },
+    project: projectFixture({ hkrr: {} }),
     sectorModel: {
       summaryJudgement: "总判断",
       misconception: "误解点",
@@ -68,50 +52,63 @@ test("outline writer prompt requires directive-style section fields", () => {
   assert.match(task.system, /mustUseEvidenceIds/);
 });
 
+test("outline writer prompt requires continuity ledger relay-card rules", () => {
+  const task = buildPromptTask("outline_writer", {
+    project: projectFixture({ hkrr: {} }),
+    sectorModel: {
+      summaryJudgement: "总判断",
+      misconception: "误解点",
+      spatialBackbone: "骨架",
+      cutLines: ["路"],
+      zones: [],
+      supplyObservation: "供应",
+      futureWatchpoints: [],
+      evidenceIds: [],
+    },
+  });
+
+  assert.match(task.system, /continuityLedger/);
+  assert.match(task.system, /读者问题链/);
+  assert.match(task.system, /交换顺序/);
+  assert.match(task.system, /删掉某一节/);
+  assert.match(task.system, /不是彼此独立的任务卡/);
+});
+
+test("mock outline output includes optional continuity ledger while old outlines remain compatible", async () => {
+  const outline = await runStructuredTask("outline_writer", {
+    project: {
+      topic: "塘桥为什么涨不动",
+      thesis: "主判断",
+      articleType: "价值重估型",
+    },
+    sectorModel: {
+      summaryJudgement: "总判断",
+      misconception: "误解点",
+      spatialBackbone: "骨架",
+      cutLines: ["路"],
+      zones: [],
+      supplyObservation: "供应",
+      futureWatchpoints: [],
+      evidenceIds: ["sc_a"],
+    },
+  });
+
+  assert.equal(typeof outline.continuityLedger.articleQuestion, "string");
+  assert.ok(outline.continuityLedger.beats.length >= 3);
+  assert.equal(outline.continuityLedger.beats[0].sectionId, outline.sections[0].id);
+});
+
 test("markdown export remains compatible with old outline sections missing new fields", () => {
   const markdown = buildProjectMarkdown({
     project: {
+      ...projectFixture({
       topic: "测试项目",
       articleType: "价值重估型",
       audience: "购房者",
       stage: "提纲生成",
       thesis: "主判断",
       coreQuestion: "核心问题",
-      thinkCard: {
-        materialDigest: "",
-        topicVerdict: "strong",
-        verdictReason: "",
-        coreJudgement: "",
-        counterIntuition: "",
-        readerPayoff: "",
-        decisionImplication: "",
-        excludedTakeaways: [],
-        hkr: { happy: "", knowledge: "", resonance: "", summary: "" },
-        rewriteSuggestion: "",
-        alternativeAngles: [],
-        aiRole: "",
-      },
-      styleCore: {
-        rhythm: "",
-        breakPattern: "",
-        knowledgeDrop: "",
-        personalView: "",
-        judgement: "",
-        counterView: "",
-        allowedMoves: [],
-        forbiddenMoves: [],
-        allowedMetaphors: [],
-        emotionCurve: "",
-        personalStake: "",
-        characterPortrait: "",
-        culturalLift: "",
-        sentenceBreak: "",
-        echo: "",
-        humbleSetup: "",
-        toneCeiling: "",
-        concretenessRequirement: "",
-        costSense: "",
-      },
+      }),
       vitalityCheck: {
         overallStatus: "warn",
         overallVerdict: "",
@@ -143,6 +140,7 @@ test("markdown export remains compatible with old outline sections missing new f
       closing: "结尾",
     },
     articleDraft: null,
+    editorialFeedbackEvents: [],
     reviewReport: null,
     publishPackage: null,
   });

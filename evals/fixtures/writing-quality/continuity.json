@@ -1,0 +1,126 @@
+{
+  "fixtures": [
+    {
+      "id": "task-card-article",
+      "label": "任务卡式并列文章",
+      "expectation": "bad_continuity",
+      "articleMarkdown": "# 任务卡式文章\n\n真正的问题不是热度，而是资源排序。\n\n## 交通\n再看，板块分化来自资源重估。[SC:sc_a]\n\n## 产业\n另外，价格背后是资源重新排序。[SC:sc_b]\n\n## 供应\n与此同时，供应也说明资源重估。[SC:sc_c]\n\n## 价格\n最后，价格还是资源排序的结果。[SC:sc_d]",
+      "continuityLedger": {
+        "articleQuestion": "到底该怎么看板块",
+        "spine": {
+          "centralQuestion": "板块价值怎么判断",
+          "openingMisread": "误以为交通产业供应价格并列罗列就够了",
+          "realProblem": "真实问题是每节没有问答推进",
+          "readerPromise": "识别并列任务卡写法",
+          "finalReturn": "回到连续判断链"
+        },
+        "beats": [
+          {
+            "sectionId": "traffic",
+            "heading": "交通",
+            "role": "show_difference",
+            "inheritedQuestion": "热度背后的真实变量是什么",
+            "answerThisSection": "板块分化来自资源重估",
+            "newInformation": "板块分化来自资源重估",
+            "evidenceIds": ["sc_a"],
+            "leavesQuestionForNext": "资源重估如何影响产业",
+            "nextSectionNecessity": "需要解释产业",
+            "mustNotRepeat": []
+          },
+          {
+            "sectionId": "industry",
+            "heading": "产业",
+            "role": "show_difference",
+            "inheritedQuestion": "另一个并列信息是什么",
+            "answerThisSection": "价格背后是资源重新排序",
+            "newInformation": "价格背后是资源重新排序",
+            "evidenceIds": ["sc_b"],
+            "leavesQuestionForNext": "供应如何体现资源排序",
+            "nextSectionNecessity": "需要解释供应",
+            "mustNotRepeat": ["资源重估"]
+          },
+          {
+            "sectionId": "supply",
+            "heading": "供应",
+            "role": "show_difference",
+            "inheritedQuestion": "再列一个角度是什么",
+            "answerThisSection": "供应也说明资源重估",
+            "newInformation": "供应也说明资源重估",
+            "evidenceIds": ["sc_c"],
+            "leavesQuestionForNext": "价格怎么看",
+            "nextSectionNecessity": "需要解释价格",
+            "mustNotRepeat": ["资源重估"]
+          }
+        ]
+      },
+      "expectedFlags": ["can_be_swapped", "no_new_information", "repeated_claim", "fake_bridge"]
+    },
+    {
+      "id": "reader-question-chain",
+      "label": "读者问题链文章",
+      "expectation": "good_continuity",
+      "articleMarkdown": "# 读者问题链文章\n\n真正的问题不是热度，而是谁还愿意为这里的确定性付成本。\n\n## 读者误解\n真正的误解，是把短期热度当作价值回归。[SC:sc_a]\n\n## 真实变量\n问题在于，真正变量是人群变化，预算安全垫变薄以后，读者会重新计算生活半径。[SC:sc_b]\n\n## 人群如何改变片区\n再往下看，人群变化如何改变片区，答案落在通勤、学校和总价门槛的组合里。[SC:sc_c]\n\n## 片区如何变成成本\n回到成本，片区分化最后会变成每天通勤、预算余量和等待兑现的代价。[SC:sc_d]\n\n## 最终判断框架\n所以这不是热不热的问题，而是你愿意为哪一种确定性付出哪一种成本。[SC:sc_d]",
+      "continuityLedger": {
+        "articleQuestion": "读者到底应该怎么判断这个板块",
+        "spine": {
+          "centralQuestion": "价值变量是什么",
+          "openingMisread": "误解是热度回归",
+          "realProblem": "真实变量是人群变化",
+          "readerPromise": "给一套成本判断框架",
+          "finalReturn": "回到为确定性付成本"
+        },
+        "beats": [
+          {
+            "sectionId": "misread",
+            "heading": "读者误解",
+            "role": "raise_misread",
+            "inheritedQuestion": "读者为什么会误判",
+            "answerThisSection": "误解是把短期热度当作价值回归",
+            "newInformation": "热度只能解释关注度，不能解释成交承接",
+            "evidenceIds": ["sc_a"],
+            "leavesQuestionForNext": "真正变量是什么",
+            "nextSectionNecessity": "下一节解释真实变量",
+            "mustNotRepeat": []
+          },
+          {
+            "sectionId": "people",
+            "heading": "真实变量",
+            "role": "break_misread",
+            "inheritedQuestion": "真正变量是什么",
+            "answerThisSection": "真正变量是人群变化",
+            "newInformation": "预算安全垫变薄以后，读者会重新计算生活半径",
+            "evidenceIds": ["sc_b"],
+            "leavesQuestionForNext": "人群变化如何改变片区",
+            "nextSectionNecessity": "需要落到片区分化",
+            "mustNotRepeat": ["热度"]
+          },
+          {
+            "sectionId": "zones",
+            "heading": "人群如何改变片区",
+            "role": "show_difference",
+            "inheritedQuestion": "人群变化如何改变片区",
+            "answerThisSection": "不同预算的人会选择不同生活半径",
+            "newInformation": "片区差异来自通勤、学校和总价门槛的组合",
+            "evidenceIds": ["sc_c"],
+            "leavesQuestionForNext": "片区分化如何变成购房成本",
+            "nextSectionNecessity": "下一节必须把差异翻译成成本",
+            "mustNotRepeat": ["人群变化"]
+          },
+          {
+            "sectionId": "cost",
+            "heading": "片区如何变成成本",
+            "role": "show_cost",
+            "inheritedQuestion": "片区分化如何变成购房成本",
+            "answerThisSection": "片区分化会变成通勤、预算余量和等待兑现的代价",
+            "newInformation": "成本不是单价，而是通勤、预算余量和兑现周期",
+            "evidenceIds": ["sc_d"],
+            "leavesQuestionForNext": "读者如何使用这套框架",
+            "nextSectionNecessity": "结尾必须转成判断工具",
+            "mustNotRepeat": ["片区差异"]
+          }
+        ]
+      },
+      "expectedNoHighSeverity": true
+    }
+  ]
+}

@@ -105,6 +105,9 @@ export function ReviewSidebar({
           {selectedBundle.reviewReport?.rewriteIntents?.length ? (
             <Chip tone="warning">待改段落：{selectedBundle.reviewReport.rewriteIntents.length}</Chip>
           ) : null}
+          {selectedBundle.reviewReport?.continuityFlags?.length ? (
+            <Chip tone="warning">连续性：{selectedBundle.reviewReport.continuityFlags.length}</Chip>
+          ) : null}
           {primaryRisk ? (
             <Chip tone={getRiskChipTone(primaryRisk.status)}>风险：{primaryRisk.title}</Chip>
           ) : (

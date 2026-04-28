@@ -44,6 +44,23 @@ export const ARTICLE_PROTOTYPES = [
 ] as const;
 export const TOPIC_READER_PERSONAS = ["busy_relocator", "improver_buyer", "risk_aware_reader", "local_life_reader"] as const;
 export const QUALITY_PYRAMID_LEVELS = ["L1", "L2", "L3", "L4"] as const;
+export const SECTION_BEAT_ROLES = [
+  "raise_misread",
+  "break_misread",
+  "explain_mechanism",
+  "show_difference",
+  "show_cost",
+  "give_decision_frame",
+  "return_to_opening",
+] as const;
+export const CONTINUITY_ISSUE_TYPES = [
+  "does_not_answer_previous",
+  "no_new_information",
+  "can_be_swapped",
+  "section_redundant",
+  "repeated_claim",
+  "fake_bridge",
+] as const;
 
 export type ArticleType = (typeof ARTICLE_TYPES)[number];
 export type ProjectStage = (typeof PROJECT_STAGES)[number];
@@ -58,6 +75,8 @@ export type TopicScorecardStatus = (typeof TOPIC_SCORECARD_STATUSES)[number];
 export type ArticlePrototype = (typeof ARTICLE_PROTOTYPES)[number];
 export type TopicReaderPersona = (typeof TOPIC_READER_PERSONAS)[number];
 export type QualityPyramidLevel = (typeof QUALITY_PYRAMID_LEVELS)[number];
+export type SectionBeatRole = (typeof SECTION_BEAT_ROLES)[number];
+export type ContinuityIssueType = (typeof CONTINUITY_ISSUE_TYPES)[number];
 
 export const ARTICLE_PROTOTYPE_LABELS: Record<ArticlePrototype, string> = {
   total_judgement: "总判断",
@@ -303,9 +322,37 @@ export interface OutlineSection {
   expectedTakeaway: string;
 }
 
+export interface NarrativeSpine {
+  centralQuestion: string;
+  openingMisread: string;
+  realProblem: string;
+  readerPromise: string;
+  finalReturn: string;
+}
+
+export interface ContinuityBeat {
+  sectionId: string;
+  heading: string;
+  role: SectionBeatRole;
+  inheritedQuestion: string;
+  answerThisSection: string;
+  newInformation: string;
+  evidenceIds: string[];
+  leavesQuestionForNext: string;
+  nextSectionNecessity: string;
+  mustNotRepeat: string[];
+}
+
+export interface ContinuityLedger {
+  articleQuestion: string;
+  spine: NarrativeSpine;
+  beats: ContinuityBeat[];
+}
+
 export interface OutlineDraft {
   hook: string;
   sections: OutlineSection[];
+  continuityLedger?: ContinuityLedger;
   closing: string;
 }
 
@@ -418,6 +465,26 @@ export interface RewriteIntent {
   suggestedRewriteMode: string;
 }
 
+export interface ContinuityFlag {
+  type: ContinuityIssueType;
+  severity: ReviewSeverity;
+  sectionIds: string[];
+  reason: string;
+  suggestedAction: string;
+}
+
+export interface StructuralRewriteIntent {
+  issueTypes: ContinuityIssueType[];
+  affectedSectionIds: string[];
+  whyItFails: string;
+  suggestedRewriteMode:
+    | "merge_sections"
+    | "delete_redundant_section"
+    | "reorder_sections"
+    | "rewrite_section_roles"
+    | "rewrite_opening_and_next_section";
+}
+
 export interface ReviewReport {
   overallVerdict: string;
   completionScore: number;
@@ -427,6 +494,8 @@ export interface ReviewReport {
   sectionScores: ReviewSectionScore[];
   paragraphFlags: ReviewParagraphFlag[];
   rewriteIntents: RewriteIntent[];
+  continuityFlags?: ContinuityFlag[];
+  structuralRewriteIntents?: StructuralRewriteIntent[];
   revisionSuggestions: string[];
   preservedPatterns: string[];
   missingPatterns: string[];

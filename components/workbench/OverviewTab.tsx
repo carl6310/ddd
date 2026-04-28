@@ -809,6 +809,21 @@ export function OverviewTab({
                 </Card>
               ) : null}
 
+              {selectedBundle.reviewReport?.continuityFlags?.length ? (
+                <Card className="vitality-detail-card">
+                  <h3>连续性问题</h3>
+                  <ul className="compact-list compact-inline-list">
+                    {selectedBundle.reviewReport.continuityFlags.slice(0, 6).map((flag) => (
+                      <li key={`${flag.type}-${flag.sectionIds.join("-")}-${flag.reason}`}>
+                        <strong>{flag.sectionIds.length ? `章节：${flag.sectionIds.join(" / ")}` : flag.type}</strong>
+                        <span>{flag.reason}</span>
+                        <span>{flag.suggestedAction}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              ) : null}
+
               {selectedBundle.reviewReport?.paragraphFlags?.length ? (
                 <Card className="vitality-detail-card">
                   <h3>最卡的段落</h3>

@@ -1,6 +1,8 @@
 import type {
   ArticleDraft,
   ArticleType,
+  ContinuityBeat,
+  ContinuityFlag,
   HAMDFrame,
   HKRRFrame,
   OutlineDraft,
@@ -23,6 +25,7 @@ const DISCOURSE_MARKERS = new Set(["首先", "其次", "最后"]);
 const TRANSITION_TOKENS = ["先说", "再看", "另外", "与此同时", "更关键的是", "回到", "问题在于", "但", "其实", "另一方面", "再往下", "最后"];
 const SCENE_TOKENS = ["通勤", "地铁", "早高峰", "晚高峰", "接娃", "买菜", "小区", "商场", "下班", "一家人", "首改", "改善"];
 const CULTURAL_LIFT_TOKENS = ["上海", "城市", "承接", "梯度", "系统", "更新", "代际", "放到更大", "更大的", "长期趋势"];
+const OPENING_ANCHOR_MARKERS = ["不是", "真正", "误解", "高估", "低估", "问题在于", "这次", "变化", "代价", "门槛", "确定性", "分化", "重估"];
 
 export function runDeterministicReview(input: {
   articleType: ArticleType;
@@ -169,9 +172,8 @@ export function runDeterministicReview(input: {
     evidenceIds: [],
   });
 
-  const contrarianSignal = ["不是", "但", "其实", "真正", "很多人", "误解", "低估", "高估", "？"].some((token) =>
-    openingWindow.includes(token),
-  );
+  const openingAnchorSignal = hasOpeningAnchorSignal(openingWindow);
+  const contrarianSignal = openingAnchorSignal || ["但", "其实", "很多人", "？"].some((token) => openingWindow.includes(token));
   checks.push({
     key: "opening",
     title: "反常识开头",
@@ -180,18 +182,16 @@ export function runDeterministicReview(input: {
     evidenceIds: [],
   });
 
-  const anchorSignal = hamd?.anchor?.trim() ? hasAnchorSignal(draft, hamd.anchor.trim()) : false;
+  const anchorSignal = openingAnchorSignal || (hamd?.anchor?.trim() ? hasAnchorSignal(draft, hamd.anchor.trim()) : false);
   checks.push({
     key: "anchor",
     title: "记忆锚点落地",
-    status: hamd?.anchor ? (anchorSignal ? "pass" : "warn") : "warn",
-    detail: hamd?.anchor ? (anchorSignal ? "正文里已经能看到记忆锚点。" : "Anchor 已定义，但正文里还没有把它立起来。") : "还没有定义 Anchor。",
+    status: anchorSignal ? "pass" : "warn",
+    detail: anchorSignal ? "正文里已经能看到记忆锚点。" : hamd?.anchor ? "Anchor 已定义，但正文里还没有把它立起来。" : "还没有定义 Anchor。",
     evidenceIds: [],
   });
 
-  const hookSignal = hamd?.hook?.trim()
-    ? openingWindow.includes("不是") || openingWindow.includes("真正") || openingWindow.includes("误解") || openingWindow.includes("高估") || openingWindow.includes("低估")
-    : false;
+  const hookSignal = hamd?.hook?.trim() ? openingAnchorSignal : false;
   checks.push({
     key: "hook",
     title: "传播钩子落地",
@@ -446,11 +446,16 @@ export function runDeterministicReview(input: {
     checks,
     sourceCards,
   });
+  const continuityFlags = buildContinuityFlags({
+    draft,
+    outlineDraft,
+  });
   const paragraphFlags = buildParagraphFlags({
     draft,
     paragraphs,
     sourceCards,
     openingWindow,
+    openingAnchorSignal,
     lastParagraph,
     sectionScores,
   });
@@ -467,6 +472,8 @@ export function runDeterministicReview(input: {
     sectionScores,
     paragraphFlags,
     rewriteIntents,
+    continuityFlags,
+    structuralRewriteIntents: buildStructuralRewriteIntents(continuityFlags),
     revisionSuggestions: buildRevisionSuggestions(checks),
     preservedPatterns: [
       contrarianSignal ? "反常识开头" : null,
@@ -536,11 +543,205 @@ function buildSectionScores(input: {
   });
 }
 
+function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraft | null }): ContinuityFlag[] {
+  const beats = input.outlineDraft?.continuityLedger?.beats ?? [];
+  if (beats.length === 0) {
+    return [];
+  }
+
+  const flags: ContinuityFlag[] = [];
+  const seenNewInformation: Array<{ beat: ContinuityBeat; text: string }> = [];
+
+  for (const beat of beats) {
+    const newInfo = beat.newInformation.trim();
+    const sectionText = extractSectionBody(input.draft, beat.heading);
+
+    if (isWeakNewInformation(newInfo)) {
+      flags.push({
+        type: "no_new_information",
+        severity: "fail",
+        sectionIds: [beat.sectionId],
+        reason: `${beat.heading} 没有交付清楚的新信息。`,
+        suggestedAction: "重写这一节的 section role，只保留一个前文没有的新判断或新事实。",
+      });
+    }
+
+    const repeated = seenNewInformation.find((item) => textSimilarity(item.text, newInfo) >= 0.25 || hasRepeatedDomainClaim(item.beat, beat));
+    if (repeated) {
+      flags.push({
+        type: "repeated_claim",
+        severity: "fail",
+        sectionIds: [repeated.beat.sectionId, beat.sectionId],
+        reason: `${beat.heading} 的新增信息与 ${repeated.beat.heading} 高度接近。`,
+        suggestedAction: "合并重复判断，或重写后一节让它回答一个新的读者问题。",
+      });
+      flags.push({
+        type: "no_new_information",
+        severity: "fail",
+        sectionIds: [beat.sectionId],
+        reason: `${beat.heading} 更像是在重复前文判断，而不是推进新信息。`,
+        suggestedAction: "删掉重复段或改写为下一层机制、成本、差异或决策用途。",
+      });
+    }
+    seenNewInformation.push({ beat, text: newInfo });
+
+    if (sectionText && startsWithFakeBridge(sectionText, beat)) {
+      flags.push({
+        type: "fake_bridge",
+        severity: "warn",
+        sectionIds: [beat.sectionId],
+        reason: `${beat.heading} 开头有转场词，但没有接住上一节留下的问题。`,
+        suggestedAction: "不要补独立过渡句，重写上一节结尾和本节开头，让本节成为上一节问题的自然答案。",
+      });
+    }
+
+    if (beat.inheritedQuestion.trim() && sectionText && !mentionsAnySignal(sectionText, beat.inheritedQuestion) && !mentionsAnySignal(beat.answerThisSection, beat.inheritedQuestion)) {
+      flags.push({
+        type: "does_not_answer_previous",
+        severity: "warn",
+        sectionIds: [beat.sectionId],
+        reason: `${beat.heading} 没有明显回答 inheritedQuestion。`,
+        suggestedAction: "重写本节开头和主判断，先回答上一节留下的问题，再展开本节新信息。",
+      });
+    }
+  }
+
+  for (let index = 0; index < beats.length - 1; index += 1) {
+    const current = beats[index];
+    const next = beats[index + 1];
+    const linked = continuityLinkScore(current, next) > 0;
+    const similar = current.role === next.role || textSimilarity(current.answerThisSection, next.answerThisSection) >= 0.25 || textSimilarity(current.newInformation, next.newInformation) >= 0.25;
+
+    if (!linked && similar) {
+      flags.push({
+        type: "can_be_swapped",
+        severity: "fail",
+        sectionIds: [current.sectionId, next.sectionId],
+        reason: `${current.heading} 与 ${next.heading} 缺少前后问答关系，且承担的判断功能接近。`,
+        suggestedAction: "重排或重写相邻 section role，让后一节必须回答前一节留下的问题。",
+      });
+    }
+  }
+
+  return dedupeContinuityFlags(flags);
+}
+
+function buildStructuralRewriteIntents(flags: ContinuityFlag[]) {
+  const structuralTypes = new Set(["can_be_swapped", "section_redundant", "no_new_information", "repeated_claim", "does_not_answer_previous"]);
+  const seriousFlags = flags.filter((flag) => flag.severity === "fail" && structuralTypes.has(flag.type));
+  if (seriousFlags.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      issueTypes: Array.from(new Set(seriousFlags.map((flag) => flag.type))),
+      affectedSectionIds: Array.from(new Set(seriousFlags.flatMap((flag) => flag.sectionIds))),
+      whyItFails: seriousFlags.map((flag) => flag.reason).join("；"),
+      suggestedRewriteMode: chooseStructuralRewriteMode(seriousFlags),
+    },
+  ];
+}
+
+function chooseStructuralRewriteMode(flags: ContinuityFlag[]) {
+  if (flags.some((flag) => flag.type === "can_be_swapped")) {
+    return "rewrite_section_roles" as const;
+  }
+  if (flags.some((flag) => flag.type === "repeated_claim" || flag.type === "section_redundant")) {
+    return "merge_sections" as const;
+  }
+  if (flags.some((flag) => flag.type === "no_new_information")) {
+    return "delete_redundant_section" as const;
+  }
+  return "rewrite_opening_and_next_section" as const;
+}
+
+function dedupeContinuityFlags(flags: ContinuityFlag[]) {
+  const seen = new Set<string>();
+  return flags.filter((flag) => {
+    const key = `${flag.type}:${flag.sectionIds.join("|")}:${flag.reason}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function isWeakNewInformation(text: string) {
+  const compact = text.replace(/\s+/g, "");
+  if (compact.length < 8) {
+    return true;
+  }
+  return ["继续分析", "进一步说明", "补充信息", "展开论述", "承接上文", "总结一下"].some((token) => compact.includes(token));
+}
+
+function startsWithFakeBridge(sectionText: string, beat: ContinuityBeat) {
+  const firstParagraph = sectionText.split(/\n\s*\n/).find((item) => item.trim())?.trim() ?? "";
+  if (!TRANSITION_TOKENS.some((token) => firstParagraph.startsWith(token))) {
+    return false;
+  }
+  return !mentionsAnySignal(firstParagraph, beat.inheritedQuestion) && !mentionsAnySignal(firstParagraph, beat.leavesQuestionForNext);
+}
+
+function continuityLinkScore(current: ContinuityBeat, next: ContinuityBeat) {
+  const fromPrevious = termsOverlap(current.leavesQuestionForNext, next.inheritedQuestion);
+  const fromCurrentAnswer = termsOverlap(current.answerThisSection, next.inheritedQuestion);
+  return fromPrevious + fromCurrentAnswer;
+}
+
+function mentionsAnySignal(text: string, signal: string) {
+  const terms = extractSignalTerms(signal);
+  if (terms.length === 0) {
+    return false;
+  }
+  return terms.some((term) => text.includes(term));
+}
+
+function termsOverlap(left: string, right: string) {
+  const leftTerms = extractSignalTerms(left);
+  const rightTerms = new Set(extractSignalTerms(right));
+  return leftTerms.filter((term) => rightTerms.has(term)).length;
+}
+
+function extractSignalTerms(text: string) {
+  const compact = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g, "");
+  const terms = new Set<string>();
+  for (let size = 2; size <= 4; size += 1) {
+    for (let index = 0; index <= compact.length - size; index += 1) {
+      terms.add(compact.slice(index, index + size));
+    }
+  }
+  return Array.from(terms).filter((term) => !["这一", "一节", "什么", "为什么", "问题", "读者", "下一", "上一", "如何", "怎么"].includes(term));
+}
+
+function textSimilarity(left: string, right: string) {
+  const leftTerms = new Set(extractSignalTerms(left));
+  const rightTerms = new Set(extractSignalTerms(right));
+  if (leftTerms.size === 0 || rightTerms.size === 0) {
+    return 0;
+  }
+  const shared = Array.from(leftTerms).filter((term) => rightTerms.has(term)).length;
+  return shared / Math.min(leftTerms.size, rightTerms.size);
+}
+
+function hasRepeatedDomainClaim(left: ContinuityBeat, right: ContinuityBeat) {
+  if (left.role !== right.role) {
+    return false;
+  }
+
+  const domainTokens = ["资源", "重估", "排序", "分化", "价格", "成本", "热度", "人群", "片区", "确定性", "供应", "交通", "产业"];
+  const leftText = `${left.answerThisSection} ${left.newInformation}`;
+  const rightText = `${right.answerThisSection} ${right.newInformation}`;
+  return domainTokens.some((token) => leftText.includes(token) && rightText.includes(token));
+}
+
 function buildParagraphFlags(input: {
   draft: string;
   paragraphs: string[];
   sourceCards: SourceCard[];
   openingWindow: string;
+  openingAnchorSignal: boolean;
   lastParagraph: string;
   sectionScores: ReviewSectionScore[];
 }): ReviewParagraphFlag[] {
@@ -552,7 +753,7 @@ function buildParagraphFlags(input: {
       const issueTypes: string[] = [];
       const sectionHeading = findSectionHeadingForParagraph(input.draft, paragraph);
 
-      if (index === 0 && !["不是", "真正", "误解", "高估", "低估", "问题在于"].some((token) => paragraph.includes(token))) {
+      if (index === 0 && !hasOpeningAnchorSignal(paragraph)) {
         issueTypes.push("weak_opening");
       }
       if (paragraph.length > 220) {
@@ -577,7 +778,7 @@ function buildParagraphFlags(input: {
       if (paragraph.includes("赋能") || paragraph.includes("多维度") || paragraph.includes("全方位") || paragraph.includes("高质量发展")) {
         issueTypes.push("generic_language");
       }
-      if (index <= 2 && !paragraph.includes("anchor") && paragraph.length > 120 && !paragraph.includes("不是一个")) {
+      if (index <= 2 && !input.openingAnchorSignal && paragraph.length > 120) {
         issueTypes.push("missing_anchor");
       }
 
@@ -632,7 +833,7 @@ function mapRewriteMode(issueType: RewriteIntent["issueType"]) {
     case "missing_anchor":
       return "补一个更可记忆的判断锚点。";
     case "weak_transition":
-      return "补过渡句，把上一段和下一段串起来。";
+      return "不要补独立过渡句。请重写上一节结尾和下一节开头，让下一节成为上一节问题的自然答案。";
     case "evidence_not_integrated":
       return "把证据直接织入论证，而不是只在句末挂引用。";
     case "generic_language":
@@ -716,6 +917,10 @@ function hasParagraphJudgement(paragraph: string) {
 
 function hasTransitionSignal(paragraph: string) {
   return TRANSITION_TOKENS.some((token) => paragraph.includes(token));
+}
+
+function hasOpeningAnchorSignal(text: string) {
+  return OPENING_ANCHOR_MARKERS.some((token) => text.includes(token));
 }
 
 function buildRevisionSuggestions(checks: ReviewCheck[]): string[] {

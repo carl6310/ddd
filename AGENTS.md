@@ -112,6 +112,19 @@ Additional rules:
 - Any new async state must have loading, success, error, and recoverability behavior.
 - Prefer incremental UI additions over large component rewrites.
 
+## Writing Quality Rule: Continuity Over Task Completion
+
+When changing prompts or review logic for article generation, preserve the continuity model:
+
+- A section is not a task card.
+- A section must answer the previous section’s unresolved question.
+- A section must add one new thing.
+- A section must make the next section necessary.
+- If adjacent sections can be swapped, the article is not continuous enough.
+- If a section can be deleted without damaging the cognition chain, it is likely filler.
+- Do not fix continuity by adding standalone bridge sentences.
+- Fix continuity by rewriting section roles, previous-section endings, and next-section openings.
+
 ## Definition Of Done
 
 A task is only done when all of the following are true:

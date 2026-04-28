@@ -71,6 +71,7 @@ function defaultHAMD(): HAMDFrame {
 function normalizeOutlineDraft(outline: OutlineDraft): OutlineDraft {
   return {
     hook: outline.hook ?? "",
+    continuityLedger: outline.continuityLedger,
     closing: outline.closing ?? "",
     sections: (outline.sections ?? []).map((section, index) => ({
       id: section.id || `section-${index + 1}`,

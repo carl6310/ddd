@@ -3,49 +3,25 @@ import assert from "node:assert/strict";
 
 const { buildPromptTask } = await import("../lib/prompt-engine.ts");
 const { runStructuredTask } = await import("../lib/llm.ts");
+const { buildCardsFromLegacy } = await import("../lib/author-cards.ts");
+
+function projectFixture(patch = {}) {
+  const base = {
+    topic: "塘桥为什么涨不动",
+    thesis: "真正的问题不是位置，而是结构。",
+    articleType: "价值重估型",
+  };
+  const cards = buildCardsFromLegacy(base);
+  return {
+    ...base,
+    ...cards,
+    ...patch,
+  };
+}
 
 test("rewrite task prompts include local rewrite context", () => {
   const prompt = buildPromptTask("evidence_weaver", {
-    project: {
-      topic: "塘桥为什么涨不动",
-      thesis: "真正的问题不是位置，而是结构。",
-      articleType: "价值重估型",
-      thinkCard: {
-        materialDigest: "",
-        topicVerdict: "strong",
-        verdictReason: "",
-        coreJudgement: "",
-        counterIntuition: "",
-        readerPayoff: "",
-        decisionImplication: "",
-        excludedTakeaways: [],
-        hkr: { happy: "", knowledge: "", resonance: "", summary: "" },
-        rewriteSuggestion: "",
-        alternativeAngles: [],
-        aiRole: "",
-      },
-      styleCore: {
-        rhythm: "",
-        breakPattern: "",
-        knowledgeDrop: "",
-        personalView: "",
-        judgement: "",
-        counterView: "",
-        allowedMoves: [],
-        forbiddenMoves: [],
-        allowedMetaphors: [],
-        emotionCurve: "",
-        personalStake: "",
-        characterPortrait: "",
-        culturalLift: "",
-        sentenceBreak: "",
-        echo: "",
-        humbleSetup: "",
-        toneCeiling: "",
-        concretenessRequirement: "",
-        costSense: "",
-      },
-    },
+    project: projectFixture(),
     paragraphText: "这一段判断很虚。",
     sectionHeading: "先把误解拨开",
     paragraphIndex: 0,
@@ -95,6 +71,138 @@ test("rewrite task prompts include local rewrite context", () => {
   assert.match(prompt.user, /为什么失败/);
   assert.match(prompt.user, /建议改法/);
   assert.match(prompt.user, /强约束证据/);
+});
+
+test("draft writer prompt uses continuity ledger without requiring it", () => {
+  const prompt = buildPromptTask("draft_writer", {
+    project: projectFixture(),
+    sectorModel: {
+      summaryJudgement: "总判断",
+      misconception: "误解",
+      spatialBackbone: "骨架",
+      cutLines: ["路"],
+      zones: [],
+      supplyObservation: "供应",
+      futureWatchpoints: [],
+      evidenceIds: ["sc_a"],
+    },
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心问题",
+          openingMisread: "误读",
+          realProblem: "真实问题",
+          readerPromise: "判断工具",
+          finalReturn: "回到开头",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "先把误解拨开",
+            role: "raise_misread",
+            inheritedQuestion: "为什么会误读",
+            answerThisSection: "不是位置，而是结构",
+            newInformation: "结构差异",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "结构是什么",
+            nextSectionNecessity: "必须解释机制",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [],
+      closing: "结尾",
+    },
+  });
+
+  assert.match(prompt.system, /沿着 ContinuityLedger/);
+  assert.match(prompt.system, /不像 5 张独立卡片/);
+  assert.match(prompt.user, /ContinuityLedger/);
+  assert.match(prompt.user, /为什么会误读/);
+
+  const fallback = buildPromptTask("draft_writer", {
+    project: projectFixture({ topic: "塘桥", thesis: "主判断" }),
+    outlineDraft: { hook: "开头", sections: [], closing: "结尾" },
+  });
+  assert.match(fallback.user, /暂无。没有 continuityLedger/);
+});
+
+test("structural rewriter prompt includes continuity flags and ledger", () => {
+  const prompt = buildPromptTask("structural_rewriter", {
+    project: projectFixture(),
+    narrativeMarkdown: "# 标题\n\n## 第一节\n重复判断。[SC:sc_a]",
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心问题",
+          openingMisread: "误读",
+          realProblem: "真实问题",
+          readerPromise: "判断工具",
+          finalReturn: "回到开头",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "第一节",
+            role: "show_difference",
+            inheritedQuestion: "上一节问什么",
+            answerThisSection: "回答什么",
+            newInformation: "新增什么",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "下一节问什么",
+            nextSectionNecessity: "为什么下一节必要",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [],
+      closing: "结尾",
+    },
+    deterministicReview: {
+      continuityFlags: [
+        {
+          type: "repeated_claim",
+          severity: "fail",
+          sectionIds: ["s1", "s2"],
+          reason: "重复前文",
+          suggestedAction: "合并",
+        },
+      ],
+    },
+    structuralRewriteIntent: {
+      issueTypes: ["repeated_claim"],
+      affectedSectionIds: ["s1", "s2"],
+      whyItFails: "重复前文",
+      suggestedRewriteMode: "merge_sections",
+    },
+    sourceCards: [{ id: "sc_a", title: "资料卡", summary: "摘要", evidence: "证据" }],
+  });
+
+  assert.match(prompt.system, /结构性重写/);
+  assert.match(prompt.system, /不要只补一句/);
+  assert.match(prompt.user, /ContinuityLedger/);
+  assert.match(prompt.user, /repeated_claim/);
+});
+
+test("mock structural rewriter returns full markdown and preserves citations", async () => {
+  const output = await runStructuredTask("structural_rewriter", {
+    narrativeMarkdown: "# 标题\n\n原文。[SC:sc_a]",
+    structuralRewriteIntent: {
+      issueTypes: ["can_be_swapped"],
+      affectedSectionIds: ["s1", "s2"],
+      whyItFails: "两节可交换",
+      suggestedRewriteMode: "rewrite_section_roles",
+    },
+    sourceCards: [{ id: "sc_a", title: "资料卡", summary: "摘要", evidence: "证据" }],
+  });
+
+  assert.match(output.narrativeMarkdown, /^# 标题/);
+  assert.match(output.narrativeMarkdown, /\[SC:sc_a\]/);
+  assert.match(output.narrativeMarkdown, /can_be_swapped/);
 });
 
 test("mock rewrite tasks return markdown content", async () => {

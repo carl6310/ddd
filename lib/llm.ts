@@ -110,6 +110,7 @@ export async function runStructuredTask<T>(
     if (
       task === "draft_writer" ||
       task === "draft_polisher" ||
+      task === "structural_rewriter" ||
       task === "opening_rewriter" ||
       task === "transition_rewriter" ||
       task === "evidence_weaver" ||
@@ -305,6 +306,8 @@ function getBaseTaskTuning(task: TaskName): TaskTuning {
       return { timeoutMs: 120000, maxTokens: 3600, retryMaxTokens: 5200, useJsonMode: true };
     case "draft_polisher":
       return { timeoutMs: 120000, maxTokens: 3600, useJsonMode: false };
+    case "structural_rewriter":
+      return { timeoutMs: 120000, maxTokens: 4200, retryMaxTokens: 5200, useJsonMode: false };
     case "opening_rewriter":
     case "transition_rewriter":
     case "evidence_weaver":
@@ -454,6 +457,8 @@ function buildMockResponse(task: TaskName, input: Parameters<typeof buildPromptT
       return mockArticleDraft(input.project, input.outlineDraft, input.sourceCards ?? []);
     case "draft_polisher":
       return { narrativeMarkdown: input.narrativeMarkdown ?? "" };
+    case "structural_rewriter":
+      return { narrativeMarkdown: mockStructuralRewrite(input.narrativeMarkdown ?? "", input.structuralRewriteIntent, input.sourceCards ?? []) };
     case "opening_rewriter":
     case "transition_rewriter":
     case "evidence_weaver":
@@ -494,6 +499,14 @@ function mockRewriteParagraph(task: TaskName, paragraphText: string, whyItFails:
     default:
       return `${base} ${whyItFails}`.trim();
   }
+}
+
+function mockStructuralRewrite(markdown: string, intent: Parameters<typeof buildPromptTask>[1]["structuralRewriteIntent"], sourceCards: SourceCard[]) {
+  const citations = sourceCards.slice(0, 2).map((card) => `[SC:${card.id}]`).join(" ");
+  const base = markdown.trim() || "# 结构重写稿\n\n真正的问题不是标签，而是结构。";
+  const issueText = intent?.issueTypes?.join("、") || "连续性问题";
+  const rewriteNote = `\n\n结构重写后，本文不再把每一节当成并列任务，而是先回答上一节留下的问题，再推进到下一层判断。${citations}\n\n本轮处理：${issueText}。`;
+  return `${base}${rewriteNote}`.trim();
 }
 
 function mockTopicCoCreate(sector: string, currentIntuition: string, rawMaterials: string): TopicCoCreationModelResult {
@@ -649,8 +662,69 @@ function buildZoneEvidenceIds(sourceCards: SourceCard[]): string[][] {
 
 function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorModel | null | undefined): OutlineDraft {
   const zones = sectorModel?.zones ?? [];
+  const zoneBeats = zones.map((zone, index) => ({
+    sectionId: `zone-section-${index + 1}`,
+    heading: `${zone.name}，${zone.label}`,
+    role: index === zones.length - 1 ? "show_cost" : "show_difference",
+    inheritedQuestion: index === 0 ? "空间骨架被看见以后，哪些片区最能说明这种差异？" : "上一块片区说明了差异存在，那下一块差异具体变在哪里？",
+    answerThisSection: `${zone.name} 的成立逻辑、优势和代价。`,
+    newInformation: zone.description,
+    evidenceIds: zone.evidenceIds,
+    leavesQuestionForNext: index === zones.length - 1 ? "这些差异最后会落到供地和购房成本上吗？" : "另一个片区是否仍然沿用同一套判断？",
+    nextSectionNecessity: index === zones.length - 1 ? "片区差异需要收束到供应和下半场判断。" : "只有继续比较下一块，读者才知道板块不是一个整体。",
+    mustNotRepeat: [thesis],
+  })) satisfies NonNullable<OutlineDraft["continuityLedger"]>["beats"];
   return {
     hook: `很多人看 ${topic}，第一眼看到的是热度和标签，但真正决定价值的，其实是另一套东西。`,
+    continuityLedger: {
+      articleQuestion: `${topic} 到底应该看标签，还是看真实结构和代价？`,
+      spine: {
+        centralQuestion: `${topic} 的价值判断到底由什么决定？`,
+        openingMisread: "读者容易把板块标签和短期热度当成价值本身。",
+        realProblem: "真正的问题是空间骨架、片区差异和现实代价如何重新排序。",
+        readerPromise: "读者看完能拿到一套判断自己适不适合的结构框架。",
+        finalReturn: "结尾回到具体片区、具体门槛和具体代价。",
+      },
+      beats: [
+        {
+          sectionId: "section-1",
+          heading: "先把误解拨开",
+          role: "raise_misread",
+          inheritedQuestion: "开头提出的热度和标签为什么可能误导读者？",
+          answerThisSection: `${topic} 真正的问题不是表面标签，而是结构。`,
+          newInformation: sectorModel?.misconception ?? "市场最常见的误解。",
+          evidenceIds: sectorModel?.evidenceIds.slice(0, 1) ?? [],
+          leavesQuestionForNext: "如果标签会误导，真实结构到底是什么？",
+          nextSectionNecessity: "下一节必须解释空间骨架，否则纠偏只停留在态度。",
+          mustNotRepeat: [],
+        },
+        {
+          sectionId: "section-2",
+          heading: "真正的空间骨架是什么",
+          role: "explain_mechanism",
+          inheritedQuestion: "真实结构到底是什么？",
+          answerThisSection: sectorModel?.spatialBackbone ?? `${topic} 不是一个整体空间，而是被切开的几个生活路径。`,
+          newInformation: (sectorModel?.cutLines ?? []).join(" / ") || "真实生活边界和切割线。",
+          evidenceIds: sectorModel?.evidenceIds.slice(0, 2) ?? [],
+          leavesQuestionForNext: "空间骨架落到具体片区，会产生哪些差异？",
+          nextSectionNecessity: "读者需要看到分区差异，才能把结构转成决策。",
+          mustNotRepeat: [thesis],
+        },
+        ...zoneBeats,
+        {
+          sectionId: "section-final",
+          heading: "供应和下半场怎么走",
+          role: "return_to_opening",
+          inheritedQuestion: "片区差异最后会落到供地和购房成本上吗？",
+          answerThisSection: `${topic} 是否成立，最后还是取决于具体片区、具体门槛和具体代价。`,
+          newInformation: sectorModel?.supplyObservation ?? "供应节奏和未来变量。",
+          evidenceIds: sectorModel?.evidenceIds.slice(-2) ?? [],
+          leavesQuestionForNext: "读者需要把这套框架用回自己的选择。",
+          nextSectionNecessity: "这是全文收束，不再开启新章节。",
+          mustNotRepeat: [thesis],
+        },
+      ],
+    },
     sections: [
       {
         id: "section-1",

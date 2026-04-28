@@ -1,7 +1,7 @@
 import { buildStyleReference, getArticleDraft, getOutlineDraft, getProject, getResearchBrief, getReviewReport, getSectorModel, listSourceCards, savePublishPackage, updateProject } from "@/lib/repository";
 import { runStructuredTask } from "@/lib/llm";
 import { canPreparePublish } from "@/lib/workflow";
-import type { PublishPackage } from "@/lib/types";
+import type { PublishPackage, WritingQualityGateResult } from "@/lib/types";
 import type { JobExecutionContext } from "@/lib/jobs/types";
 import { JobError } from "@/lib/jobs/types";
 import { buildWritingQualityGate } from "@/lib/writing-quality/gate";
@@ -52,6 +52,7 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
     shouldFix: qualityGate.shouldFix.length,
     optionalPolish: qualityGate.optionalPolish.length,
   });
+  assertPublishQualityGateAllowsPrepare(qualityGate, context);
 
   context.setProgress("calling_llm", "正在生成发布前整理。");
   const publishPackage = await runStructuredTask<PublishPackage>(
@@ -104,6 +105,31 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
   savePublishPackage(projectId, publishPackage);
   updateProject(projectId, { stage: "发布前整理" });
   context.log("info", "result_saved", "发布前整理结果已保存。");
+}
+
+export function assertPublishQualityGateAllowsPrepare(qualityGate: WritingQualityGateResult, context?: Pick<JobExecutionContext, "log">) {
+  const blocked =
+    qualityGate.mode === "hard-block" || qualityGate.overallStatus === "fail" || qualityGate.mustFix.length > 0;
+  if (!blocked) {
+    return;
+  }
+
+  const mustFixTitles = qualityGate.mustFix.map((item) => item.title).filter(Boolean);
+  const message = buildQualityGateBlockedMessage(mustFixTitles);
+  context?.log("warn", "quality_gate_blocked", message, {
+    mode: qualityGate.mode,
+    overallStatus: qualityGate.overallStatus,
+    mustFix: qualityGate.mustFix.map((item) => ({
+      code: item.code,
+      title: item.title,
+    })),
+  });
+  throw new JobError("quality_gate_failed", message);
+}
+
+function buildQualityGateBlockedMessage(mustFixTitles: string[]) {
+  const suffix = mustFixTitles.length ? `请先处理：${mustFixTitles.slice(0, 3).join("、")}。` : "请先回到质检/正文修复后再生成发布整理。";
+  return `写作质量门槛未通过，暂时不能生成发布前整理稿。${suffix}`;
 }
 
 function needsSummaryRefinement(summary: string) {

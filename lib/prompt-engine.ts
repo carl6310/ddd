@@ -27,6 +27,7 @@ export type TaskName =
   | "outline_writer"
   | "draft_writer"
   | "draft_polisher"
+  | "structural_rewriter"
   | "opening_rewriter"
   | "transition_rewriter"
   | "evidence_weaver"
@@ -66,6 +67,12 @@ export function buildPromptTask(
     rewriteIntent?: {
       issueType: string;
       targetRange: string;
+      whyItFails: string;
+      suggestedRewriteMode: string;
+    };
+    structuralRewriteIntent?: {
+      issueTypes: string[];
+      affectedSectionIds: string[];
       whyItFails: string;
       suggestedRewriteMode: string;
     };
@@ -486,10 +493,38 @@ ${formatSectorModelSourceCards(input.sourceCards || [])}
 请把历史样本中的开头方式、结构节奏和判断推进方式吸收进来，但不要复制句子或现成命名。
 ${styleLearningRules}
 ${authorBrainText}
+你不是在生成“段落任务书”，而是在生成“读者问题链”。
+每一节必须回答上一节留下的问题，并给下一节制造必要性。
+如果两节交换顺序后仍然成立，说明这两节不是连续推进。
+如果删掉某一节后全文主线没有损失，说明这一节是填充。
 必须输出严格 JSON，不要输出额外文字。
 JSON 结构：
 {
   "hook": "开头一句",
+  "continuityLedger": {
+    "articleQuestion": "这篇文章到底要回答什么问题",
+    "spine": {
+      "centralQuestion": "全文核心问题",
+      "openingMisread": "读者一开始容易误判什么",
+      "realProblem": "真正的问题是什么",
+      "readerPromise": "读者看完得到什么判断工具",
+      "finalReturn": "结尾如何回到开头"
+    },
+    "beats": [
+      {
+        "sectionId": "section-1",
+        "heading": "小节标题",
+        "role": "raise_misread|break_misread|explain_mechanism|show_difference|show_cost|give_decision_frame|return_to_opening",
+        "inheritedQuestion": "这一节接住上一节留下的什么问题，第一节接住开头误读",
+        "answerThisSection": "这一节只回答什么",
+        "newInformation": "这一节新增什么，不能是前文换皮",
+        "evidenceIds": ["source card id"],
+        "leavesQuestionForNext": "读者读完自然会追问什么",
+        "nextSectionNecessity": "为什么下一节非出现不可",
+        "mustNotRepeat": ["前文已经说过的判断"]
+      }
+    ]
+  },
   "sections": [
     {
       "id": "section-1",
@@ -520,7 +555,8 @@ JSON 结构：
   ],
   "closing": "结尾要落到哪里"
 }
-sections 至少 5 段，且必须是段落任务书，不是空标题列表。
+sections 至少 5 段，且必须是连续接力卡，不是空标题列表，也不是彼此独立的任务卡。
+move / break / scene / cost / counterView / culture lift / callback / styleObjective 可以作为编辑建议，但不能把每一节都写成同一套风格动作清单。
         `.trim(),
         user: `
 项目主题：${input.project?.topic}
@@ -544,8 +580,10 @@ ${profileText}
 ${languageText}
 
 要求：先纠偏，再讲空间骨架，再分区拆解，再讲供应和未来，最后回到购房者视角。
-要求：至少有一个 section 负责落人物或生活场景，至少有一个 section 负责升维，结尾 section 必须明确回环。
-要求：每个 section 必须有唯一主判断、唯一动作、必须落地细节、场景或代价、承接目标、反面理解、mainlineSentence、callbackTarget、readerUsefulness。
+要求：先写 continuityLedger，再写 sections；每个 section 的 id 必须能在 continuityLedger.beats 里找到对应 sectionId。
+要求：每个 section 必须接住 inheritedQuestion，回答 answerThisSection，并在结尾留下 leavesQuestionForNext。
+要求：至少有一个 section 负责落人物或生活场景，至少有一个 section 负责升维，结尾 section 必须明确回环；这些是整体配置，不要机械摊派到每一节。
+要求：每个 section 必须有唯一主判断、唯一推进动作、必须落地细节、承接目标、反面理解、mainlineSentence、callbackTarget、readerUsefulness。
 要求：每个 section 的 move / break / bridge / styleObjective / singlePurpose / transitionTarget / discoveryTurn 都必须可执行，不能写空词。
 要求：每个 section 的 mustUseEvidenceIds 至少 1 个，并且必须是这段正文后续真正要挂进文中的证据。
         `.trim(),
@@ -558,6 +596,16 @@ ${languageText}
 可以模仿思考方向，但不要逐字复用历史样本，也不要套用现成抓手词。
 ${styleLearningRules}
 ${authorBrainText}
+你不是逐段完成任务书，而是沿着 ContinuityLedger 写一篇连续文章。
+写作规则：
+1. 每一节开头必须自然回应上一节留下的问题，但不要机械使用“上文说到”“接下来我们看”。
+2. 每一节只推进一件事。
+3. 每一节必须带来前文没有的新信息、新判断或新决策用途。
+4. 每一节结尾不要完全总结本节，要把读者推向下一节。
+5. 禁止把每节都写成“先判断、再解释、再举例、再升华”的固定结构。
+6. 禁止为了完成风格指标硬塞短句、疑问句、人物场景、文化升维或口语词。
+7. 如果缺少真实材料，不要编造现场感，直接写成分析判断，或标注“这里需要作者补真实观察”。
+8. 最终文章读起来应该像一个人在连续思考，不像 5 张独立卡片。
 你必须直接输出 Markdown 正文，不要输出 JSON，不要输出额外解释，不要加代码围栏。
 
 硬性要求：
@@ -566,10 +614,10 @@ ${authorBrainText}
 3. 必须解释空间结构
 4. 必须体现 sectorModel 中已有片区的拆解，不要把片区强行压缩成固定数量
 5. 必须把写作动作卡真正写进正文，而不是只完成结构
-6. 至少落一个具体人物/生活场景、一处文化升维、一处现实代价、一句短促断裂句，并让结尾回扣开头
+6. 全文整体至少落一个具体人物/生活场景、一处文化升维、一处现实代价、一句短促断裂句，并让结尾回扣开头；不要机械分摊到每一节
 7. 不要写成中介软文
 8. 只输出 narrativeMarkdown，不要额外生成第二篇文章
-9. 全文至少用 5 个口语化转场/情绪/谦逊词组，至少 3 处短句独立成段，至少 2 处疑问句
+9. 口语化转场、短句、疑问句服务自然推进，不能为了凑数量硬塞；有把握时全文可以使用 5 个左右口语化表达、3 处短句、2 处疑问句
 10. 在核心判断前至少有 1 处谦逊铺垫（说实话我也不确定、这只是个人理解）
 11. 如果某段需要实地体感但你没有素材，用「（待作者补：XXX）」标注，不要编造假体感。具体人物场景如果是推测的，也要标注「（待作者确认：XXX）」
 12. 如果某段的 microStoryNeed / sceneOrCost 缺少证据支撑，必须显式用待作者补标注，不要假装亲历
@@ -606,6 +654,9 @@ ${(input.outlineDraft?.sections ?? [])
       `${index + 1}. ${section.heading} | 目标：${section.purpose} | 段落主判断：${section.sectionThesis || "待补"} | 唯一动作：${section.singlePurpose || "待补"} | 主线句：${section.mainlineSentence || "待补"} | 回环目标：${section.callbackTarget || "待补"} | 微型故事：${section.microStoryNeed || "待补"} | 发现转折：${section.discoveryTurn || "待补"} | 必须落地：${section.mustLandDetail || "待补"} | 场景/代价：${section.sceneOrCost || "待补"} | 对立观点：${section.opposingView || section.counterPoint || "待补"} | 读者用途：${section.readerUsefulness || "待补"} | 动作：${section.move} | 打破：${section.break} | 承接：${section.bridge} | 承接目标：${section.transitionTarget || "待补"} | 风格目标：${section.styleObjective} | 重点：${section.keyPoints.join("、")} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"} | 证据：${section.evidenceIds.join("、")}`,
   )
   .join("\n")}
+
+ContinuityLedger：
+${input.outlineDraft?.continuityLedger ? JSON.stringify(input.outlineDraft.continuityLedger, null, 2) : "暂无。没有 continuityLedger 时，请沿用现有提纲写法，但仍要避免独立任务卡式段落。"}
 
 风格样本：
 ${input.styleReference || "暂无风格样本"}
@@ -665,6 +716,56 @@ ${input.styleReference || "暂无风格样本"}
 - 优先修 opening / hook / anchor / transitions / emotional-arc / echo / citations
 - 如果当前文章类型是误解纠偏型，必须明确解释“大家为什么会看错”的机制，而不是只说看错了
 - 如果当前稿件里某个段落已经有生命力，不要把它修平
+        `.trim(),
+      };
+    case "structural_rewriter":
+      return {
+        system: `
+你是一位上海板块长文结构重写编辑。你要做结构性重写，不是润色句子。
+${styleLearningRules}
+${authorBrainText}
+你必须直接输出完整 Markdown 正文，不要输出 JSON，不要输出额外说明，不要加代码围栏。
+
+根据 ContinuityFlags：
+- 可以删节
+- 可以合并节
+- 可以重排节
+- 可以重写 section role
+- 可以重写上一节结尾和下一节开头
+- 不要只补一句“接下来我们看”
+- 不要把重复观点换一种说法保留
+- 保留已有事实和资料卡引用
+- 不编造新事实
+
+处理原则：
+1. 如果相邻两节可以交换，重写两节的因果/问答关系，让后一节必须回答前一节留下的问题。
+2. 如果一节没有新增信息，删除、合并，或改成机制/成本/差异/决策用途中的一个新台阶。
+3. 如果重复前文观点，不要换皮保留，必须合并或改写成下一层判断。
+4. 如果只是转场虚假，不补桥句，改写上一节结尾和下一节开头。
+5. 保留所有仍然有效的 [SC:id] 引用；如果删掉引用所在句，必须把引用迁移到仍然使用该事实的句子。
+        `.trim(),
+        user: `
+项目主题：${input.project?.topic}
+主命题：${input.project?.thesis}
+
+当前正文：
+${input.narrativeMarkdown || ""}
+
+ContinuityLedger：
+${input.outlineDraft?.continuityLedger ? JSON.stringify(input.outlineDraft.continuityLedger, null, 2) : "暂无"}
+
+结构性重写意图：
+${JSON.stringify(input.structuralRewriteIntent ?? input.rewriteIntent ?? {}, null, 2)}
+
+确定性质检：
+${JSON.stringify(input.deterministicReview, null, 2)}
+
+资料卡：
+${(input.sourceCards || [])
+  .map((card) => `- ${card.id} | ${card.title} | 摘要：${card.summary} | 证据：${card.evidence}`)
+  .join("\n")}
+
+只返回重写后的完整 Markdown。
         `.trim(),
       };
     case "opening_rewriter":
