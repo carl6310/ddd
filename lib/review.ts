@@ -551,12 +551,15 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
 
   const flags: ContinuityFlag[] = [];
   const seenNewInformation: Array<{ beat: ContinuityBeat; text: string }> = [];
-  const unlinkedPairs: Array<{ current: ContinuityBeat; next: ContinuityBeat }> = [];
+  const ledgerUnlinkedPairs: Array<{ current: ContinuityBeat; next: ContinuityBeat }> = [];
+  const textUnlinkedPairs: Array<{ current: ContinuityBeat; next: ContinuityBeat }> = [];
 
   for (const beat of beats) {
     const newInfo = beat.newInformation.trim();
     const sectionText = extractSectionBody(input.draft, beat.heading);
     const sectionCitations = extractCitedIds(sectionText);
+    const requiredEvidenceIds = getRequiredEvidenceIdsForBeat(input.outlineDraft, beat);
+    const optionalEvidenceIds = beat.evidenceIds.filter((id) => !requiredEvidenceIds.includes(id));
 
     if (isWeakNewInformation(newInfo)) {
       flags.push({
@@ -569,7 +572,12 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
     }
 
     if (sectionText.trim()) {
-      if (newInfo && !hasStrongSignalConnection(sectionText, newInfo)) {
+      const answersLedger = beat.answerThisSection.trim() ? hasStrongSignalConnection(sectionText, beat.answerThisSection) : false;
+      const hasRequiredEvidence = requiredEvidenceIds.length === 0 || requiredEvidenceIds.every((id) => sectionCitations.includes(id));
+      const hasExpectedEvidence =
+        requiredEvidenceIds.some((id) => sectionCitations.includes(id)) || optionalEvidenceIds.some((id) => sectionCitations.includes(id));
+
+      if (newInfo && !hasStrongSignalConnection(sectionText, newInfo) && !(answersLedger && hasRequiredEvidence && hasExpectedEvidence)) {
         flags.push({
           type: "section_does_not_deliver_new_information",
           severity: "fail",
@@ -579,7 +587,7 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
         });
       }
 
-      if (beat.answerThisSection.trim() && !hasStrongSignalConnection(sectionText, beat.answerThisSection)) {
+      if (beat.answerThisSection.trim() && !answersLedger) {
         flags.push({
           type: "section_does_not_answer_ledger",
           severity: "fail",
@@ -589,14 +597,25 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
         });
       }
 
-      const missingEvidenceIds = beat.evidenceIds.filter((id) => !sectionCitations.includes(id));
-      if (missingEvidenceIds.length > 0) {
+      const missingRequiredEvidenceIds = requiredEvidenceIds.filter((id) => !sectionCitations.includes(id));
+      if (missingRequiredEvidenceIds.length > 0) {
         flags.push({
           type: "section_missing_required_evidence",
           severity: "fail",
           sectionIds: [beat.sectionId],
-          reason: `${beat.heading} 没有引用 continuityLedger 要求的资料卡：${missingEvidenceIds.join("、")}。`,
-          suggestedAction: "把缺失资料卡织进本节对应判断里；如果正文不再使用该事实，重写本节 role 或调整证据绑定。",
+          reason: `${beat.heading} 没有引用本节 mustUseEvidenceIds 要求的资料卡：${missingRequiredEvidenceIds.join("、")}。`,
+          suggestedAction: "把缺失的强约束资料卡织进本节对应判断里；如果正文不再使用该事实，重写本节 role 或调整证据绑定。",
+        });
+      }
+
+      const missingOptionalEvidenceIds = optionalEvidenceIds.filter((id) => !sectionCitations.includes(id));
+      if (missingOptionalEvidenceIds.length > 0) {
+        flags.push({
+          type: "section_missing_required_evidence",
+          severity: "warn",
+          sectionIds: [beat.sectionId],
+          reason: `${beat.heading} 没有引用 continuityLedger 推荐的资料卡：${missingOptionalEvidenceIds.join("、")}。`,
+          suggestedAction: "这是推荐证据缺口，不要为了凑引用硬塞；只有当本节判断需要它时再织入正文。",
         });
       }
     } else {
@@ -656,7 +675,7 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
     const similar = current.role === next.role || textSimilarity(current.answerThisSection, next.answerThisSection) >= 0.25 || textSimilarity(current.newInformation, next.newInformation) >= 0.25;
 
     if (current.leavesQuestionForNext.trim() && next.inheritedQuestion.trim() && !linked) {
-      unlinkedPairs.push({ current, next });
+      ledgerUnlinkedPairs.push({ current, next });
     }
 
     if (!linked && similar) {
@@ -668,18 +687,40 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
         suggestedAction: "重排或重写相邻 section role，让后一节必须回答前一节留下的问题。",
       });
     }
+
+    const currentEnding = extractSectionEnding(input.draft, current.heading);
+    const nextOpening = extractSectionOpening(input.draft, next.heading);
+    if (current.leavesQuestionForNext.trim() && currentEnding && nextOpening && !mentionsAnySignal(nextOpening, current.leavesQuestionForNext)) {
+      textUnlinkedPairs.push({ current, next });
+    }
   }
 
-  for (const pair of unlinkedPairs) {
+  for (const pair of ledgerUnlinkedPairs) {
     flags.push({
       type: "unlinked_adjacency",
-      severity: unlinkedPairs.length >= 2 ? "fail" : "warn",
+      severity: ledgerUnlinkedPairs.length >= 2 ? "fail" : "warn",
       sectionIds: [pair.current.sectionId, pair.next.sectionId],
       reason: `${pair.current.heading} 留下的问题没有接到 ${pair.next.heading} 的 inheritedQuestion。`,
       suggestedAction:
-        unlinkedPairs.length >= 2
+        ledgerUnlinkedPairs.length >= 2
           ? "重写相邻 section role 和段尾/段首问答链，连续两处以上断链需要结构性返工。"
           : "重写上一节结尾或下一节开头，让下一节继承上一节留下的问题。",
+    });
+  }
+
+  for (const pair of textUnlinkedPairs) {
+    const matchesLedgerUnlink = ledgerUnlinkedPairs.some(
+      (ledgerPair) => ledgerPair.current.sectionId === pair.current.sectionId && ledgerPair.next.sectionId === pair.next.sectionId,
+    );
+    const shouldEscalate = textUnlinkedPairs.length >= 2 || matchesLedgerUnlink;
+    flags.push({
+      type: "unlinked_adjacency",
+      severity: shouldEscalate ? "fail" : "warn",
+      sectionIds: [pair.current.sectionId, pair.next.sectionId],
+      reason: `${pair.next.heading} 的开头没有回答 ${pair.current.heading} 结尾留下的问题。`,
+      suggestedAction: shouldEscalate
+        ? "多处段尾/段首问答断链，需要结构性重写相邻 section role。"
+        : "优先重写上一节结尾和下一节开头，不要补独立转场句。",
     });
   }
 
@@ -687,30 +728,46 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
 }
 
 function buildStructuralRewriteIntents(flags: ContinuityFlag[]) {
-  const structuralTypes = new Set([
-    "can_be_swapped",
-    "section_redundant",
-    "no_new_information",
-    "repeated_claim",
-    "does_not_answer_previous",
-    "section_does_not_deliver_new_information",
-    "section_does_not_answer_ledger",
-    "section_missing_required_evidence",
-    "unlinked_adjacency",
-  ]);
-  const seriousFlags = flags.filter((flag) => structuralTypes.has(flag.type) && (flag.severity === "fail" || flag.type === "does_not_answer_previous"));
-  if (seriousFlags.length === 0) {
-    return [];
-  }
-
-  return [
+  const groups: Array<{
+    name: "ledger_delivery" | "redundancy" | "adjacency";
+    priority: number;
+    types: ContinuityFlag["type"][];
+  }> = [
     {
-      issueTypes: Array.from(new Set(seriousFlags.map((flag) => flag.type))),
-      affectedSectionIds: Array.from(new Set(seriousFlags.flatMap((flag) => flag.sectionIds))),
-      whyItFails: seriousFlags.map((flag) => flag.reason).join("；"),
-      suggestedRewriteMode: chooseStructuralRewriteMode(seriousFlags),
+      name: "ledger_delivery",
+      priority: 3,
+      types: ["section_does_not_deliver_new_information", "section_does_not_answer_ledger", "section_missing_required_evidence"],
+    },
+    {
+      name: "redundancy",
+      priority: 2,
+      types: ["repeated_claim", "no_new_information", "section_redundant"],
+    },
+    {
+      name: "adjacency",
+      priority: 1,
+      types: ["does_not_answer_previous", "unlinked_adjacency", "can_be_swapped", "fake_bridge"],
     },
   ];
+
+  return groups
+    .map((group) => {
+      const groupFlags = flags.filter((flag) => group.types.includes(flag.type) && (flag.severity === "fail" || flag.type === "does_not_answer_previous"));
+      return { group, flags: groupFlags };
+    })
+    .filter((item) => item.flags.length > 0)
+    .sort((left, right) => {
+      const leftFailed = left.flags.some((flag) => flag.severity === "fail") ? 1 : 0;
+      const rightFailed = right.flags.some((flag) => flag.severity === "fail") ? 1 : 0;
+      return rightFailed - leftFailed || right.group.priority - left.group.priority;
+    })
+    .slice(0, 2)
+    .map((item) => ({
+      issueTypes: Array.from(new Set(item.flags.map((flag) => flag.type))),
+      affectedSectionIds: Array.from(new Set(item.flags.flatMap((flag) => flag.sectionIds))),
+      whyItFails: item.flags.map((flag) => flag.reason).join("；"),
+      suggestedRewriteMode: chooseStructuralRewriteMode(item.flags),
+    }));
 }
 
 function chooseStructuralRewriteMode(flags: ContinuityFlag[]) {
@@ -723,7 +780,10 @@ function chooseStructuralRewriteMode(flags: ContinuityFlag[]) {
   if (flags.some((flag) => flag.type === "repeated_claim" || flag.type === "section_redundant")) {
     return "merge_sections" as const;
   }
-  if (flags.some((flag) => flag.type === "no_new_information" || flag.type === "section_does_not_deliver_new_information")) {
+  if (flags.some((flag) => flag.type === "section_does_not_deliver_new_information")) {
+    return "rewrite_section_roles" as const;
+  }
+  if (flags.some((flag) => flag.type === "no_new_information")) {
     return "delete_redundant_section" as const;
   }
   return "rewrite_opening_and_next_section" as const;
@@ -763,8 +823,23 @@ function continuityLinkScore(current: ContinuityBeat, next: ContinuityBeat) {
   return fromPrevious + fromCurrentAnswer;
 }
 
+function getRequiredEvidenceIdsForBeat(outlineDraft: OutlineDraft | null | undefined, beat: ContinuityBeat) {
+  const section = outlineDraft?.sections.find((item) => item.id === beat.sectionId || item.heading === beat.heading);
+  return section?.mustUseEvidenceIds ?? [];
+}
+
 function extractCitedIds(text: string) {
   return Array.from(new Set(text.match(/\[SC:([a-zA-Z0-9_-]+)\]/g)?.map((token) => token.slice(4, -1)) ?? []));
+}
+
+function extractSectionOpening(markdown: string, heading: string) {
+  const paragraphs = extractParagraphs(extractSectionBody(markdown, heading));
+  return paragraphs[0] ?? "";
+}
+
+function extractSectionEnding(markdown: string, heading: string) {
+  const paragraphs = extractParagraphs(extractSectionBody(markdown, heading));
+  return paragraphs.at(-1) ?? "";
 }
 
 function mentionsAnySignal(text: string, signal: string) {

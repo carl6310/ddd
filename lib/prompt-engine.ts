@@ -750,7 +750,7 @@ ${authorBrainText}
 4. 如果只是转场虚假，不补桥句，改写上一节结尾和下一节开头。
 5. 保留所有仍然有效的 [SC:id] 引用；如果删掉引用所在句，必须把引用迁移到仍然使用该事实的句子。
 6. 如果正文没有兑现 ledger 的 answerThisSection / newInformation，重写本节主判断和关键事实，不要只调顺语气。
-7. 如果本节缺少 ledger 要求的 evidenceIds，把资料卡织进对应判断；不能为了保留引用而编造事实。
+7. 如果本节缺少 mustUseEvidenceIds，把资料卡织进对应判断；普通 evidenceIds 是推荐证据，不能为了保留引用而编造事实或硬塞材料。
         `.trim(),
         user: `
 项目主题：${input.project?.topic}

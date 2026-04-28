@@ -427,17 +427,77 @@ test("review flags section text that does not deliver ledger newInformation", ()
         "真正的问题不是热度。",
         "",
         "## 预算安全垫",
-        "真正变量是预算安全垫，但这一段只停在抽象判断，没有写具体人群怎么变。[SC:sc_a]",
+        "真正变量是预算安全垫，但这一段只停在抽象判断，没有写具体人群怎么变。",
       ].join("\n"),
     },
   });
 
   const types = new Set(review.continuityFlags?.map((flag) => flag.type));
   assert.ok(types.has("section_does_not_deliver_new_information"));
-  assert.ok((review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("section_does_not_deliver_new_information")));
+  const intent = review.structuralRewriteIntents?.find((item) => item.issueTypes.includes("section_does_not_deliver_new_information"));
+  assert.ok(intent);
+  assert.notEqual(intent.suggestedRewriteMode, "delete_redundant_section");
 });
 
-test("review flags ledger evidence that is not cited in the matching section", () => {
+test("review accepts paraphrased newInformation when section answers ledger and cites required evidence", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心变量是什么",
+          openingMisread: "误以为只看热度",
+          realProblem: "真实变量是预算安全垫",
+          readerPromise: "给判断框架",
+          finalReturn: "回到选择成本",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "预算安全垫",
+            role: "break_misread",
+            inheritedQuestion: "真正变量是什么",
+            answerThisSection: "真正变量是预算安全垫",
+            newInformation: "首改成交周期正在拉长",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "周期变化如何改变选择",
+            nextSectionNecessity: "下一节落到选择",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: "s1",
+          heading: "预算安全垫",
+          evidenceIds: ["sc_a"],
+          mustUseEvidenceIds: ["sc_a"],
+        },
+      ],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是热度。",
+        "",
+        "## 预算安全垫",
+        "真正变量是预算安全垫，改善买家现在要等更久，才轮到合适的房源和价格。[SC:sc_a]",
+      ].join("\n"),
+    },
+  });
+
+  const types = new Set(review.continuityFlags?.map((flag) => flag.type));
+  assert.ok(!types.has("section_does_not_deliver_new_information"));
+  assert.ok(!types.has("section_missing_required_evidence"));
+});
+
+test("review fails missing mustUseEvidenceIds in the matching section", () => {
   const review = runDeterministicReview({
     ...baseReviewInput(),
     outlineDraft: {
@@ -466,7 +526,14 @@ test("review flags ledger evidence that is not cited in the matching section", (
           },
         ],
       },
-      sections: [],
+      sections: [
+        {
+          id: "s1",
+          heading: "预算安全垫",
+          evidenceIds: ["sc_a"],
+          mustUseEvidenceIds: ["sc_a"],
+        },
+      ],
       closing: "结尾",
     },
     articleDraft: {
@@ -487,6 +554,218 @@ test("review flags ledger evidence that is not cited in the matching section", (
   assert.ok(evidenceFlag);
   assert.equal(evidenceFlag.severity, "fail");
   assert.ok((review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("section_missing_required_evidence")));
+});
+
+test("review warns when optional ledger evidenceIds are not cited", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心变量是什么",
+          openingMisread: "误以为只看热度",
+          realProblem: "真实变量是预算安全垫",
+          readerPromise: "给判断框架",
+          finalReturn: "回到选择成本",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "预算安全垫",
+            role: "break_misread",
+            inheritedQuestion: "真正变量是什么",
+            answerThisSection: "真正变量是预算安全垫",
+            newInformation: "预算安全垫决定改善家庭能否承接",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "预算如何改变片区选择",
+            nextSectionNecessity: "下一节落到片区选择",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: "s1",
+          heading: "预算安全垫",
+          evidenceIds: ["sc_a"],
+          mustUseEvidenceIds: [],
+        },
+      ],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是热度。",
+        "",
+        "## 预算安全垫",
+        "真正变量是预算安全垫，预算安全垫决定改善家庭能否承接。",
+      ].join("\n"),
+    },
+  });
+
+  const evidenceFlag = review.continuityFlags?.find((flag) => flag.type === "section_missing_required_evidence");
+  assert.ok(evidenceFlag);
+  assert.equal(evidenceFlag.severity, "warn");
+  assert.ok(!(review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("section_missing_required_evidence")));
+});
+
+test("structural rewrite intents split ledger delivery and redundancy groups", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心变量是什么",
+          openingMisread: "误以为看热度",
+          realProblem: "真实变量是资源排序",
+          readerPromise: "给判断框架",
+          finalReturn: "回到选择成本",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "资源重估",
+            role: "show_difference",
+            inheritedQuestion: "真正变量是什么",
+            answerThisSection: "板块分化来自资源重估",
+            newInformation: "板块分化来自资源重估",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "资源重估如何影响价格",
+            nextSectionNecessity: "下一节解释价格",
+            mustNotRepeat: [],
+          },
+          {
+            sectionId: "s2",
+            heading: "价格排序",
+            role: "show_difference",
+            inheritedQuestion: "资源重估如何影响价格",
+            answerThisSection: "价格背后是资源重新排序",
+            newInformation: "价格背后是资源重新排序",
+            evidenceIds: ["sc_b"],
+            leavesQuestionForNext: "读者如何选择",
+            nextSectionNecessity: "下一节给建议",
+            mustNotRepeat: ["资源重估"],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: "s1",
+          heading: "资源重估",
+          evidenceIds: ["sc_a"],
+          mustUseEvidenceIds: ["sc_a"],
+        },
+        {
+          id: "s2",
+          heading: "价格排序",
+          evidenceIds: ["sc_b"],
+          mustUseEvidenceIds: [],
+        },
+      ],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是热度，而是资源排序。",
+        "",
+        "## 资源重估",
+        "再看，资源重估会带来板块分化。",
+        "",
+        "## 价格排序",
+        "另外，价格背后也是资源重新排序。[SC:sc_b]",
+      ].join("\n"),
+    },
+  });
+
+  const intents = review.structuralRewriteIntents ?? [];
+  assert.equal(intents.length, 2);
+  assert.ok(intents.some((intent) => intent.issueTypes.includes("section_missing_required_evidence")));
+  assert.ok(intents.some((intent) => intent.issueTypes.includes("repeated_claim") || intent.issueTypes.includes("no_new_information")));
+  assert.ok(!intents.some((intent) => intent.issueTypes.includes("section_missing_required_evidence") && intent.issueTypes.includes("repeated_claim")));
+});
+
+test("review warns for a single section opening that does not answer previous ending question", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心变量是什么",
+          openingMisread: "误以为看热度",
+          realProblem: "真实变量是预算",
+          readerPromise: "给判断框架",
+          finalReturn: "回到选择成本",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "预算变化",
+            role: "break_misread",
+            inheritedQuestion: "真正变量是什么",
+            answerThisSection: "真正变量是预算安全垫",
+            newInformation: "预算安全垫会影响选择",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "预算如何影响选择",
+            nextSectionNecessity: "下一节解释选择",
+            mustNotRepeat: [],
+          },
+          {
+            sectionId: "s2",
+            heading: "片区选择",
+            role: "give_decision_frame",
+            inheritedQuestion: "预算如何影响选择",
+            answerThisSection: "预算余量会把片区选择分开",
+            newInformation: "预算余量会把片区分开",
+            evidenceIds: ["sc_b"],
+            leavesQuestionForNext: "读者如何使用这套框架",
+            nextSectionNecessity: "结尾给判断工具",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [
+        { id: "s1", heading: "预算变化", evidenceIds: ["sc_a"], mustUseEvidenceIds: ["sc_a"] },
+        { id: "s2", heading: "片区选择", evidenceIds: ["sc_b"], mustUseEvidenceIds: ["sc_b"] },
+      ],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是热度。",
+        "",
+        "## 预算变化",
+        "真正变量是预算安全垫，预算安全垫会影响选择。[SC:sc_a]",
+        "",
+        "## 片区选择",
+        "先看片区，不同家庭会走向不同生活半径。[SC:sc_b]",
+        "",
+        "预算如何影响选择，答案是预算余量会把片区选择分开，最后变成不同的成本承受方式。",
+      ].join("\n"),
+    },
+  });
+
+  const textFlag = review.continuityFlags?.find((flag) => flag.reason.includes("开头没有回答"));
+  assert.ok(textFlag);
+  assert.equal(textFlag.severity, "warn");
+  assert.ok(!(review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("unlinked_adjacency")));
 });
 
 test("review escalates repeated unlinked adjacency to structural rewrite", () => {
