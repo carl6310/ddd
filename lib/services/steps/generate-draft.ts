@@ -9,6 +9,8 @@ import { JobError } from "@/lib/jobs/types";
 import type { StructuralRewriteIntent, RewriteIntent } from "@/lib/types";
 import type { TaskName } from "@/lib/prompt-engine";
 
+export const MAX_STRUCTURAL_REWRITE_INTENTS_PER_PASS = 1;
+
 export async function generateDraftStep(input: { projectId: string; forceProceed?: boolean; context: JobExecutionContext }) {
   const { projectId, forceProceed = false, context } = input;
 
@@ -81,8 +83,16 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
       sourceCards,
     });
 
-    const structuralRewriteCandidates = review.structuralRewriteIntents?.slice(0, 1) ?? [];
+    const structuralRewriteCandidates = selectStructuralRewriteCandidates(review);
     if (structuralRewriteCandidates.length > 0) {
+      const deferredStructuralRewriteCount = Math.max(0, (review.structuralRewriteIntents?.length ?? 0) - structuralRewriteCandidates.length);
+      if (deferredStructuralRewriteCount > 0) {
+        context.log("info", "structural_rewrite_candidates_deferred", "本轮只处理最高优先级结构重写，其余候选等待下一轮复评。", {
+          selectedCount: structuralRewriteCandidates.length,
+          deferredCount: deferredStructuralRewriteCount,
+          maxPerPass: MAX_STRUCTURAL_REWRITE_INTENTS_PER_PASS,
+        });
+      }
       context.setProgress("calling_llm", `正在结构性重写，第 ${attempt + 1} 轮。`);
       finalNarrativeMarkdown = await applyStructuralRewritePipeline({
         markdown: finalNarrativeMarkdown,
@@ -206,6 +216,10 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
   });
   updateProject(projectId, { stage: "正文生成" });
   context.log("info", "result_saved", "正文结果已保存。");
+}
+
+export function selectStructuralRewriteCandidates(review: Pick<ReturnType<typeof runDeterministicReview>, "structuralRewriteIntents">) {
+  return review.structuralRewriteIntents?.slice(0, MAX_STRUCTURAL_REWRITE_INTENTS_PER_PASS) ?? [];
 }
 
 async function applyRewriteIntentPipeline(input: {

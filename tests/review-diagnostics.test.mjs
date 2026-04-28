@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { runDeterministicReview } = await import("../lib/review.ts");
+const { MAX_STRUCTURAL_REWRITE_INTENTS_PER_PASS, selectStructuralRewriteCandidates } = await import("../lib/services/steps/generate-draft.ts");
 
 function buildReviewWithOpening(openingParagraph) {
   return runDeterministicReview({
@@ -286,8 +287,8 @@ test("deterministic review flags bad continuity ledger and creates structural re
             heading: "资源重估",
             role: "show_difference",
             inheritedQuestion: "热度背后的真实变量是什么",
-            answerThisSection: "板块分化来自资源重估",
-            newInformation: "板块分化来自资源重估",
+            answerThisSection: "板块分化来自资源重估和价格排序",
+            newInformation: "板块分化来自资源重估和价格排序",
             evidenceIds: ["sc_a"],
             leavesQuestionForNext: "资源重估如何影响价格",
             nextSectionNecessity: "需要解释价格",
@@ -298,8 +299,8 @@ test("deterministic review flags bad continuity ledger and creates structural re
             heading: "价格排序",
             role: "show_difference",
             inheritedQuestion: "另一个并列信息是什么",
-            answerThisSection: "价格背后是资源重新排序",
-            newInformation: "价格背后是资源重新排序",
+            answerThisSection: "价格排序还是来自资源重估和板块分化",
+            newInformation: "价格排序还是来自资源重估和板块分化",
             evidenceIds: ["sc_b"],
             leavesQuestionForNext: "购房者怎么选择",
             nextSectionNecessity: "需要给建议",
@@ -319,10 +320,10 @@ test("deterministic review flags bad continuity ledger and creates structural re
         "真正的问题不是热度，而是资源排序。",
         "",
         "## 资源重估",
-        "再看，资源重估会带来板块分化。[SC:sc_a]",
+        "再看，资源重估会带来板块分化和价格排序。[SC:sc_a]",
         "",
         "## 价格排序",
-        "另外，价格背后也是资源重新排序。[SC:sc_b]",
+        "另外，价格排序还是来自资源重估和板块分化。[SC:sc_b]",
       ].join("\n"),
     },
   });
@@ -609,10 +610,101 @@ test("review warns when optional ledger evidenceIds are not cited", () => {
     },
   });
 
-  const evidenceFlag = review.continuityFlags?.find((flag) => flag.type === "section_missing_required_evidence");
+  const evidenceFlag = review.continuityFlags?.find((flag) => flag.type === "section_missing_optional_evidence");
   assert.ok(evidenceFlag);
   assert.equal(evidenceFlag.severity, "warn");
-  assert.ok(!(review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("section_missing_required_evidence")));
+  assert.ok(!(review.continuityFlags ?? []).some((flag) => flag.type === "section_missing_required_evidence"));
+  assert.ok(!(review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("section_missing_optional_evidence")));
+});
+
+test("same-role sections sharing only one broad domain token do not trigger repeated_claim", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "成本怎么判断",
+          openingMisread: "误以为成本只有价格",
+          realProblem: "真实变量是不同成本维度",
+          readerPromise: "拆开不同成本",
+          finalReturn: "回到选择",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "通勤成本",
+            role: "show_cost",
+            inheritedQuestion: "第一个成本是什么",
+            answerThisSection: "第一个成本是通勤时间",
+            newInformation: "通勤时间会改变每天可支配时间",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "还有什么成本",
+            nextSectionNecessity: "下一节解释资金",
+            mustNotRepeat: [],
+          },
+          {
+            sectionId: "s2",
+            heading: "资金成本",
+            role: "show_cost",
+            inheritedQuestion: "还有什么成本",
+            answerThisSection: "第二个成本是资金占用",
+            newInformation: "首付占用会压缩家庭安全垫",
+            evidenceIds: ["sc_b"],
+            leavesQuestionForNext: "读者如何选择",
+            nextSectionNecessity: "下一节给框架",
+            mustNotRepeat: ["通勤时间"],
+          },
+        ],
+      },
+      sections: [
+        { id: "s1", heading: "通勤成本", evidenceIds: ["sc_a"], mustUseEvidenceIds: ["sc_a"] },
+        { id: "s2", heading: "资金成本", evidenceIds: ["sc_b"], mustUseEvidenceIds: ["sc_b"] },
+      ],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是价格，而是成本。",
+        "",
+        "## 通勤成本",
+        "第一个成本是通勤时间，它会改变每天可支配时间。[SC:sc_a]",
+        "",
+        "## 资金成本",
+        "还有什么成本？第二个成本是资金占用，首付占用会压缩家庭安全垫。[SC:sc_b]",
+      ].join("\n"),
+    },
+  });
+
+  assert.ok(!(review.continuityFlags ?? []).some((flag) => flag.type === "repeated_claim"));
+});
+
+test("structural rewrite candidate selection is capped and explicit", () => {
+  const candidates = selectStructuralRewriteCandidates({
+    structuralRewriteIntents: [
+      {
+        issueTypes: ["section_does_not_answer_ledger"],
+        affectedSectionIds: ["s1"],
+        whyItFails: "ledger delivery",
+        suggestedRewriteMode: "rewrite_opening_and_next_section",
+      },
+      {
+        issueTypes: ["repeated_claim"],
+        affectedSectionIds: ["s2", "s3"],
+        whyItFails: "redundancy",
+        suggestedRewriteMode: "merge_sections",
+      },
+    ],
+  });
+
+  assert.equal(MAX_STRUCTURAL_REWRITE_INTENTS_PER_PASS, 1);
+  assert.equal(candidates.length, 1);
+  assert.deepEqual(candidates[0].issueTypes, ["section_does_not_answer_ledger"]);
 });
 
 test("structural rewrite intents split ledger delivery and redundancy groups", () => {
@@ -635,8 +727,8 @@ test("structural rewrite intents split ledger delivery and redundancy groups", (
             heading: "资源重估",
             role: "show_difference",
             inheritedQuestion: "真正变量是什么",
-            answerThisSection: "板块分化来自资源重估",
-            newInformation: "板块分化来自资源重估",
+            answerThisSection: "板块分化来自资源重估和价格排序",
+            newInformation: "板块分化来自资源重估和价格排序",
             evidenceIds: ["sc_a"],
             leavesQuestionForNext: "资源重估如何影响价格",
             nextSectionNecessity: "下一节解释价格",
@@ -647,8 +739,8 @@ test("structural rewrite intents split ledger delivery and redundancy groups", (
             heading: "价格排序",
             role: "show_difference",
             inheritedQuestion: "资源重估如何影响价格",
-            answerThisSection: "价格背后是资源重新排序",
-            newInformation: "价格背后是资源重新排序",
+            answerThisSection: "价格排序还是来自资源重估和板块分化",
+            newInformation: "价格排序还是来自资源重估和板块分化",
             evidenceIds: ["sc_b"],
             leavesQuestionForNext: "读者如何选择",
             nextSectionNecessity: "下一节给建议",
@@ -681,10 +773,10 @@ test("structural rewrite intents split ledger delivery and redundancy groups", (
         "真正的问题不是热度，而是资源排序。",
         "",
         "## 资源重估",
-        "再看，资源重估会带来板块分化。",
+        "再看，资源重估会带来板块分化和价格排序。",
         "",
         "## 价格排序",
-        "另外，价格背后也是资源重新排序。[SC:sc_b]",
+        "另外，价格排序还是来自资源重估和板块分化。[SC:sc_b]",
       ].join("\n"),
     },
   });

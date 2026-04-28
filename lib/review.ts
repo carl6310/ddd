@@ -611,7 +611,7 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
       const missingOptionalEvidenceIds = optionalEvidenceIds.filter((id) => !sectionCitations.includes(id));
       if (missingOptionalEvidenceIds.length > 0) {
         flags.push({
-          type: "section_missing_required_evidence",
+          type: "section_missing_optional_evidence",
           severity: "warn",
           sectionIds: [beat.sectionId],
           reason: `${beat.heading} 没有引用 continuityLedger 推荐的资料卡：${missingOptionalEvidenceIds.join("、")}。`,
@@ -898,7 +898,12 @@ function hasRepeatedDomainClaim(left: ContinuityBeat, right: ContinuityBeat) {
   const domainTokens = ["资源", "重估", "排序", "分化", "价格", "成本", "热度", "人群", "片区", "确定性", "供应", "交通", "产业"];
   const leftText = `${left.answerThisSection} ${left.newInformation}`;
   const rightText = `${right.answerThisSection} ${right.newInformation}`;
-  return domainTokens.some((token) => leftText.includes(token) && rightText.includes(token));
+  const sharedDomainTokens = domainTokens.filter((token) => leftText.includes(token) && rightText.includes(token));
+  if (sharedDomainTokens.length < 2) {
+    return false;
+  }
+
+  return textSimilarity(left.answerThisSection, right.answerThisSection) >= 0.2 || textSimilarity(left.newInformation, right.newInformation) >= 0.2;
 }
 
 function buildParagraphFlags(input: {
