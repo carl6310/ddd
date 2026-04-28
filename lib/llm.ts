@@ -294,6 +294,8 @@ function getTaskTuning(task: TaskName): TaskTuning {
 
 function getBaseTaskTuning(task: TaskName): TaskTuning {
   switch (task) {
+    case "topic_cocreate_fast":
+      return { timeoutMs: 75000, maxTokens: 2000, retryMaxTokens: 2200, useJsonMode: true };
     case "topic_cocreate":
       return { timeoutMs: 480000, maxTokens: 4800, retryMaxTokens: 6400, useJsonMode: true };
     case "research_brief":
@@ -352,6 +354,7 @@ function buildStructuredTaskLengthError(task: TaskName): string {
     case "think_card":
     case "topic_judge":
       return "模型在生成选题定义卡时输出过长，结果没有完整返回。请直接重试；如果仍然失败，需要进一步压缩输入材料。";
+    case "topic_cocreate_fast":
     case "topic_cocreate":
       return "模型在生成选题候选池时输出过长，结果没有完整返回。请重试，或减少输入材料长度。";
     default:
@@ -364,6 +367,7 @@ function buildStructuredTaskParseError(task: TaskName): string {
     case "think_card":
     case "topic_judge":
       return "模型返回的选题定义结果不完整，暂时无法生成项目。请重试一次。";
+    case "topic_cocreate_fast":
     case "topic_cocreate":
       return "模型返回的选题候选结果不完整，暂时无法解析。请重试一次。";
     default:
@@ -443,6 +447,8 @@ function buildMockResponse(task: TaskName, input: Parameters<typeof buildPromptT
     case "think_card":
     case "topic_judge":
       return mockTopicJudge(input.topic ?? "", input.audience ?? "", input.targetWords ?? 2400);
+    case "topic_cocreate_fast":
+      return mockTopicCoCreateFast(input.sector ?? "", input.currentIntuition ?? "", input.rawMaterials ?? "");
     case "topic_cocreate":
       return mockTopicCoCreate(input.sector ?? "", input.currentIntuition ?? "", input.rawMaterials ?? "");
     case "source_card_summarizer":
@@ -511,6 +517,14 @@ function mockStructuralRewrite(markdown: string, intent: Parameters<typeof build
 
 function mockTopicCoCreate(sector: string, currentIntuition: string, rawMaterials: string): TopicCoCreationModelResult {
   return buildTopicCoCreateFallback(sector || "未命名板块", currentIntuition, rawMaterials, []);
+}
+
+function mockTopicCoCreateFast(sector: string, currentIntuition: string, rawMaterials: string): TopicCoCreationModelResult {
+  const output = mockTopicCoCreate(sector, currentIntuition, rawMaterials);
+  return {
+    ...output,
+    candidateAngles: output.candidateAngles.slice(0, 8),
+  };
 }
 
 function mockTopicJudge(topic: string, audience: string, targetWords: number): TopicJudgeResult {

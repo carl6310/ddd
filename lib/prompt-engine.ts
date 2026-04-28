@@ -18,6 +18,7 @@ import {
 import { buildCoreConstraintPack } from "@/lib/knowledge-base";
 
 export type TaskName =
+  | "topic_cocreate_fast"
   | "topic_cocreate"
   | "think_card"
   | "topic_judge"
@@ -160,6 +161,70 @@ JSON 结构：
 原始材料：
 ${input.rawMaterials || "暂无"}
         `.trim(),
+      };
+    case "topic_cocreate_fast":
+      return {
+        system: [
+          "你是一位上海板块选题编辑，要快速产出一组可讨论的候选角度。",
+          "这是一轮快速共创，不做完整深挖，不要追求字段齐全。",
+          "你的任务是基于用户输入和 Signal Brief，输出 6-8 个差异明确、可继续补证据的候选角度。",
+          "必须输出严格 JSON，不要输出额外文字。",
+          "",
+          "JSON 结构：",
+          "{",
+          '  "sector": "板块名",',
+          '  "candidateAngles": [',
+          "    {",
+          '      "id": "angle-1",',
+          '      "title": "标题方向",',
+          '      "angleType": "thesis|counterintuitive|spatial_segmentation|buyer_segment|transaction_micro|supply_structure|policy_transmission|timing_window|comparative|risk_deconstruction|decision_service|narrative_upgrade|scene_character|lifecycle|mismatch|culture_psychology",',
+          '      "articleType": "断供型|价值重估型|规划拆解型|误解纠偏型|更新拆迁型",',
+          '      "coreJudgement": "一句话核心判断",',
+          '      "readerValue": "读者看完能直接拿走什么判断收益",',
+          '      "neededEvidence": ["还需要补的关键证据 1", "还需要补的关键证据 2"],',
+          '      "riskOfMisfire": "这条角度最容易写偏的地方"',
+          "    }",
+          "  ]",
+          "}",
+          "",
+          "要求：",
+          "1. 输出 6-8 个 candidateAngles",
+          "2. 尽量覆盖不同 angleType，不要围绕同一个判断换标题",
+          "3. 每个角度只保留轻量字段：id / title / angleType / articleType / coreJudgement / readerValue / neededEvidence / riskOfMisfire",
+          "4. 不要输出 hkr、readerLens、signalRefs、recommendedNextStep、articlePrototype、targetReaderPersona、creativeAnchor、whyNow",
+          "5. 证据不足时不要假装确定，把缺口写进 neededEvidence 和 riskOfMisfire",
+          "6. 不要写成泛板块介绍或中介稿选题",
+        ].join("\n"),
+        user: [
+          "请基于以下输入快速共创选题候选。",
+          "",
+          "【板块 / 主题】",
+          input.sector || "未明确提供",
+          "",
+          "【用户当前直觉】",
+          input.currentIntuition || "未提供",
+          "",
+          "【原始材料】",
+          "手头材料：",
+          input.rawMaterials || "暂无",
+          "",
+          "【Signal Brief】",
+          input.signalBrief
+            ? [
+                `查询：${input.signalBrief.queries.join(" | ") || "未执行联网搜索"}`,
+                ...input.signalBrief.signals.map(
+                  (signal, index) =>
+                    `${index + 1}. [${signal.signalType}] ${signal.title} | ${[signal.source, signal.publishedAt, signal.url].filter(Boolean).join(" | ")}\n摘要：${signal.summary}\n为什么重要：${signal.whyItMatters}`,
+                ),
+                `缺口：${input.signalBrief.gaps.join("；") || "暂无"}`,
+                `新鲜度提醒：${input.signalBrief.freshnessNote}`,
+              ].join("\n")
+            : "暂无",
+          "",
+          "【额外约束】",
+          "不想写成什么：",
+          input.avoidAngles || "不想写成泛板块介绍和中介稿",
+        ].join("\n"),
       };
     case "topic_cocreate":
       return {

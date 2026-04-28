@@ -666,10 +666,21 @@ export interface TopicCoCreationResult {
 }
 
 export interface TopicCoCreationResponse {
+  depth?: TopicCoCreationDepth;
   signalMode: SignalProviderMode;
   signalBrief: SignalBrief;
   result: TopicCoCreationResult;
   sourceDigests: SignalSourceDigest[];
+  timings?: TopicCoCreationTimings;
+}
+
+export type TopicCoCreationDepth = "fast" | "full";
+
+export interface TopicCoCreationTimings {
+  signalMs: number;
+  modelMs: number;
+  postprocessMs: number;
+  totalMs: number;
 }
 
 export interface TopicCoCreationInput {
@@ -678,6 +689,7 @@ export interface TopicCoCreationInput {
   rawMaterials: string;
   avoidAngles: string;
   signalMode: SignalProviderMode;
+  depth?: TopicCoCreationDepth;
 }
 
 export interface TopicCoCreationRun {

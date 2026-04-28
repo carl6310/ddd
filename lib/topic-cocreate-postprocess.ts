@@ -116,7 +116,7 @@ type PostprocessInput = {
 
 export function postprocessTopicCoCreateResult(input: PostprocessInput): TopicCoCreationResult {
   const recommendedCount = clamp(input.recommendedCount ?? 6, 4, 6);
-  const longlistCount = clamp(input.longlistCount ?? 16, 12, 16);
+  const longlistCount = clamp(input.longlistCount ?? 16, 6, 16);
   const normalized = [...input.rawAngles, ...(input.fallbackAngles ?? [])]
     .map((angle, index) => normalizeTopicAngleDraft(angle, {
       sector: input.sector,
