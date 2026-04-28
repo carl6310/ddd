@@ -334,6 +334,243 @@ test("deterministic review flags bad continuity ledger and creates structural re
   assert.ok((review.structuralRewriteIntents ?? []).length >= 1);
 });
 
+test("does_not_answer_previous continuity flag triggers structural rewrite even as warning", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心变量是什么",
+          openingMisread: "误以为只看距离",
+          realProblem: "真实变量是预算安全垫",
+          readerPromise: "给判断框架",
+          finalReturn: "回到选择成本",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "预算安全垫",
+            role: "break_misread",
+            inheritedQuestion: "距离近为什么不等于确定性",
+            answerThisSection: "真正变量是预算安全垫",
+            newInformation: "预算安全垫决定了改善家庭能否承接",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "预算安全垫会怎样改变片区选择",
+            nextSectionNecessity: "下一节落到片区选择",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是位置，而是结构。",
+        "",
+        "## 预算安全垫",
+        "真正变量是预算安全垫，它决定改善家庭能否承接。[SC:sc_a]",
+      ].join("\n"),
+    },
+  });
+
+  const answerFlag = review.continuityFlags?.find((flag) => flag.type === "does_not_answer_previous");
+  assert.ok(answerFlag);
+  assert.equal(answerFlag.severity, "warn");
+  assert.ok((review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("does_not_answer_previous")));
+});
+
+test("review flags section text that does not deliver ledger newInformation", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心变量是什么",
+          openingMisread: "误以为只看热度",
+          realProblem: "真实变量是预算安全垫",
+          readerPromise: "给判断框架",
+          finalReturn: "回到选择成本",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "预算安全垫",
+            role: "break_misread",
+            inheritedQuestion: "真正变量是什么",
+            answerThisSection: "真正变量是预算安全垫",
+            newInformation: "首改成交周期正在拉长",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "预算变化如何改变片区选择",
+            nextSectionNecessity: "下一节落到片区选择",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是热度。",
+        "",
+        "## 预算安全垫",
+        "真正变量是预算安全垫，但这一段只停在抽象判断，没有写具体人群怎么变。[SC:sc_a]",
+      ].join("\n"),
+    },
+  });
+
+  const types = new Set(review.continuityFlags?.map((flag) => flag.type));
+  assert.ok(types.has("section_does_not_deliver_new_information"));
+  assert.ok((review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("section_does_not_deliver_new_information")));
+});
+
+test("review flags ledger evidence that is not cited in the matching section", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心变量是什么",
+          openingMisread: "误以为只看热度",
+          realProblem: "真实变量是预算安全垫",
+          readerPromise: "给判断框架",
+          finalReturn: "回到选择成本",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "预算安全垫",
+            role: "break_misread",
+            inheritedQuestion: "真正变量是什么",
+            answerThisSection: "真正变量是预算安全垫",
+            newInformation: "预算安全垫决定改善家庭能否承接",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "预算如何改变片区选择",
+            nextSectionNecessity: "下一节落到片区选择",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是热度。",
+        "",
+        "## 预算安全垫",
+        "真正变量是预算安全垫，预算安全垫决定改善家庭能否承接。",
+      ].join("\n"),
+    },
+  });
+
+  const evidenceFlag = review.continuityFlags?.find((flag) => flag.type === "section_missing_required_evidence");
+  assert.ok(evidenceFlag);
+  assert.equal(evidenceFlag.severity, "fail");
+  assert.ok((review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("section_missing_required_evidence")));
+});
+
+test("review escalates repeated unlinked adjacency to structural rewrite", () => {
+  const review = runDeterministicReview({
+    ...baseReviewInput(),
+    outlineDraft: {
+      hook: "开头",
+      continuityLedger: {
+        articleQuestion: "到底看什么",
+        spine: {
+          centralQuestion: "核心变量是什么",
+          openingMisread: "误以为看热度",
+          realProblem: "真实变量是成本",
+          readerPromise: "给判断框架",
+          finalReturn: "回到选择成本",
+        },
+        beats: [
+          {
+            sectionId: "s1",
+            heading: "热度误读",
+            role: "raise_misread",
+            inheritedQuestion: "读者为什么会误判",
+            answerThisSection: "误判来自把热度当价值",
+            newInformation: "热度只能解释关注度",
+            evidenceIds: ["sc_a"],
+            leavesQuestionForNext: "真正变量是什么",
+            nextSectionNecessity: "下一节解释真实变量",
+            mustNotRepeat: [],
+          },
+          {
+            sectionId: "s2",
+            heading: "预算变量",
+            role: "break_misread",
+            inheritedQuestion: "学校资源如何变化",
+            answerThisSection: "真正变量是预算安全垫",
+            newInformation: "预算安全垫决定承接能力",
+            evidenceIds: ["sc_b"],
+            leavesQuestionForNext: "预算如何改变选择",
+            nextSectionNecessity: "下一节落到选择",
+            mustNotRepeat: [],
+          },
+          {
+            sectionId: "s3",
+            heading: "片区选择",
+            role: "give_decision_frame",
+            inheritedQuestion: "交通半径为什么重要",
+            answerThisSection: "选择要看生活半径",
+            newInformation: "生活半径决定真实成本",
+            evidenceIds: ["sc_b"],
+            leavesQuestionForNext: "最后如何决策",
+            nextSectionNecessity: "下一节收束",
+            mustNotRepeat: [],
+          },
+        ],
+      },
+      sections: [],
+      closing: "结尾",
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: [
+        "# 标题",
+        "",
+        "真正的问题不是热度。",
+        "",
+        "## 热度误读",
+        "误判来自把热度当价值，热度只能解释关注度。[SC:sc_a]",
+        "",
+        "## 预算变量",
+        "真正变量是预算安全垫，它决定承接能力。[SC:sc_b]",
+        "",
+        "## 片区选择",
+        "选择要看生活半径，因为生活半径决定真实成本。[SC:sc_b]",
+      ].join("\n"),
+    },
+  });
+
+  const adjacencyFlags = (review.continuityFlags ?? []).filter((flag) => flag.type === "unlinked_adjacency");
+  assert.equal(adjacencyFlags.length, 2);
+  assert.ok(adjacencyFlags.every((flag) => flag.severity === "fail"));
+  assert.ok((review.structuralRewriteIntents ?? []).some((intent) => intent.issueTypes.includes("unlinked_adjacency")));
+});
+
 test("deterministic review keeps good continuity chain mostly clean", () => {
   const review = runDeterministicReview({
     ...baseReviewInput(),
@@ -399,7 +636,7 @@ test("deterministic review keeps good continuity chain mostly clean", () => {
         "真正的问题不是热度，而是人群和成本。",
         "",
         "## 误解是热度回归",
-        "真正的误解，是把热度当作价值回归。[SC:sc_a]",
+        "真正的误解，是把热度当作价值回归；热度只能解释关注度，不能解释成交承接。[SC:sc_a]",
         "",
         "## 真实变量是人群变化",
         "问题在于，真正变量是人群变化，首改和改善的预算安全垫已经不同。[SC:sc_b]",
@@ -426,7 +663,7 @@ test("weak transition rewrite advice rejects standalone bridge sentences", () =>
 
   const transitionIntent = review.rewriteIntents.find((intent) => intent.issueType === "weak_transition");
   assert.ok(transitionIntent);
-  assert.match(transitionIntent.suggestedRewriteMode, /不要补独立过渡句/);
+  assert.match(transitionIntent.suggestedRewriteMode, /不要补独立转场句/);
   assert.match(transitionIntent.suggestedRewriteMode, /上一节结尾和下一节开头/);
   assert.doesNotMatch(transitionIntent.suggestedRewriteMode, /补过渡句/);
 });

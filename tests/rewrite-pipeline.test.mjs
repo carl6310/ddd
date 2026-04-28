@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 const { buildPromptTask } = await import("../lib/prompt-engine.ts");
 const { runStructuredTask } = await import("../lib/llm.ts");
 const { buildCardsFromLegacy } = await import("../lib/author-cards.ts");
+const { stitchNarrativeFlow } = await import("../lib/services/steps/generate-draft.ts");
 
 function projectFixture(patch = {}) {
   const base = {
@@ -140,9 +141,43 @@ test("draft polisher rejects standalone bridge insertion", () => {
     narrativeMarkdown: "# 标题\n\n第一节。\n\n第二节。",
   });
 
-  assert.match(prompt.system, /不要补独立过渡句/);
+  assert.match(prompt.system, /不要补独立转场句/);
   assert.match(prompt.system, /上一节结尾和下一节开头/);
   assert.doesNotMatch(prompt.system, /中段必须补转场句/);
+});
+
+test("stitchNarrativeFlow does not inject formula bridges when continuity ledger exists", () => {
+  const stitched = stitchNarrativeFlow(
+    [
+      "# 标题",
+      "",
+      "开头判断。[SC:sc_a]",
+      "",
+      "## 第一节",
+      "第一节正文。[SC:sc_a]",
+      "",
+      "## 第二节",
+      "第二节正文。[SC:sc_b]",
+    ].join("\n"),
+    {
+      continuityLedger: {
+        beats: [],
+      },
+      sections: [
+        { heading: "第一节", bridge: "引出问题：这会影响后面的选择" },
+        { heading: "第二节", bridge: "自然过渡到成本" },
+      ],
+      closing: "结尾",
+    },
+    "真正的问题不是位置，而是结构。",
+    "结构",
+  );
+
+  assert.doesNotMatch(stitched, /问题在于，/);
+  assert.doesNotMatch(stitched, /再往下看，/);
+  assert.doesNotMatch(stitched, /这会影响后面的选择/);
+  assert.match(stitched, /\[SC:sc_a\]/);
+  assert.match(stitched, /## 第二节/);
 });
 
 test("structural rewriter prompt includes continuity flags and ledger", () => {

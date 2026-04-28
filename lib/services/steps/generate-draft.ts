@@ -380,7 +380,16 @@ function normalizeCitationIds(markdown: string, sourceCards: Array<{ id: string 
   });
 }
 
-function stitchNarrativeFlow(markdown: string, outlineDraft: { sections: Array<{ heading: string; bridge: string }>; closing: string }, thesis: string, anchor: string) {
+export function stitchNarrativeFlow(
+  markdown: string,
+  outlineDraft: { sections: Array<{ heading: string; bridge: string }>; closing: string; continuityLedger?: unknown },
+  thesis: string,
+  anchor: string,
+) {
+  if (outlineDraft.continuityLedger) {
+    return safelyFormatNarrativeMarkdown(markdown);
+  }
+
   const lines = markdown.split("\n");
   const rewritten: string[] = [];
 
@@ -403,7 +412,7 @@ function stitchNarrativeFlow(markdown: string, outlineDraft: { sections: Array<{
     rewritten.push(line);
   }
 
-  const nextMarkdown = rewritten.join("\n");
+  const nextMarkdown = safelyFormatNarrativeMarkdown(rewritten.join("\n"));
   const paragraphs = extractMarkdownParagraphs(nextMarkdown);
   const lastParagraph = paragraphs.at(-1) ?? "";
   const anchorSeed = (anchor || thesis).trim().slice(0, Math.min(16, (anchor || thesis).trim().length));
@@ -429,4 +438,8 @@ function naturalizeBridge(bridge: string, index: number) {
   const prefix = index === 1 ? "问题在于，" : "再往下看，";
   const sentence = /^(问题在于|再往下看|回到|但)/.test(cleaned) ? cleaned : `${prefix}${cleaned}`;
   return /[。！？]$/.test(sentence) ? sentence : `${sentence}。`;
+}
+
+function safelyFormatNarrativeMarkdown(markdown: string) {
+  return markdown.replace(/[ \t]+$/gm, "").replace(/\n{4,}/g, "\n\n\n").trim();
 }

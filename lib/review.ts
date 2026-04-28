@@ -551,10 +551,12 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
 
   const flags: ContinuityFlag[] = [];
   const seenNewInformation: Array<{ beat: ContinuityBeat; text: string }> = [];
+  const unlinkedPairs: Array<{ current: ContinuityBeat; next: ContinuityBeat }> = [];
 
   for (const beat of beats) {
     const newInfo = beat.newInformation.trim();
     const sectionText = extractSectionBody(input.draft, beat.heading);
+    const sectionCitations = extractCitedIds(sectionText);
 
     if (isWeakNewInformation(newInfo)) {
       flags.push({
@@ -563,6 +565,47 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
         sectionIds: [beat.sectionId],
         reason: `${beat.heading} 没有交付清楚的新信息。`,
         suggestedAction: "重写这一节的 section role，只保留一个前文没有的新判断或新事实。",
+      });
+    }
+
+    if (sectionText.trim()) {
+      if (newInfo && !hasStrongSignalConnection(sectionText, newInfo)) {
+        flags.push({
+          type: "section_does_not_deliver_new_information",
+          severity: "fail",
+          sectionIds: [beat.sectionId],
+          reason: `${beat.heading} 的正文没有兑现 continuityLedger.newInformation。`,
+          suggestedAction: "重写本节主判断和关键事实，让正文真正交付 ledger 里承诺的新信息。",
+        });
+      }
+
+      if (beat.answerThisSection.trim() && !hasStrongSignalConnection(sectionText, beat.answerThisSection)) {
+        flags.push({
+          type: "section_does_not_answer_ledger",
+          severity: "fail",
+          sectionIds: [beat.sectionId],
+          reason: `${beat.heading} 的正文没有回答 continuityLedger.answerThisSection。`,
+          suggestedAction: "重写本节开头和主判断，先把 ledger 里规定的回答说清楚，再展开材料。",
+        });
+      }
+
+      const missingEvidenceIds = beat.evidenceIds.filter((id) => !sectionCitations.includes(id));
+      if (missingEvidenceIds.length > 0) {
+        flags.push({
+          type: "section_missing_required_evidence",
+          severity: "fail",
+          sectionIds: [beat.sectionId],
+          reason: `${beat.heading} 没有引用 continuityLedger 要求的资料卡：${missingEvidenceIds.join("、")}。`,
+          suggestedAction: "把缺失资料卡织进本节对应判断里；如果正文不再使用该事实，重写本节 role 或调整证据绑定。",
+        });
+      }
+    } else {
+      flags.push({
+        type: "section_does_not_answer_ledger",
+        severity: "fail",
+        sectionIds: [beat.sectionId],
+        reason: `${beat.heading} 在正文里没有匹配到对应小节。`,
+        suggestedAction: "补回这一节，或重写结构让 ledger 和正文小节一一对应。",
       });
     }
 
@@ -591,7 +634,7 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
         severity: "warn",
         sectionIds: [beat.sectionId],
         reason: `${beat.heading} 开头有转场词，但没有接住上一节留下的问题。`,
-        suggestedAction: "不要补独立过渡句，重写上一节结尾和本节开头，让本节成为上一节问题的自然答案。",
+        suggestedAction: "不要补独立转场句，重写上一节结尾和本节开头，让本节成为上一节问题的自然答案。",
       });
     }
 
@@ -612,6 +655,10 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
     const linked = continuityLinkScore(current, next) > 0;
     const similar = current.role === next.role || textSimilarity(current.answerThisSection, next.answerThisSection) >= 0.25 || textSimilarity(current.newInformation, next.newInformation) >= 0.25;
 
+    if (current.leavesQuestionForNext.trim() && next.inheritedQuestion.trim() && !linked) {
+      unlinkedPairs.push({ current, next });
+    }
+
     if (!linked && similar) {
       flags.push({
         type: "can_be_swapped",
@@ -623,12 +670,35 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
     }
   }
 
+  for (const pair of unlinkedPairs) {
+    flags.push({
+      type: "unlinked_adjacency",
+      severity: unlinkedPairs.length >= 2 ? "fail" : "warn",
+      sectionIds: [pair.current.sectionId, pair.next.sectionId],
+      reason: `${pair.current.heading} 留下的问题没有接到 ${pair.next.heading} 的 inheritedQuestion。`,
+      suggestedAction:
+        unlinkedPairs.length >= 2
+          ? "重写相邻 section role 和段尾/段首问答链，连续两处以上断链需要结构性返工。"
+          : "重写上一节结尾或下一节开头，让下一节继承上一节留下的问题。",
+    });
+  }
+
   return dedupeContinuityFlags(flags);
 }
 
 function buildStructuralRewriteIntents(flags: ContinuityFlag[]) {
-  const structuralTypes = new Set(["can_be_swapped", "section_redundant", "no_new_information", "repeated_claim", "does_not_answer_previous"]);
-  const seriousFlags = flags.filter((flag) => flag.severity === "fail" && structuralTypes.has(flag.type));
+  const structuralTypes = new Set([
+    "can_be_swapped",
+    "section_redundant",
+    "no_new_information",
+    "repeated_claim",
+    "does_not_answer_previous",
+    "section_does_not_deliver_new_information",
+    "section_does_not_answer_ledger",
+    "section_missing_required_evidence",
+    "unlinked_adjacency",
+  ]);
+  const seriousFlags = flags.filter((flag) => structuralTypes.has(flag.type) && (flag.severity === "fail" || flag.type === "does_not_answer_previous"));
   if (seriousFlags.length === 0) {
     return [];
   }
@@ -647,10 +717,13 @@ function chooseStructuralRewriteMode(flags: ContinuityFlag[]) {
   if (flags.some((flag) => flag.type === "can_be_swapped")) {
     return "rewrite_section_roles" as const;
   }
+  if (flags.some((flag) => flag.type === "unlinked_adjacency" || flag.type === "does_not_answer_previous" || flag.type === "section_does_not_answer_ledger")) {
+    return "rewrite_opening_and_next_section" as const;
+  }
   if (flags.some((flag) => flag.type === "repeated_claim" || flag.type === "section_redundant")) {
     return "merge_sections" as const;
   }
-  if (flags.some((flag) => flag.type === "no_new_information")) {
+  if (flags.some((flag) => flag.type === "no_new_information" || flag.type === "section_does_not_deliver_new_information")) {
     return "delete_redundant_section" as const;
   }
   return "rewrite_opening_and_next_section" as const;
@@ -690,12 +763,29 @@ function continuityLinkScore(current: ContinuityBeat, next: ContinuityBeat) {
   return fromPrevious + fromCurrentAnswer;
 }
 
+function extractCitedIds(text: string) {
+  return Array.from(new Set(text.match(/\[SC:([a-zA-Z0-9_-]+)\]/g)?.map((token) => token.slice(4, -1)) ?? []));
+}
+
 function mentionsAnySignal(text: string, signal: string) {
   const terms = extractSignalTerms(signal);
   if (terms.length === 0) {
     return false;
   }
   return terms.some((term) => text.includes(term));
+}
+
+function hasStrongSignalConnection(text: string, signal: string) {
+  const terms = extractSignalTerms(signal);
+  if (terms.length === 0) {
+    return false;
+  }
+
+  const matched = terms.filter((term) => text.includes(term)).length;
+  if (terms.length <= 3) {
+    return matched >= 1;
+  }
+  return matched >= 2 || matched / terms.length >= 0.12;
 }
 
 function termsOverlap(left: string, right: string) {
@@ -833,7 +923,7 @@ function mapRewriteMode(issueType: RewriteIntent["issueType"]) {
     case "missing_anchor":
       return "补一个更可记忆的判断锚点。";
     case "weak_transition":
-      return "不要补独立过渡句。请重写上一节结尾和下一节开头，让下一节成为上一节问题的自然答案。";
+      return "不要补独立转场句。请重写上一节结尾和下一节开头，让下一节成为上一节问题的自然答案。";
     case "evidence_not_integrated":
       return "把证据直接织入论证，而不是只在句末挂引用。";
     case "generic_language":

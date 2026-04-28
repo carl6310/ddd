@@ -60,6 +60,10 @@ export const CONTINUITY_ISSUE_TYPES = [
   "section_redundant",
   "repeated_claim",
   "fake_bridge",
+  "section_does_not_deliver_new_information",
+  "section_does_not_answer_ledger",
+  "section_missing_required_evidence",
+  "unlinked_adjacency",
 ] as const;
 
 export type ArticleType = (typeof ARTICLE_TYPES)[number];
