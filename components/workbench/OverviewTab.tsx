@@ -247,6 +247,8 @@ export function OverviewTab({
   const vitalityGuidance = buildVitalityGuidance(vitalityIssues, selectedBundle.reviewReport);
   const writingQuality = buildWritingQualitySnapshot(selectedBundle);
   const topicReaderLens = getTopicReaderLens(selectedBundle.project.topicMeta);
+  const argumentFrame = selectedBundle.outlineDraft?.argumentFrame ?? null;
+  const argumentQualityFlags = selectedBundle.reviewReport?.argumentQualityFlags ?? [];
   const writingQualityMetrics = [
     {
       label: "总体质量分",
@@ -456,6 +458,31 @@ export function OverviewTab({
                       <span>{layer.status} · {layer.summary}</span>
                     </li>
                   ))}
+                </ul>
+              </Card>
+            ) : null}
+            {argumentFrame ? (
+              <Card className="overview-insight-card">
+                <h3>论证骨架</h3>
+                <ul className="compact-list">
+                  <li>
+                    <strong>主形状</strong>
+                    <span>{argumentFrame.primaryShape}</span>
+                  </li>
+                  {argumentFrame.secondaryShapes.length ? (
+                    <li>
+                      <strong>辅助形状</strong>
+                      <span>{argumentFrame.secondaryShapes.join(" / ")}</span>
+                    </li>
+                  ) : null}
+                  <li>
+                    <strong>核心张力</strong>
+                    <span>{argumentFrame.centralTension}</span>
+                  </li>
+                  <li>
+                    <strong>回答</strong>
+                    <span>{argumentFrame.answer}</span>
+                  </li>
                 </ul>
               </Card>
             ) : null}
@@ -824,6 +851,22 @@ export function OverviewTab({
                 </Card>
               ) : null}
 
+              {argumentQualityFlags.length ? (
+                <Card className="vitality-detail-card">
+                  <h3>论证质量问题</h3>
+                  <ul className="compact-list compact-inline-list">
+                    {argumentQualityFlags.slice(0, 8).map((flag) => (
+                      <li key={`${flag.type}-${flag.sectionIds.join("-")}-${flag.reason}`}>
+                        <strong>{formatArgumentQualityTitle(flag.type)}</strong>
+                        <span>{flag.severity}{flag.sectionIds.length ? ` · 章节：${flag.sectionIds.join(" / ")}` : ""}</span>
+                        <span>{formatArgumentQualityMessage(flag.type, flag.reason)}</span>
+                        <span>{flag.suggestedAction}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              ) : null}
+
               {selectedBundle.reviewReport?.paragraphFlags?.length ? (
                 <Card className="vitality-detail-card">
                   <h3>最卡的段落</h3>
@@ -976,6 +1019,28 @@ function formatQualityNote(note: string) {
     (current, [key, label]) => current.replaceAll(key, label),
     note,
   );
+}
+
+function formatArgumentQualityTitle(type: string) {
+  const labels: Record<string, string> = {
+    headline_not_answered: "标题问题没有回答",
+    thesis_too_generic: "主判断太泛",
+    map_tour_in_judgement_essay: "判断稿写成片区巡游",
+    zones_used_as_structure_not_evidence: "片区成了目录",
+    counterargument_missing: "缺少反方处理",
+    decision_frame_weak: "决策框架弱",
+    too_much_background_before_answer: "答案出现太晚",
+    evidence_without_argument: "证据没有服务论点",
+    claim_without_consequence: "论点缺少读者后果",
+  };
+  return labels[type] ?? type;
+}
+
+function formatArgumentQualityMessage(type: string, fallback: string) {
+  if (type === "map_tour_in_judgement_essay") {
+    return "这篇是判断稿，但中段像片区巡游。建议把片区材料合并进核心论点，不要连续写成北广场/南广场/商务区/春申。";
+  }
+  return fallback;
 }
 
 function TextAreaField({

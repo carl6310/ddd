@@ -44,6 +44,20 @@ export const ARTICLE_PROTOTYPES = [
 ] as const;
 export const TOPIC_READER_PERSONAS = ["busy_relocator", "improver_buyer", "risk_aware_reader", "local_life_reader"] as const;
 export const QUALITY_PYRAMID_LEVELS = ["L1", "L2", "L3", "L4"] as const;
+export const ARGUMENT_SHAPES = [
+  "judgement_essay",
+  "misread_correction",
+  "signal_reinterpretation",
+  "lifecycle_reframe",
+  "asset_tiering",
+  "mismatch_diagnosis",
+  "tradeoff_decision",
+  "risk_decomposition",
+  "comparison_benchmark",
+  "planning_reality_check",
+  "cycle_timing",
+  "buyer_persona_split",
+] as const;
 export const SECTION_BEAT_ROLES = [
   "raise_misread",
   "break_misread",
@@ -66,6 +80,17 @@ export const CONTINUITY_ISSUE_TYPES = [
   "section_missing_optional_evidence",
   "unlinked_adjacency",
 ] as const;
+export const ARGUMENT_QUALITY_ISSUE_TYPES = [
+  "headline_not_answered",
+  "thesis_too_generic",
+  "map_tour_in_judgement_essay",
+  "zones_used_as_structure_not_evidence",
+  "counterargument_missing",
+  "decision_frame_weak",
+  "too_much_background_before_answer",
+  "evidence_without_argument",
+  "claim_without_consequence",
+] as const;
 
 export type ArticleType = (typeof ARTICLE_TYPES)[number];
 export type ProjectStage = (typeof PROJECT_STAGES)[number];
@@ -80,8 +105,33 @@ export type TopicScorecardStatus = (typeof TOPIC_SCORECARD_STATUSES)[number];
 export type ArticlePrototype = (typeof ARTICLE_PROTOTYPES)[number];
 export type TopicReaderPersona = (typeof TOPIC_READER_PERSONAS)[number];
 export type QualityPyramidLevel = (typeof QUALITY_PYRAMID_LEVELS)[number];
+export type ArgumentShape = (typeof ARGUMENT_SHAPES)[number];
 export type SectionBeatRole = (typeof SECTION_BEAT_ROLES)[number];
 export type ContinuityIssueType = (typeof CONTINUITY_ISSUE_TYPES)[number];
+export type ArgumentQualityIssueType = (typeof ARGUMENT_QUALITY_ISSUE_TYPES)[number];
+export type StructuralRewriteIssueType = ContinuityIssueType | ArgumentQualityIssueType;
+
+export interface ArgumentSupportingClaim {
+  id: string;
+  claim: string;
+  role: "open" | "explain" | "prove" | "counter" | "decision" | "return";
+  evidenceIds: string[];
+  mustUseEvidenceIds: string[];
+  zonesAsEvidence?: string[];
+  shouldNotBecomeSection?: boolean;
+}
+
+export interface ArgumentFrame {
+  primaryShape: ArgumentShape;
+  secondaryShapes: ArgumentShape[];
+  centralTension: string;
+  answer: string;
+  notThis: string[];
+  supportingClaims: ArgumentSupportingClaim[];
+  strongestCounterArgument: string;
+  howToHandleCounterArgument: string;
+  readerDecisionFrame: string;
+}
 
 export const ARTICLE_PROTOTYPE_LABELS: Record<ArticlePrototype, string> = {
   total_judgement: "总判断",
@@ -242,6 +292,14 @@ export interface ArticleProject {
   updatedAt: string;
 }
 
+export interface ProjectIntent {
+  cleanTitle: string;
+  cleanQuestion: string;
+  cleanThesis: string;
+  cleanReaderPayoff: string;
+  forbiddenInternalPhrases: string[];
+}
+
 export interface ResearchDimension {
   dimension: string;
   reason: string;
@@ -358,6 +416,7 @@ export interface OutlineDraft {
   hook: string;
   sections: OutlineSection[];
   continuityLedger?: ContinuityLedger;
+  argumentFrame?: ArgumentFrame;
   closing: string;
 }
 
@@ -478,8 +537,16 @@ export interface ContinuityFlag {
   suggestedAction: string;
 }
 
+export interface ArgumentQualityFlag {
+  type: ArgumentQualityIssueType;
+  severity: ReviewSeverity;
+  sectionIds: string[];
+  reason: string;
+  suggestedAction: string;
+}
+
 export interface StructuralRewriteIntent {
-  issueTypes: ContinuityIssueType[];
+  issueTypes: StructuralRewriteIssueType[];
   affectedSectionIds: string[];
   whyItFails: string;
   suggestedRewriteMode:
@@ -500,6 +567,7 @@ export interface ReviewReport {
   paragraphFlags: ReviewParagraphFlag[];
   rewriteIntents: RewriteIntent[];
   continuityFlags?: ContinuityFlag[];
+  argumentQualityFlags?: ArgumentQualityFlag[];
   structuralRewriteIntents?: StructuralRewriteIntent[];
   deferredStructuralRewriteIntents?: StructuralRewriteIntent[];
   revisionSuggestions: string[];

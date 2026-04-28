@@ -35,6 +35,7 @@ import { buildDefaultWritingMoves } from "@/lib/writing-moves";
 import { buildCardsFromLegacy, defaultTopicMeta, defaultVitalityCheck, deriveLegacyFrames } from "@/lib/author-cards";
 import { classifyEditorialFeedbackEvents } from "@/lib/editorial-feedback/classifier";
 import { buildSampleActionAssets, buildStyleActionReference, type SampleActionAssetRecord } from "@/lib/style-assets/registry";
+import { normalizeArgumentFrame } from "@/lib/argument-frame";
 
 function normalizeTopicMeta(value: TopicMeta | null | undefined): TopicMeta {
   const fallback = defaultTopicMeta();
@@ -72,6 +73,7 @@ function normalizeOutlineDraft(outline: OutlineDraft): OutlineDraft {
   return {
     hook: outline.hook ?? "",
     continuityLedger: outline.continuityLedger,
+    argumentFrame: outline.argumentFrame ? normalizeArgumentFrame(outline.argumentFrame) : undefined,
     closing: outline.closing ?? "",
     sections: (outline.sections ?? []).map((section, index) => ({
       id: section.id || `section-${index + 1}`,

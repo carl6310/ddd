@@ -241,6 +241,112 @@ test("structural rewriter prompt includes continuity flags and ledger", () => {
   assert.match(prompt.user, /repeated_claim/);
 });
 
+test("structural rewriter prompt includes argument quality context and claim-led map tour rules", () => {
+  const prompt = buildPromptTask("structural_rewriter", {
+    project: projectFixture({
+      topic: "莘庄房价高估了吗",
+      thesis: "莘庄不是简单高估，但安全边际不厚。",
+    }),
+    argumentFrame: {
+      primaryShape: "judgement_essay",
+      secondaryShapes: [],
+      centralTension: "新房冷和成熟板块撑价之间的矛盾。",
+      answer: "莘庄不是简单高估，但安全边际不厚。",
+      notThis: ["不要写成板块分区说明书"],
+      supportingClaims: [
+        {
+          id: "claim-1",
+          claim: "成熟确定性仍然撑价。",
+          role: "prove",
+          evidenceIds: ["sc_a"],
+          mustUseEvidenceIds: ["sc_a"],
+          zonesAsEvidence: ["北广场", "南广场"],
+          shouldNotBecomeSection: true,
+        },
+      ],
+      strongestCounterArgument: "反方认为新增供应会压低价格。",
+      howToHandleCounterArgument: "承认供应压力，但限定它影响的资产范围。",
+      readerDecisionFrame: "读者按预算、等待周期和风险承受力判断。",
+    },
+    narrativeMarkdown: "# 莘庄房价高估了吗\n\n## 北广场\n事实。[SC:sc_a]\n\n## 南广场\n事实。[SC:sc_b]\n\n## 商务区\n事实。[SC:sc_c]\n\n## 春申\n事实。[SC:sc_d]",
+    outlineDraft: {
+      hook: "开头",
+      argumentFrame: {
+        primaryShape: "judgement_essay",
+        secondaryShapes: [],
+        centralTension: "新房冷和成熟板块撑价之间的矛盾。",
+        answer: "莘庄不是简单高估，但安全边际不厚。",
+        notThis: ["不要写成板块分区说明书"],
+        supportingClaims: [],
+        strongestCounterArgument: "",
+        howToHandleCounterArgument: "",
+        readerDecisionFrame: "",
+      },
+      continuityLedger: {
+        articleQuestion: "莘庄房价高估了吗",
+        spine: {
+          centralQuestion: "高估了吗",
+          openingMisread: "把冷认购等同崩盘",
+          realProblem: "安全边际不厚",
+          readerPromise: "判断框架",
+          finalReturn: "回到高估问题",
+        },
+        beats: [],
+      },
+      sections: [],
+      closing: "结尾",
+    },
+    deterministicReview: {
+      continuityFlags: [
+        {
+          type: "does_not_answer_previous",
+          severity: "warn",
+          sectionIds: ["s2"],
+          reason: "没有接住上一节问题",
+          suggestedAction: "重写上一节结尾和下一节开头",
+        },
+      ],
+      argumentQualityFlags: [
+        {
+          type: "map_tour_in_judgement_essay",
+          severity: "fail",
+          sectionIds: ["s1", "s2", "s3", "s4"],
+          reason: "judgement_essay 出现连续片区章节。",
+          suggestedAction: "改成 claim-led sections。",
+        },
+        {
+          type: "decision_frame_weak",
+          severity: "warn",
+          sectionIds: [],
+          reason: "结尾没有决策框架。",
+          suggestedAction: "补读者决策问题。",
+        },
+      ],
+    },
+    structuralRewriteIntent: {
+      issueTypes: ["map_tour_in_judgement_essay", "decision_frame_weak"],
+      affectedSectionIds: ["s1", "s2", "s3", "s4"],
+      whyItFails: "地图导览压过主判断。",
+      suggestedRewriteMode: "rewrite_section_roles",
+    },
+    sourceCards: [
+      { id: "sc_a", title: "北广场资料", summary: "摘要", evidence: "证据" },
+      { id: "sc_b", title: "南广场资料", summary: "摘要", evidence: "证据" },
+    ],
+  });
+
+  assert.match(prompt.user, /ArgumentFrame/);
+  assert.match(prompt.user, /argumentQualityFlags/);
+  assert.match(prompt.user, /continuityFlags/);
+  assert.match(prompt.user, /map_tour_in_judgement_essay/);
+  assert.match(prompt.system, /不要删除有用的 zone facts/);
+  assert.match(prompt.system, /把 zone facts 移到 supporting claims/);
+  assert.match(prompt.system, /把 zone headings 换成 claim headings/);
+  assert.match(prompt.system, /新房冷为什么不等于板块崩/);
+  assert.match(prompt.system, /保留 citations、source-backed facts、ContinuityLedger handoff/);
+  assert.match(prompt.system, /保留所有仍然有效的 \[SC:id\] 引用/);
+});
+
 test("mock structural rewriter returns full markdown and preserves citations", async () => {
   const output = await runStructuredTask("structural_rewriter", {
     narrativeMarkdown: "# 标题\n\n原文。[SC:sc_a]",

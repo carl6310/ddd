@@ -400,6 +400,10 @@ export function DraftsTab({
                 </div>
                 {draftMessage ? <p className="subtle structure-stage-message">{draftMessage}</p> : null}
 
+                {selectedBundle.outlineDraft.argumentFrame ? (
+                  <ArgumentFrameCard argumentFrame={selectedBundle.outlineDraft.argumentFrame} />
+                ) : null}
+
                 <div className="document-block outline-block">
                   <div className="document-block-title">引子</div>
                   <div className="apple-form-group">
@@ -1152,4 +1156,78 @@ function buildOutlineSectionDescription(section: NonNullable<ProjectBundle["outl
   ].filter(Boolean);
 
   return summaryItems.join(" / ") || "这一段还没有补充任务说明。";
+}
+
+function ArgumentFrameCard({
+  argumentFrame,
+}: {
+  argumentFrame: NonNullable<NonNullable<ProjectBundle["outlineDraft"]>["argumentFrame"]>;
+}) {
+  return (
+    <div className="document-block outline-block">
+      <div className="document-block-title">
+        论证骨架 <Chip tone="accent">{argumentFrame.primaryShape}</Chip>
+      </div>
+      <ul className="compact-list compact-inline-list">
+        {argumentFrame.secondaryShapes.length ? (
+          <li>
+            <strong>辅助形状</strong>
+            <span>{argumentFrame.secondaryShapes.join(" / ")}</span>
+          </li>
+        ) : null}
+        <li>
+          <strong>核心张力</strong>
+          <span>{argumentFrame.centralTension}</span>
+        </li>
+        <li>
+          <strong>回答</strong>
+          <span>{argumentFrame.answer}</span>
+        </li>
+        {argumentFrame.notThis.length ? (
+          <li>
+            <strong>不要写成</strong>
+            <span>{argumentFrame.notThis.join(" / ")}</span>
+          </li>
+        ) : null}
+      </ul>
+      {argumentFrame.supportingClaims.length ? (
+        <div className="outline-list stack">
+          {argumentFrame.supportingClaims.map((claim) => (
+            <Card className="outline-item" key={claim.id}>
+              <div className="document-block-title">
+                {claim.role} <Chip>{claim.id}</Chip>
+              </div>
+              <p>{claim.claim}</p>
+              <ul className="compact-list compact-inline-list">
+                {claim.evidenceIds.length ? (
+                  <li>
+                    <strong>证据</strong>
+                    <span>{claim.evidenceIds.join(" / ")}</span>
+                  </li>
+                ) : null}
+                {claim.mustUseEvidenceIds.length ? (
+                  <li>
+                    <strong>强约束证据</strong>
+                    <span>{claim.mustUseEvidenceIds.join(" / ")}</span>
+                  </li>
+                ) : null}
+                {claim.zonesAsEvidence?.length ? (
+                  <li>
+                    <strong>作为证据的片区</strong>
+                    <span>{claim.zonesAsEvidence.join(" / ")}</span>
+                  </li>
+                ) : null}
+                {claim.shouldNotBecomeSection ? (
+                  <li>
+                    <strong>结构提醒</strong>
+                    <span>这条论点不要直接变成独立片区章节。</span>
+                  </li>
+                ) : null}
+              </ul>
+            </Card>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }

@@ -1,0 +1,76 @@
+{
+  "fixtures": [
+    {
+      "id": "xinzhuang-map-tour-sample",
+      "label": "莘庄判断稿片区巡游样例",
+      "topic": "莘庄房价高估了吗？",
+      "articleType": "价值重估型",
+      "thesis": "莘庄不是典型泡沫，但也不是成长型板块；它靠成熟确定性支撑价格，代价是旧、慢和上限感。",
+      "outlineHeadings": ["北广场", "南广场", "商务区", "春申"],
+      "sectorZones": ["北广场", "南广场", "商务区", "春申"],
+      "articleMarkdown": "# 莘庄房价高估了吗？\n\n莘庄不是典型泡沫，但也不是成长型板块；它靠成熟确定性支撑价格，代价是旧、慢和上限感。\n\n## 北广场\n北广场能撑住价格，不是因为故事新，而是因为成熟生活和核心资产仍有确定性。[SC:sc_a]\n\n## 南广场\n南广场的问题在于房龄和界面旧，但生活底盘让它没有那么容易被简单打折。[SC:sc_b]\n\n## 商务区\n商务区看起来有 TOD 预期，可真正的价格弹性还要看兑现节奏和买家愿不愿意等。[SC:sc_c]\n\n## 春申\n春申承接外溢需求，不过它更像成本敏感买家的替代选择，不是莘庄价格上限的来源。[SC:sc_d]\n\n最后，读者要看的不是莘庄这个名字，而是预算、等待周期、房龄成本和转手安全边际。",
+      "sourceCards": [
+        {
+          "id": "sc_a",
+          "title": "北广场成熟生活资料",
+          "summary": "北广场有成熟生活配套和核心资产支撑。",
+          "evidence": "北广场有成熟生活配套和核心资产支撑。"
+        },
+        {
+          "id": "sc_b",
+          "title": "南广场房龄与生活底盘资料",
+          "summary": "南广场生活成熟，但房龄和界面偏旧。",
+          "evidence": "南广场生活成熟，但房龄和界面偏旧。"
+        },
+        {
+          "id": "sc_c",
+          "title": "商务区 TOD 兑现资料",
+          "summary": "商务区有 TOD 预期，但兑现节奏仍需观察。",
+          "evidence": "商务区有 TOD 预期，但兑现节奏仍需观察。"
+        },
+        {
+          "id": "sc_d",
+          "title": "春申外溢承接资料",
+          "summary": "春申承接一部分外溢需求，但通勤和资产上限需要评估。",
+          "evidence": "春申承接一部分外溢需求，但通勤和资产上限需要评估。"
+        }
+      ],
+      "argumentFrame": {
+        "primaryShape": "judgement_essay",
+        "secondaryShapes": ["risk_decomposition"],
+        "centralTension": "新房认购冷、商业兑现慢，但核心二手资产仍能维持高价。",
+        "answer": "莘庄不是典型泡沫，但也不是成长型板块；它靠成熟确定性支撑价格，代价是旧、慢和上限感。",
+        "notThis": ["不要写成板块分区说明书", "不要把北广场、南广场、商务区、春申写成连续章节"],
+        "supportingClaims": [
+          {
+            "id": "claim-1",
+            "claim": "成熟确定性仍然能解释一部分高价。",
+            "role": "prove",
+            "evidenceIds": ["sc_a", "sc_b"],
+            "mustUseEvidenceIds": ["sc_a"],
+            "zonesAsEvidence": ["北广场", "南广场"],
+            "shouldNotBecomeSection": true
+          },
+          {
+            "id": "claim-2",
+            "claim": "真正的风险来自兑现慢和资产上限感。",
+            "role": "counter",
+            "evidenceIds": ["sc_c", "sc_d"],
+            "mustUseEvidenceIds": [],
+            "zonesAsEvidence": ["商务区", "春申"],
+            "shouldNotBecomeSection": true
+          }
+        ],
+        "strongestCounterArgument": "新房认购冷说明莘庄价格已经撑不住。",
+        "howToHandleCounterArgument": "承认短期信号有压力，但区分新房去化、二手核心资产和普通资产。",
+        "readerDecisionFrame": "读者按预算、等待周期、房龄成本和转手安全边际判断。"
+      },
+      "humanNotes": {
+        "answersHeadline": "yes",
+        "centralTension": "yes",
+        "mapTour": "yes",
+        "notes": "模板样例：真实评估时把 articleMarkdown 替换成实际生成稿。"
+      }
+    }
+  ]
+}

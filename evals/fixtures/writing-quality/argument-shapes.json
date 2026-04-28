@@ -1,0 +1,154 @@
+{
+  "fixtures": [
+    {
+      "id": "judgement-essay-xinzhuang-overvalued",
+      "topic": "莘庄房价高估了吗？",
+      "primaryShape": "judgement_essay",
+      "secondaryShapes": ["risk_decomposition"],
+      "centralTension": "新房认购冷和二手核心资产高价之间的张力。",
+      "answer": "莘庄不是典型泡沫，但也不是成长型板块；它靠成熟确定性支撑价格，代价是旧、慢和上限感。",
+      "notThis": ["不要写成板块分区说明书", "不要把北广场、南广场、商务区、春申写成连续章节"],
+      "badOutlineHeadings": ["北广场", "南广场", "商务区", "春申"],
+      "goodOutlineHeadings": [
+        "新房冷为什么不等于板块崩",
+        "成熟确定性为什么还能撑价",
+        "真正撑价的是少数核心资产",
+        "成熟为什么也是天花板",
+        "买房人怎么判断"
+      ],
+      "expectedFlags": ["map_tour_in_judgement_essay"]
+    },
+    {
+      "id": "misread-correction-qibao-not-just-school",
+      "topic": "七宝是不是只剩学区标签？",
+      "primaryShape": "misread_correction",
+      "secondaryShapes": ["asset_tiering"],
+      "centralTension": "外部只看学区标签，但真实价值来自交通、商业、居住成熟度和资产分层的组合。",
+      "answer": "七宝不能只按学区理解；学区是入口，真正决定价格的是成熟生活网络和不同房龄资产的分层。",
+      "notThis": ["不要写成学校清单", "不要把每个小区轮流介绍"],
+      "badOutlineHeadings": ["学区", "地铁", "商业", "小区"],
+      "goodOutlineHeadings": ["大家为什么会把七宝看窄", "学区标签为什么有迷惑性", "真实支撑来自哪些生活网络", "哪些资产没有吃到同样溢价", "读者该怎么重新看七宝"],
+      "expectedFlags": []
+    },
+    {
+      "id": "signal-reinterpretation-new-house-cold",
+      "topic": "新房认购冷是不是说明板块不行了？",
+      "primaryShape": "signal_reinterpretation",
+      "secondaryShapes": ["mismatch_diagnosis"],
+      "centralTension": "认购冷这个表面信号容易被理解成板块失速，但它也可能只是价格、产品和购买力错配。",
+      "answer": "认购冷不能直接等同板块崩；更可能说明当前新房定价和买房人风险偏好之间出现错配。",
+      "notThis": ["不要写成成交数据流水账", "不要只说冷或热"],
+      "badOutlineHeadings": ["认购率", "成交量", "挂牌量", "价格"],
+      "goodOutlineHeadings": ["这个冷信号为什么容易吓人", "冷认购通常被怎样误读", "真正要拆的是价格和产品错配", "哪些证据能证明不是板块崩", "下一步该看什么确认信号"],
+      "expectedFlags": []
+    },
+    {
+      "id": "lifecycle-reframe-tangzhen-ceiling",
+      "topic": "唐镇是不是进入兑现后半场？",
+      "primaryShape": "lifecycle_reframe",
+      "secondaryShapes": ["cycle_timing"],
+      "centralTension": "唐镇过去靠成长故事定价，但兑现越多，新增想象空间越小。",
+      "answer": "唐镇不是故事消失，而是从成长型叙事进入兑现型叙事；价格要从预期溢价转向兑现质量。",
+      "notThis": ["不要写成怀旧板块史", "不要只复述规划进展"],
+      "badOutlineHeadings": ["过去", "现在", "未来", "总结"],
+      "goodOutlineHeadings": ["唐镇以前卖的是什么预期", "转折点为什么已经出现", "兑现之后新增约束是什么", "新价值逻辑从哪里来", "读者应该按什么时间点判断"],
+      "expectedFlags": []
+    },
+    {
+      "id": "asset-tiering-xuhui-old-houses",
+      "topic": "徐汇老房子还值得买吗？",
+      "primaryShape": "asset_tiering",
+      "secondaryShapes": ["tradeoff_decision"],
+      "centralTension": "同样叫徐汇老房子，有的享受核心资源，有的只剩老旧成本。",
+      "answer": "徐汇老房不能一刀切；核心资产还能买确定性，普通老破小要先算居住、贷款和转手成本。",
+      "notThis": ["不要按街道地理顺序导览", "不要把老房统一写成情怀资产"],
+      "badOutlineHeadings": ["衡山路", "徐家汇", "田林", "漕河泾"],
+      "goodOutlineHeadings": ["先定什么才算核心资产", "哪些老房仍然有稀缺性", "普通资产为什么容易被高估", "边缘老房最大的错买风险", "买家应该按哪条线分层"],
+      "expectedFlags": []
+    },
+    {
+      "id": "mismatch-diagnosis-zhenru-label-price",
+      "topic": "真如为什么规划很强但价格弹性不够？",
+      "primaryShape": "mismatch_diagnosis",
+      "secondaryShapes": ["planning_reality_check"],
+      "centralTension": "规划标签很强，但居住界面、供应节奏和买家预期没有完全匹配。",
+      "answer": "真如的问题不是没规划，而是规划叙事和当前居住、供应、价格承接之间存在错配。",
+      "notThis": ["不要只列规划利好", "不要写成板块优缺点清单"],
+      "badOutlineHeadings": ["规划", "交通", "商业", "住宅"],
+      "goodOutlineHeadings": ["市场原本期待什么匹配", "现实里哪一环没有对上", "错配来自兑现还是产品", "价格弹性为什么被削弱", "读者该如何修正预期"],
+      "expectedFlags": []
+    },
+    {
+      "id": "tradeoff-decision-pudong-or-minhang",
+      "topic": "同样预算买浦东还是闵行？",
+      "primaryShape": "tradeoff_decision",
+      "secondaryShapes": ["comparison_benchmark", "buyer_persona_split"],
+      "centralTension": "读者想要更好的城市界面，但预算、通勤和房龄无法同时满足。",
+      "answer": "这不是浦东和闵行谁绝对更好，而是你愿意把预算花在产业确定性、生活成熟度还是房龄改善上。",
+      "notThis": ["不要写成两个区域轮流介绍", "不要给万能答案"],
+      "badOutlineHeadings": ["浦东", "闵行", "价格", "配套"],
+      "goodOutlineHeadings": ["先确认读者真正要什么", "两边分别牺牲什么", "哪些取舍维度最关键", "什么成本不能接受", "最后用哪条规则做决定"],
+      "expectedFlags": []
+    },
+    {
+      "id": "risk-decomposition-suburban-new-town",
+      "topic": "远郊新城买房最大的风险是什么？",
+      "primaryShape": "risk_decomposition",
+      "secondaryShapes": ["planning_reality_check"],
+      "centralTension": "远郊新城有总价和规划吸引力，但风险会沿着产业、人口和二手流动性传导。",
+      "answer": "远郊新城最大的风险不是距离远，而是兑现慢时，流动性和生活成本会一起压到买家身上。",
+      "notThis": ["不要写成恐吓式风险提醒", "不要只列缺点"],
+      "badOutlineHeadings": ["通勤风险", "商业风险", "学校风险", "转手风险"],
+      "goodOutlineHeadings": ["先定义真正的风险命题", "风险如何从规划慢传到生活", "谁最容易承担这个风险", "什么条件能缓解风险", "到什么阈值就该回避"],
+      "expectedFlags": []
+    },
+    {
+      "id": "comparison-benchmark-qiantan-vs-xuhui",
+      "topic": "前滩和徐汇滨江怎么选？",
+      "primaryShape": "comparison_benchmark",
+      "secondaryShapes": ["tradeoff_decision"],
+      "centralTension": "两个板块都代表城市界面升级，但一个偏新城兑现，一个偏核心区再生。",
+      "answer": "前滩和徐汇滨江不是简单新旧对比；真正差别在产业兑现、城市界面稳定性和资产稀缺度。",
+      "notThis": ["不要按两个板块分别介绍", "不要只列打分表"],
+      "badOutlineHeadings": ["前滩", "徐汇滨江", "价格对比", "结论"],
+      "goodOutlineHeadings": ["为什么要选这两个标杆比较", "它们相同的城市界面是什么", "真正不同的是兑现路径", "价差背后证明了什么", "读者该按哪种偏好选择"],
+      "expectedFlags": []
+    },
+    {
+      "id": "planning-reality-check-tod-promise",
+      "topic": "TOD 规划会不会真正改变板块价格？",
+      "primaryShape": "planning_reality_check",
+      "secondaryShapes": ["risk_decomposition"],
+      "centralTension": "TOD 承诺很容易抬高预期，但价格真正改变取决于兑现条件、受益范围和时间成本。",
+      "answer": "TOD 不是天然利好；只有客流、商业、居住半径和供应节奏一起兑现，才会真正改变价格。",
+      "notThis": ["不要复述规划公示", "不要把地铁站当作自动涨价理由"],
+      "badOutlineHeadings": ["规划", "地铁", "商业", "产业"],
+      "goodOutlineHeadings": ["规划承诺到底是什么", "兑现需要哪些条件", "瓶颈会卡在哪里", "谁才是真正受益者", "价格影响要看什么时间表"],
+      "expectedFlags": []
+    },
+    {
+      "id": "cycle-timing-buy-now-or-wait",
+      "topic": "现在买改善盘是早了还是晚了？",
+      "primaryShape": "cycle_timing",
+      "secondaryShapes": ["tradeoff_decision"],
+      "centralTension": "市场价格已经松动，但好资产确认信号和买家安全垫还没有完全同步。",
+      "answer": "现在不是简单早或晚；对确定资产可以开始筛选，对边缘资产应该等成交和价格确认。",
+      "notThis": ["不要写成宏观行情空话", "不要只喊抄底或观望"],
+      "badOutlineHeadings": ["政策", "成交", "价格", "建议"],
+      "goodOutlineHeadings": ["先判断现在处在周期哪一段", "哪些信号说明机会出现", "哪些风险仍然滞后", "下一确认点是什么", "读者的行动窗口怎么划"],
+      "expectedFlags": []
+    },
+    {
+      "id": "buyer-persona-split-baoshan",
+      "topic": "宝山滨江到底适合谁？",
+      "primaryShape": "buyer_persona_split",
+      "secondaryShapes": ["asset_tiering"],
+      "centralTension": "同一个板块对通勤、预算、改善和长期持有的人意义完全不同。",
+      "answer": "宝山滨江不是所有人都适合；预算敏感、接受兑现周期的人可以看，强通勤和短期流动性买家要谨慎。",
+      "notThis": ["不要写成销售画像", "不要把所有买家都说成适合"],
+      "badOutlineHeadings": ["刚需", "改善", "投资", "养老"],
+      "goodOutlineHeadings": ["先把买家分叉讲清楚", "不同人真正重视什么", "哪些事实对哪类人有用", "谁应该继续看", "谁应该回避"],
+      "expectedFlags": []
+    }
+  ]
+}

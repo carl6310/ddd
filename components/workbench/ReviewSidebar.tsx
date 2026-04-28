@@ -108,6 +108,9 @@ export function ReviewSidebar({
           {selectedBundle.reviewReport?.continuityFlags?.length ? (
             <Chip tone="warning">连续性：{selectedBundle.reviewReport.continuityFlags.length}</Chip>
           ) : null}
+          {selectedBundle.reviewReport?.argumentQualityFlags?.length ? (
+            <Chip tone="warning">论证：{selectedBundle.reviewReport.argumentQualityFlags.length}</Chip>
+          ) : null}
           {primaryRisk ? (
             <Chip tone={getRiskChipTone(primaryRisk.status)}>风险：{primaryRisk.title}</Chip>
           ) : (

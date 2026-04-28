@@ -1,5 +1,6 @@
 import type {
   ArticleDraft,
+  ArgumentQualityFlag,
   ArticleType,
   ContinuityBeat,
   ContinuityFlag,
@@ -13,6 +14,7 @@ import type {
   RewriteIntent,
   SectorModel,
   SourceCard,
+  StructuralRewriteIntent,
   VitalityCheck,
   WritingMovesFrame,
 } from "@/lib/types";
@@ -444,6 +446,13 @@ export function runDeterministicReview(input: {
     draft,
     outlineDraft,
   });
+  const argumentQualityFlags = buildArgumentQualityFlags({
+    draft,
+    paragraphs,
+    thesis,
+    outlineDraft,
+    sectorModel,
+  });
   const paragraphFlags = buildParagraphFlags({
     draft,
     paragraphs,
@@ -467,7 +476,8 @@ export function runDeterministicReview(input: {
     paragraphFlags,
     rewriteIntents,
     continuityFlags,
-    structuralRewriteIntents: buildStructuralRewriteIntents(continuityFlags),
+    argumentQualityFlags,
+    structuralRewriteIntents: buildStructuralRewriteIntents(continuityFlags, argumentQualityFlags),
     deferredStructuralRewriteIntents: [],
     revisionSuggestions: buildRevisionSuggestions(checks),
     preservedPatterns: [
@@ -722,7 +732,141 @@ function buildContinuityFlags(input: { draft: string; outlineDraft?: OutlineDraf
   return dedupeContinuityFlags(flags);
 }
 
-function buildStructuralRewriteIntents(flags: ContinuityFlag[]) {
+function buildArgumentQualityFlags(input: {
+  draft: string;
+  paragraphs: string[];
+  thesis: string;
+  outlineDraft?: OutlineDraft | null;
+  sectorModel?: SectorModel | null;
+}): ArgumentQualityFlag[] {
+  const frame = input.outlineDraft?.argumentFrame;
+  if (!frame) {
+    return [];
+  }
+
+  const flags: ArgumentQualityFlag[] = [];
+  const headings = extractMarkdownHeadings(input.draft);
+  const outlineHeadings = input.outlineDraft?.sections.map((section) => section.heading) ?? [];
+  const allHeadings = headings.length ? headings : outlineHeadings;
+  const zoneNames = Array.from(
+    new Set([
+      ...(input.sectorModel?.zones.map((zone) => zone.name).filter(Boolean) ?? []),
+      "北广场",
+      "南广场",
+      "商务区",
+      "春申",
+    ]),
+  );
+  const zoneHeadingStats = getZoneHeadingStats(allHeadings, zoneNames);
+  const openingText = input.paragraphs.slice(0, 3).join("\n");
+  const earlyText = input.paragraphs.slice(0, 5).join("\n");
+  const endingText = input.paragraphs.slice(-3).join("\n");
+  const answer = frame.answer || input.thesis;
+
+  if (!answerClearlyPresent(openingText, answer) && !answerClearlyPresent(input.draft, answer)) {
+    flags.push({
+      type: "headline_not_answered",
+      severity: "fail",
+      sectionIds: [],
+      reason: "正文没有清楚回答标题/核心问题。",
+      suggestedAction: "在开头直接给出 ArgumentFrame.answer，再展开证据和反方。",
+    });
+  }
+
+  if (isGenericArgumentAnswer(answer)) {
+    flags.push({
+      type: "thesis_too_generic",
+      severity: "fail",
+      sectionIds: [],
+      reason: "ArgumentFrame.answer 过泛，像“具体看情况”而不是可争辩判断。",
+      suggestedAction: "重写主判断，明确回答成立/不成立/在什么条件下成立。",
+    });
+  }
+
+  if (frame.primaryShape === "judgement_essay" && zoneHeadingStats.maxConsecutive >= 3) {
+    flags.push({
+      type: "map_tour_in_judgement_essay",
+      severity: "fail",
+      sectionIds: getSectionIdsByHeadings(input.outlineDraft, zoneHeadingStats.consecutiveHeadings),
+      reason: "judgement_essay 出现 3 个以上连续片区标题，正文被写成地图导览。",
+      suggestedAction: "把连续片区章节改写为围绕核心判断的 claim-led sections；片区只作为证据出现，不直接做目录。",
+    });
+  }
+
+  if (frame.primaryShape === "judgement_essay" && zoneHeadingStats.total >= 2) {
+    flags.push({
+      type: "zones_used_as_structure_not_evidence",
+      severity: zoneHeadingStats.maxConsecutive >= 3 ? "fail" : "warn",
+      sectionIds: getSectionIdsByHeadings(input.outlineDraft, zoneHeadingStats.zoneHeadings),
+      reason: "片区正在承担章节目录功能，而不是服务 supportingClaims。",
+      suggestedAction: "把片区事实移动到对应 claim 内部，用作证据而不是目录。",
+    });
+  }
+
+  if (frame.strongestCounterArgument.trim() && !hasCounterargumentHandled(input.draft, frame.strongestCounterArgument)) {
+    flags.push({
+      type: "counterargument_missing",
+      severity: "warn",
+      sectionIds: [],
+      reason: "ArgumentFrame 提供了最强反方，但正文没有处理它。",
+      suggestedAction: "补一个反方处理段，先承认反方成立的边界，再说明如何收束回主判断。",
+    });
+  }
+
+  if (frame.readerDecisionFrame.trim() && !hasDecisionFrameSignal(endingText, frame.readerDecisionFrame)) {
+    flags.push({
+      type: "decision_frame_weak",
+      severity: "warn",
+      sectionIds: [],
+      reason: "结尾更像总结，没有给读者可使用的决策问题。",
+      suggestedAction: "把结尾改成读者可执行的判断框架，例如预算、风险、等待周期、替代选择。",
+    });
+  }
+
+  if (answer && !answerClearlyPresent(earlyText, answer) && answerClearlyPresent(input.draft, answer)) {
+    flags.push({
+      type: "too_much_background_before_answer",
+      severity: "warn",
+      sectionIds: [],
+      reason: "文章在给出中心判断前铺垫过长。",
+      suggestedAction: "把 ArgumentFrame.answer 前移到开头三到五段内，再展开背景。",
+    });
+  }
+
+  for (const paragraph of input.paragraphs) {
+    if (extractCitedIds(paragraph).length > 0 && !hasArgumentSignal(paragraph)) {
+      flags.push({
+        type: "evidence_without_argument",
+        severity: "warn",
+        sectionIds: [],
+        reason: `有引用资料的段落没有说明它证明了什么：${paragraph.slice(0, 60)}。`,
+        suggestedAction: "在引用前后补清楚该证据服务的判断，而不是只堆材料。",
+      });
+      break;
+    }
+  }
+
+  const unsupportedClaim = frame.supportingClaims.find((claim) => {
+    if (!claim.claim.trim() || !hasStrongSignalConnection(input.draft, claim.claim)) {
+      return false;
+    }
+    const paragraph = findParagraphWithSignal(input.paragraphs, claim.claim);
+    return paragraph ? !hasConsequenceSignal(paragraph) : false;
+  });
+  if (unsupportedClaim) {
+    flags.push({
+      type: "claim_without_consequence",
+      severity: "warn",
+      sectionIds: [],
+      reason: `论点“${unsupportedClaim.claim}”出现了，但没有解释对读者有什么后果。`,
+      suggestedAction: "补一句读者后果：这意味着什么风险、代价、选择或行动边界。",
+    });
+  }
+
+  return dedupeArgumentQualityFlags(flags);
+}
+
+function buildStructuralRewriteIntents(flags: ContinuityFlag[], argumentFlags: ArgumentQualityFlag[] = []): StructuralRewriteIntent[] {
   const groups: Array<{
     name: "ledger_delivery" | "redundancy" | "adjacency";
     priority: number;
@@ -745,7 +889,7 @@ function buildStructuralRewriteIntents(flags: ContinuityFlag[]) {
     },
   ];
 
-  return groups
+  const continuityIntents = groups
     .map((group) => {
       const groupFlags = flags.filter((flag) => group.types.includes(flag.type) && (flag.severity === "fail" || flag.type === "does_not_answer_previous"));
       return { group, flags: groupFlags };
@@ -763,6 +907,23 @@ function buildStructuralRewriteIntents(flags: ContinuityFlag[]) {
       whyItFails: item.flags.map((flag) => flag.reason).join("；"),
       suggestedRewriteMode: chooseStructuralRewriteMode(item.flags),
     }));
+  const argumentIntents = buildArgumentStructuralRewriteIntents(argumentFlags);
+  return [...argumentIntents, ...continuityIntents].slice(0, 2);
+}
+
+function buildArgumentStructuralRewriteIntents(flags: ArgumentQualityFlag[]): StructuralRewriteIntent[] {
+  const mapTourFlags = flags.filter((flag) => flag.type === "map_tour_in_judgement_essay" && flag.severity === "fail");
+  if (mapTourFlags.length === 0) {
+    return [];
+  }
+  return [
+    {
+      issueTypes: ["map_tour_in_judgement_essay"],
+      affectedSectionIds: Array.from(new Set(mapTourFlags.flatMap((flag) => flag.sectionIds))),
+      whyItFails: mapTourFlags.map((flag) => flag.reason).join("；"),
+      suggestedRewriteMode: "rewrite_section_roles",
+    },
+  ];
 }
 
 function chooseStructuralRewriteMode(flags: ContinuityFlag[]) {
@@ -794,6 +955,101 @@ function dedupeContinuityFlags(flags: ContinuityFlag[]) {
     seen.add(key);
     return true;
   });
+}
+
+function dedupeArgumentQualityFlags(flags: ArgumentQualityFlag[]) {
+  const seen = new Set<string>();
+  return flags.filter((flag) => {
+    const key = `${flag.type}:${flag.sectionIds.join("|")}:${flag.reason}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function getZoneHeadingStats(headings: string[], zoneNames: string[]) {
+  let maxConsecutive = 0;
+  let currentConsecutive: string[] = [];
+  let bestConsecutive: string[] = [];
+  const zoneHeadings: string[] = [];
+
+  for (const heading of headings) {
+    const isZoneHeading = isZoneLikeHeading(heading, zoneNames);
+    if (isZoneHeading) {
+      zoneHeadings.push(heading);
+      currentConsecutive.push(heading);
+      if (currentConsecutive.length > maxConsecutive) {
+        maxConsecutive = currentConsecutive.length;
+        bestConsecutive = [...currentConsecutive];
+      }
+    } else {
+      currentConsecutive = [];
+    }
+  }
+
+  return {
+    total: zoneHeadings.length,
+    maxConsecutive,
+    zoneHeadings,
+    consecutiveHeadings: bestConsecutive,
+  };
+}
+
+function isZoneLikeHeading(heading: string, zoneNames: string[]) {
+  const compact = heading.replace(/\s+/g, "");
+  return zoneNames.some((zoneName) => zoneName && compact.includes(zoneName.replace(/\s+/g, "")));
+}
+
+function getSectionIdsByHeadings(outlineDraft: OutlineDraft | null | undefined, headings: string[]) {
+  return headings
+    .map((heading) => outlineDraft?.sections.find((section) => section.heading === heading || heading.includes(section.heading) || section.heading.includes(heading))?.id)
+    .filter((id): id is string => Boolean(id));
+}
+
+function answerClearlyPresent(text: string, answer: string) {
+  const compactAnswer = answer.replace(/\s+/g, "");
+  if (!compactAnswer) {
+    return false;
+  }
+  if (compactAnswer.length <= 12 && text.includes(compactAnswer)) {
+    return true;
+  }
+  return hasStrongSignalConnection(text, answer);
+}
+
+function isGenericArgumentAnswer(text: string) {
+  const compact = text.replace(/\s+/g, "");
+  return !compact || compact.length < 6 || ["具体看情况", "要具体分析", "看个人需求", "因人而异", "不能一概而论", "要看实际情况"].some((token) => compact.includes(token));
+}
+
+function hasDecisionFrameSignal(text: string, frame: string) {
+  const decisionTokens = ["预算", "风险", "等待", "替代", "选择", "适合", "不适合", "买", "不要买", "能不能接受", "如果", "取舍", "决策", "边界"];
+  return decisionTokens.some((token) => text.includes(token)) || hasStrongSignalConnection(text, frame);
+}
+
+function hasCounterargumentHandled(text: string, counterargument: string) {
+  const terms = extractSignalTerms(counterargument).filter((term) => term.length === 2 && !["反方", "认为", "价格", "片区"].includes(term));
+  const matched = new Set(terms.filter((term) => text.includes(term)));
+  const hasCounterMarker = ["反方", "有人会说", "也有人", "质疑", "担心", "承认", "确实", "不过", "但是", "但"].some((token) => text.includes(token));
+  return matched.size >= 4 || (hasCounterMarker && matched.size >= 2);
+}
+
+function hasArgumentSignal(paragraph: string) {
+  return ["说明", "证明", "意味着", "所以", "因此", "关键", "真正", "不是", "而是", "问题", "判断", "结论", "支撑", "风险", "代价"].some((token) =>
+    paragraph.includes(token),
+  );
+}
+
+function hasConsequenceSignal(paragraph: string) {
+  return ["意味着", "所以", "因此", "读者", "买房人", "预算", "风险", "代价", "选择", "决策", "适合", "不适合", "要不要", "能不能"].some((token) =>
+    paragraph.includes(token),
+  );
+}
+
+function findParagraphWithSignal(paragraphs: string[], signal: string) {
+  return paragraphs.find((paragraph) => hasStrongSignalConnection(paragraph, signal));
 }
 
 function isWeakNewInformation(text: string) {

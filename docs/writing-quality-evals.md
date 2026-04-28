@@ -78,3 +78,15 @@ npm run eval:writing-quality:report
 
 ### `vitality_pass_rate`
 直接复用现有 `vitalityCheck` 的通过结果。
+
+## Argument Human Eval
+
+ArgumentFrame 质量的人评 harness 见 `docs/argument-human-eval.md`。
+
+运行：
+
+```bash
+npm run eval:argument-human
+```
+
+默认读取 `evals/fixtures/writing-quality/argument-samples.json`，输出 `output/evals/argument-human-eval-latest.json`，并在终端打印可读报告。

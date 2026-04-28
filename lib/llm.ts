@@ -1,4 +1,4 @@
-import type { OutlineDraft, PublishPackage, ResearchBrief, ReviewReport, SectorModel, SourceCard, TopicCoCreationModelResult, TopicJudgeResult } from "@/lib/types";
+import type { ArgumentFrame, ArgumentShape, OutlineDraft, PublishPackage, ResearchBrief, ReviewReport, SectorModel, SourceCard, TopicCoCreationModelResult, TopicJudgeResult } from "@/lib/types";
 import type { TaskName } from "@/lib/prompt-engine";
 import { buildPromptTask } from "@/lib/prompt-engine";
 import { buildLLMCallHashes, recordLLMCall, summarizeLLMError } from "@/lib/observability/llm-calls";
@@ -8,6 +8,7 @@ import type { CoCreationSourceDigest } from "@/lib/co-creation-materials";
 import { buildCardsFromLegacy, deriveLegacyFrames } from "@/lib/author-cards";
 import { buildDefaultWritingMoves } from "@/lib/writing-moves";
 import { generateSourceSummary, type GeneratedSourceSummary } from "@/lib/source-summary";
+import { inferArgumentShapeFromTopic } from "@/lib/argument-frame";
 
 const modelMode = process.env.MODEL_MODE ?? (process.env.MODEL_API_KEY ? "remote" : "mock");
 const modelName = process.env.MODEL_NAME ?? "gpt-4.1-mini";
@@ -304,6 +305,8 @@ function getBaseTaskTuning(task: TaskName): TaskTuning {
       return { timeoutMs: 60000, maxTokens: 1200, retryMaxTokens: 1800, useJsonMode: true };
     case "sector_modeler":
       return { timeoutMs: 120000, maxTokens: 2400, retryMaxTokens: 3200, useJsonMode: true };
+    case "argument_framer":
+      return { timeoutMs: 90000, maxTokens: 2200, retryMaxTokens: 2800, useJsonMode: true };
     case "outline_writer":
       return { timeoutMs: 120000, maxTokens: 3600, retryMaxTokens: 5200, useJsonMode: true };
     case "draft_polisher":
@@ -457,6 +460,8 @@ function buildMockResponse(task: TaskName, input: Parameters<typeof buildPromptT
       return mockResearchBrief(input.project?.topic ?? "", input.project?.thesis ?? "");
     case "sector_modeler":
       return mockSectorModel(input.project?.topic ?? "", input.project?.thesis ?? "", input.sourceCards ?? []);
+    case "argument_framer":
+      return mockArgumentFrame(input.project?.topic ?? "", input.project?.thesis ?? "", input.sectorModel, input.sourceCards ?? []);
     case "outline_writer":
       return mockOutlineDraft(input.project?.topic ?? "", input.project?.thesis ?? "", input.sectorModel);
     case "draft_writer":
@@ -672,6 +677,109 @@ function buildZoneEvidenceIds(sourceCards: SourceCard[]): string[][] {
     [ids[1] ?? ids[0]],
     [ids[2] ?? ids[0]],
   ];
+}
+
+function mockArgumentFrame(topic: string, thesis: string, sectorModel: SectorModel | null | undefined, sourceCards: SourceCard[]): ArgumentFrame {
+  const fullTopic = `${topic} ${thesis}`;
+  const primaryShape = inferArgumentShapeFromTopic({ topic, thesis });
+  const evidenceIds = sourceCards.length ? sourceCards.map((card) => card.id) : sectorModel?.evidenceIds ?? [];
+  const zonesAsEvidence = sectorModel?.zones.slice(0, 3).map((zone) => zone.name) ?? [];
+  const firstEvidenceId = evidenceIds[0] ? [evidenceIds[0]] : [];
+  const secondEvidenceIds = evidenceIds.slice(0, 2);
+
+  return {
+    primaryShape,
+    secondaryShapes: inferMockSecondaryShapes(primaryShape, fullTopic),
+    centralTension: buildMockCentralTension(primaryShape, topic),
+    answer: thesis || buildMockAnswer(primaryShape, topic),
+    notThis: [
+      "不要写成板块资料复述。",
+      "不要因为 SectorModel 里有多个 zone，就把 zone 顺序直接变成文章目录。",
+    ],
+    supportingClaims: [
+      {
+        id: "claim-1",
+        claim: thesis || buildMockAnswer(primaryShape, topic),
+        role: "open",
+        evidenceIds: firstEvidenceId,
+        mustUseEvidenceIds: firstEvidenceId,
+        zonesAsEvidence,
+        shouldNotBecomeSection: true,
+      },
+      {
+        id: "claim-2",
+        claim: sectorModel?.summaryJudgement ?? `${topic} 的判断要落到价格支撑、风险边界和读者取舍。`,
+        role: "prove",
+        evidenceIds: secondEvidenceIds,
+        mustUseEvidenceIds: firstEvidenceId,
+        zonesAsEvidence,
+        shouldNotBecomeSection: false,
+      },
+      {
+        id: "claim-3",
+        claim: sectorModel?.supplyObservation ?? "真正影响读者决策的是供应、兑现周期和替代选择。",
+        role: "decision",
+        evidenceIds: evidenceIds.slice(1, 3),
+        mustUseEvidenceIds: evidenceIds.slice(1, 2),
+        zonesAsEvidence: zonesAsEvidence.slice(1),
+        shouldNotBecomeSection: false,
+      },
+    ],
+    strongestCounterArgument: "反方会说，板块内部差异很大，不能用一个总判断概括。",
+    howToHandleCounterArgument: "承认片区差异，但把差异作为论点证据和判断边界，而不是改写成片区导览。",
+    readerDecisionFrame: "读者按预算、风险承受力、等待周期和替代选择，判断这个结论是否适合自己。",
+  };
+}
+
+function inferMockSecondaryShapes(primaryShape: ArgumentShape, text: string): ArgumentShape[] {
+  const candidates: ArgumentShape[] = [];
+  if (primaryShape !== "risk_decomposition" && /风险|坑|站岗|接盘/.test(text)) {
+    candidates.push("risk_decomposition");
+  }
+  if (primaryShape !== "tradeoff_decision" && /买不买|怎么选|值不值/.test(text)) {
+    candidates.push("tradeoff_decision");
+  }
+  if (primaryShape !== "planning_reality_check" && /规划|TOD|地铁|商业|产业/.test(text)) {
+    candidates.push("planning_reality_check");
+  }
+  return candidates.slice(0, 2);
+}
+
+function buildMockCentralTension(shape: ArgumentShape, topic: string) {
+  switch (shape) {
+    case "misread_correction":
+      return `${topic} 的常见看法和真实判断边界之间的矛盾。`;
+    case "signal_reinterpretation":
+      return `${topic} 的表层信号和真实含义之间的矛盾。`;
+    case "lifecycle_reframe":
+      return `${topic} 的旧周期叙事和新阶段约束之间的矛盾。`;
+    case "asset_tiering":
+      return `${topic} 内部资产分层和外部统一标签之间的矛盾。`;
+    case "mismatch_diagnosis":
+      return `${topic} 的市场标签和现实错配之间的矛盾。`;
+    case "tradeoff_decision":
+      return `${topic} 的收益想象和现实取舍之间的矛盾。`;
+    case "risk_decomposition":
+      return `${topic} 的风险感知和真实触发条件之间的矛盾。`;
+    case "comparison_benchmark":
+      return `${topic} 的可比对象和真实差异之间的矛盾。`;
+    case "planning_reality_check":
+      return `${topic} 的规划承诺和兑现路径之间的矛盾。`;
+    case "cycle_timing":
+      return `${topic} 的入场时点和确认信号之间的矛盾。`;
+    case "buyer_persona_split":
+      return `${topic} 对不同买家成立条件不同。`;
+    case "judgement_essay":
+    default:
+      return `${topic} 的价格判断和真实支撑之间的矛盾。`;
+  }
+}
+
+function buildMockAnswer(shape: ArgumentShape, topic: string) {
+  if (shape === "judgement_essay") {
+    return `${topic} 不能简单下结论，要看支撑是否足够、风险边界是否清楚。`;
+  }
+  return `${topic} 要按 ${shape} 的逻辑组织，而不是写成片区地图导览。`;
 }
 
 function mockOutlineDraft(topic: string, thesis: string, sectorModel: SectorModel | null | undefined): OutlineDraft {

@@ -1,13 +1,17 @@
 import type {
   ArticleProject,
+  ArgumentFrame,
   OutlineDraft,
+  ProjectIntent,
   ResearchBrief,
   SignalBrief,
   SectorModel,
   SourceCard,
   ReviewReport,
 } from "@/lib/types";
+import { ARGUMENT_SHAPES } from "@/lib/types";
 import { formatStyleCore, formatThinkCard } from "@/lib/author-cards";
+import { normalizeProjectIntent } from "@/lib/project-intent";
 import {
   AUTHOR_ACTION_CORE,
   AUTHOR_BRAIN_CORE,
@@ -25,6 +29,7 @@ export type TaskName =
   | "source_card_summarizer"
   | "research_brief"
   | "sector_modeler"
+  | "argument_framer"
   | "outline_writer"
   | "draft_writer"
   | "draft_polisher"
@@ -59,6 +64,8 @@ export function buildPromptTask(
     signalBrief?: SignalBrief | null;
     researchBrief?: ResearchBrief | null;
     sectorModel?: SectorModel | null;
+    argumentFrame?: ArgumentFrame | null;
+    projectIntent?: ProjectIntent | null;
     outlineDraft?: OutlineDraft | null;
     narrativeMarkdown?: string;
     deterministicReview?: ReviewReport | null;
@@ -132,6 +139,38 @@ ${constraintPack.articleTypeProfile.specializedChecks.map((item) => `- ${item}`)
 这些是风格候选，不是硬性计数。只有在服务连续推进、事实表达和读者判断时才使用；不要为了凑风格指标硬塞短句、疑问句、口语词或谦逊铺垫。`;
   const thinkCardText = input.project?.thinkCard ? formatThinkCard(input.project.thinkCard) : "暂无 ThinkCard。";
   const styleCoreText = input.project?.styleCore ? formatStyleCore(input.project.styleCore) : "暂无 StyleCore。";
+  const projectIntent = input.projectIntent ?? (input.project ? normalizeProjectIntent(input.project) : null);
+  const projectIntentText = projectIntent
+    ? JSON.stringify(projectIntent, null, 2)
+    : "暂无。使用项目原始 topic / coreQuestion / thesis，但不要复用内部候选角度长句。";
+  const argumentShapeDefinitions = `
+- judgement_essay：直接回答“高估/低估/值不值/还能不能买/泡沫/是否错过”等判断题。
+- misread_correction：先解释市场为什么看错，再给正确理解框架。
+- signal_reinterpretation：把认购冷、成交热、挂牌多、去化慢、土拍冷、商业延期等信号重新解释。
+- lifecycle_reframe：说明成熟、老牌、不讲故事、兑现完、天花板等生命周期变化。
+- asset_tiering：把核心资产、普通资产、弱资产分层，解释分化和哪类房子更成立。
+- mismatch_diagnosis：诊断价格、供给、规划、需求、标签之间的错配。
+- tradeoff_decision：帮助读者在买不买、怎么选、接受什么代价之间做取舍。
+- risk_decomposition：拆解风险、坑、站岗、接盘等问题的触发条件和传导路径。
+- comparison_benchmark：回答 A 和 B 怎么选，或用标杆比较证明判断。
+- planning_reality_check：校验规划、TOD、地铁、商业、产业的兑现路径和现实影响。
+- cycle_timing：判断当前是早了、晚了、错过了，还是需要等确认信号。
+- buyer_persona_split：按不同买家画像拆分结论，说明谁适合、谁不适合。
+`.trim();
+  const argumentShapeOutlineRules = `
+- judgement_essay：section 应按“表面信号 -> 真正矛盾 -> 支撑判断 -> 反面风险 -> 买房人决策框架”推进；不要创建 3+ consecutive zone-heading sections，不要把北广场/南广场/商务区/春申写成连续 section headings，zone 只能作为 supportingClaims 内部证据。
+- misread_correction：section 应解释误读从哪里来、为什么有迷惑性、真实边界是什么、读者该如何改看法；不要只喊“大家误解了”或改写成片区导览。
+- signal_reinterpretation：section 应围绕表面信号、常见解读、反向解释、证据校验、下一步观察组织；不要把认购/成交/挂牌信号堆成资料清单。
+- lifecycle_reframe：section 应围绕旧阶段、转折点、新约束、新价值逻辑、读者时点组织；不要把成熟板块写成怀旧或静态配套说明。
+- asset_tiering：section 可以写资产/zone，但必须按核心资产、普通资产、边缘资产、错买风险分组；不要按地理顺序 tour。
+- mismatch_diagnosis：section 应围绕预期匹配、现实错配、错配原因、价格后果、修正判断组织；不要只列优缺点。
+- tradeoff_decision：section 应围绕读者目标、可选方案、取舍维度、不可接受成本、决策规则组织；不要写成泛泛购房建议。
+- risk_decomposition：section 应围绕风险命题、触发条件、传导链、谁承担、缓解阈值组织；不要把风险写成情绪化提醒。
+- comparison_benchmark：section 应围绕选择维度、同点、差异点、价差/价值差、比较能证明什么组织；不要按双方地理板块轮流介绍。
+- planning_reality_check：section 应围绕 planning promise、兑现条件、bottleneck、beneficiary range、pricing consequence 组织；不要复述规划公示。
+- cycle_timing：section 应围绕周期位置、确认信号、滞后风险、下一确认点、行动窗口组织；不要写成宏观行情空话。
+- buyer_persona_split：section 应围绕人群分叉、各自重视什么、哪些事实相关、谁应该行动、谁应该回避组织；不要把人群拆分写成销售画像。
+`.trim();
 
   switch (task) {
     case "source_card_summarizer":
@@ -560,6 +599,93 @@ ${formatSectorModelSourceCards(input.sourceCards || [])}
 请从真实生活边界而不是行政边界出发拆板块。
         `.trim(),
       };
+    case "argument_framer":
+      return {
+        system: `
+你是一位判断型文章的论证编辑。你的任务是产出 ArgumentFrame：先决定文章的论证形状，再给后续提纲提供判断路径。
+你只产出严格 JSON，不要输出额外文字，不要加 Markdown，不要加代码围栏。
+
+允许的 ArgumentShape 只有：
+${ARGUMENT_SHAPES.map((shape) => `- ${shape}`).join("\n")}
+
+12 种 shape 定义：
+${argumentShapeDefinitions}
+
+输出 JSON 必须完全符合：
+{
+  "primaryShape": "judgement_essay",
+  "secondaryShapes": [],
+  "centralTension": "全文最核心的矛盾",
+  "answer": "对标题问题的直接回答，不能绕开问题",
+  "notThis": ["这篇明确不要写成什么"],
+  "supportingClaims": [
+    {
+      "id": "claim-1",
+      "claim": "支撑 answer 的论点",
+      "role": "open|explain|prove|counter|decision|return",
+      "evidenceIds": ["source card id"],
+      "mustUseEvidenceIds": ["必须写进正文的 source card id"],
+      "zonesAsEvidence": ["可以作为证据的片区名"],
+      "shouldNotBecomeSection": false
+    }
+  ],
+  "strongestCounterArgument": "最强反方观点",
+  "howToHandleCounterArgument": "正文如何处理反方，不是简单否定",
+  "readerDecisionFrame": "读者最后怎么用这篇文章做判断"
+}
+
+shape 选择规则：
+1. 标题或主题包含“高估 / 低估 / 值不值 / 还能不能买 / 泡沫 / 是否错过”，primaryShape 必须优先选 judgement_essay，除非用户明确要求地图式板块导览。
+2. 包含“大家都说 / 被误解 / 真相 / 不是你想的”，优先选 misread_correction。
+3. 包含“认购冷 / 成交热 / 挂牌多 / 去化慢 / 土拍冷 / 商业延期”，优先选 signal_reinterpretation 或 mismatch_diagnosis。
+4. 包含“成熟 / 老牌 / 不讲故事 / 兑现完 / 天花板”，优先选 lifecycle_reframe。
+5. 包含“核心资产 / 普通资产 / 分化 / 哪类房子”，优先选 asset_tiering。
+6. 包含“风险 / 坑 / 站岗 / 接盘”，优先选 risk_decomposition。
+7. 包含“买不买 / 适合谁 / 怎么选”，优先选 tradeoff_decision 或 buyer_persona_split。
+8. 包含“规划 / TOD / 地铁 / 商业 / 产业”，优先选 planning_reality_check。
+9. 包含“A 和 B 怎么选”或两个板块/资产的显性比较，优先选 comparison_benchmark。
+
+硬规则：
+1. 必须且只能选择一个 primaryShape。
+2. secondaryShapes 最多两个；没有必要就输出空数组。
+3. primaryShape 决定文章结构，secondaryShapes 只能影响局部处理。
+4. SectorModel 是证据地图，不是文章结构。
+5. 不要把 zones 顺序直接变成连续章节；除非 primaryShape 是 sector_map-like。当前 12 种 ArgumentShape 没有纯 sector_map，所以默认把 zones 当证据，不当目录。
+6. 如果 topic 是 judgement question，不要产出 map tour；片区只能进入 supportingClaims 的 evidence 或 zonesAsEvidence。
+7. supportingClaims 必须是论点，不是章节标题清单；每条 claim 都要有稳定 id，例如 claim-1。
+8. 事实型 claim 必须绑定 evidenceIds；必须进入正文的证据放入 mustUseEvidenceIds。没有资料支撑时不要编事实。
+9. ProjectIntent.cleanQuestion / cleanThesis / cleanReaderPayoff 是清洗后的写作意图；不要把 ProjectIntent.forbiddenInternalPhrases 当成标题、核心问题或论点复用。
+        `.trim(),
+        user: `
+项目主题：${input.project?.topic}
+文章类型：${input.project?.articleType}
+主命题：${input.project?.thesis}
+核心问题：${input.project?.coreQuestion}
+
+ProjectIntent（清洗后的写作意图；优先使用 cleanQuestion / cleanThesis / cleanReaderPayoff）：
+${projectIntentText}
+
+ThinkCard：
+${thinkCardText}
+
+StyleCore：
+${styleCoreText}
+
+ResearchBrief：
+${JSON.stringify(input.researchBrief ?? null, null, 2)}
+
+TopicScorecard：
+${JSON.stringify(input.project?.topicMeta?.topicScorecard ?? null, null, 2)}
+
+SectorModel（证据地图，不是文章目录）：
+${JSON.stringify(input.sectorModel ?? null, null, 2)}
+
+资料卡：
+${(input.sourceCards || [])
+  .map((card) => `- ${card.id} | ${card.title} | 摘要：${card.summary} | 证据：${card.evidence} | 片区：${card.zone || "未标注"}`)
+  .join("\n")}
+        `.trim(),
+      };
     case "outline_writer":
       return {
         system: `
@@ -568,6 +694,12 @@ ${formatSectorModelSourceCards(input.sourceCards || [])}
 ${styleLearningRules}
 ${authorBrainText}
 你不是在生成“段落任务书”，而是在生成“读者问题链”。
+ArgumentFrame 优先级高于 SectorModel。primaryShape 决定文章结构，secondaryShapes 只能影响局部处理。
+ProjectIntent 优先级高于项目原始长标题、selectedAngleTitle、StyleCore、HAMD、writingMoves 里的内部候选角度长句。
+SectorModel is evidence map, not article structure. SectorModel 是证据地图，不是默认章节目录。
+outline_writer 必须显式避开 argumentFrame.notThis 里的每一项，不得用同义改写绕过。
+outline_writer 必须显式避开 ProjectIntent.forbiddenInternalPhrases；如果 StyleCore / HAMD / writingMoves 里出现这些长句，视为内部素材，不得写进提纲标题、core question 或正文表达。
+section roles 必须服从 ArgumentFrame.primaryShape，同时仍然要写 continuityLedger。
 每一节必须回答上一节留下的问题，并给下一节制造必要性。
 如果两节交换顺序后仍然成立，说明这两节不是连续推进。
 如果删掉某一节后全文主线没有损失，说明这一节是填充。
@@ -631,6 +763,14 @@ JSON 结构：
 }
 sections 至少 5 段，且必须是连续接力卡，不是空标题列表，也不是彼此独立的任务卡。
 move / break / scene / cost / counterView / culture lift / callback / styleObjective 可以作为编辑建议，但不能把每一节都写成同一套风格动作清单。
+ArgumentShape 提纲规则：
+${argumentShapeOutlineRules}
+证据规则：
+1. Every factual supportingClaim must bind evidence.
+2. 每个 factual supportingClaim 都必须绑定 evidenceIds；必须写进正文的证据放入 mustUseEvidenceIds。
+3. A section without new facts may have empty mustUseEvidenceIds.
+4. decision / return section 如果不引入新事实，可以 evidence-light，mustUseEvidenceIds 可以为空。
+5. 不要为了让每节都有证据而硬塞资料，也不要把每个可用 source card 都强行写进每一节。
 场景溯源硬规则：
 1. 不得把资料卡里的粗颗粒事实升级成亲历现场。资料说“底商密集”，不能写成“生煎摊冒热气、修鞋铺下午三点收工”。
 2. 不得编造具体时间、感官细节、商户类型、行人行为、买家原话、带看动作，除非资料卡原文明确出现。
@@ -640,8 +780,14 @@ move / break / scene / cost / counterView / culture lift / callback / styleObjec
         user: `
 项目主题：${input.project?.topic}
 主命题：${input.project?.thesis}
+ProjectIntent（清洗后的写作意图，优先级高于原始 topic / coreQuestion / selectedAngleTitle）：
+${projectIntentText}
 板块建模：
 ${JSON.stringify(input.sectorModel, null, 2)}
+ArgumentFrame（论证形状；primaryShape 决定文章结构，SectorModel 只作为证据地图）：
+${input.argumentFrame ? JSON.stringify(input.argumentFrame, null, 2) : "暂无"}
+必须避开的 notThis：
+${input.argumentFrame?.notThis?.length ? input.argumentFrame.notThis.map((item) => `- ${item}`).join("\n") : "暂无"}
 HKRR：
 ${JSON.stringify(input.project?.hkrr, null, 2)}
 ThinkCard：
@@ -658,12 +804,12 @@ ${profileText}
 语言资产：
 ${languageSuggestionText}
 
-要求：先纠偏，再讲空间骨架，再分区拆解，再讲供应和未来，最后回到购房者视角。
+要求：根据 ArgumentFrame.primaryShape 选择文章结构；没有 ArgumentFrame 时才退回文章类型和 SectorModel 判断。
 要求：先写 continuityLedger，再写 sections；每个 section 的 id 必须能在 continuityLedger.beats 里找到对应 sectionId。
 要求：每个 section 必须接住 inheritedQuestion，回答 answerThisSection，并在结尾留下 leavesQuestionForNext。
 要求：section 的硬约束只保留 id / heading / purpose / sectionThesis / singlePurpose / mustLandDetail / readerUsefulness / evidenceIds / mustUseEvidenceIds / transitionTarget / expectedTakeaway。
 要求：move / break / bridge / styleObjective / discoveryTurn / counterView / callbackTarget 只是编辑建议，可以留空；不要为了填满字段把每节写成同一种任务卡。
-要求：每个 section 的 mustUseEvidenceIds 至少 1 个，并且必须是这段正文后续真正要挂进文中的证据。
+要求：不要强制每个 section 都有 mustUseEvidenceIds；只有本节引入新事实/资料判断时才填写。没有新事实的 decision / return section 可以为空。
         `.trim(),
       };
     case "draft_writer":
@@ -674,7 +820,13 @@ ${languageSuggestionText}
 可以模仿思考方向，但不要逐字复用历史样本，也不要套用现成抓手词。
 ${styleLearningRules}
 ${authorBrainText}
-你不是逐段完成任务书，而是沿着 ContinuityLedger 写一篇连续文章。
+你不是逐段完成任务书，而是沿着 ArgumentFrame + ContinuityLedger 写一篇连续文章。
+ProjectIntent 是标题、核心问题、主判断和读者收益的干净版本；正文不得复用 ProjectIntent.forbiddenInternalPhrases。
+ArgumentFrame decides the article's argumentative shape. ArgumentFrame 决定文章的论证形状。
+ContinuityLedger decides section handoff. ContinuityLedger 决定 section 之间如何接力。
+Outline sections are draft plan, not a prison. Outline sections 是写作计划，不是牢笼。
+如果 Outline sections 和 ArgumentFrame 冲突，优先服从 ArgumentFrame。
+如果 outline sections 看起来像 map tour，但 primaryShape=judgement_essay，必须把 zone material 合并进 claim-led sections。
 写作规则：
 1. 每一节开头必须自然回应上一节留下的问题，但不要机械使用“上文说到”“接下来我们看”。
 2. 每一节只推进一件事。
@@ -684,31 +836,45 @@ ${authorBrainText}
 6. 禁止为了完成风格指标硬塞短句、疑问句、人物场景、文化升维或口语词。
 7. 如果缺少真实材料，不要编造现场感，直接写成分析判断，或标注“这里需要作者补真实观察”。
 8. 最终文章读起来应该像一个人在连续思考，不像 5 张独立卡片。
+9. 每一节必须服务一个 supportingClaim，或服务两个 supportingClaims 之间的 deliberate transition。
+10. 不要因为 sourceCards 或 SectorModel 里有材料就写进正文；材料必须服务 ArgumentFrame.answer / supportingClaims / readerDecisionFrame。
+11. argumentFrame.notThis 里的每一项都是禁区，正文不得出现这些写法。
 你必须直接输出 Markdown 正文，不要输出 JSON，不要输出额外解释，不要加代码围栏。
 
 硬性要求：
 1. 关键判断后必须插入资料卡引用标记，格式固定为 [SC:sourceId]
 2. 必须有一句话主判断
-3. 必须解释空间结构
-4. 必须体现 sectorModel 中已有片区的拆解，不要把片区强行压缩成固定数量
+3. ArgumentFrame decides the article's argumentative shape；不要把 SectorModel 当章节目录
+4. 必须沿着 ArgumentFrame 使用 sectorModel 中的片区和资产：zones/assets are evidence, not sections
 5. 必须沿着 ContinuityLedger 写：回应 inheritedQuestion，回答 answerThisSection，写出 newInformation，并留下 leavesQuestionForNext
 6. 每一节必须给读者一个新的判断、事实、机制解释或决策用途，不能只是完成风格动作
 7. 不要写成中介软文
 8. 只输出 narrativeMarkdown，不要额外生成第二篇文章
-9. 如果某段需要实地体感但你没有素材，用「（待作者补：XXX）」标注，不要编造假体感。具体人物场景如果是推测的，也要标注「（待作者确认：XXX）」
+9. 如果某段需要实地体感但你没有素材，用「[待作者补：具体场景]」或「（待作者补：XXX）」标注，不要编造假体感。具体人物场景如果是推测的，也要标注「（待作者确认：XXX）」
 10. 节奏、短句、疑问句、口语化、文化升维、代价感和谦逊铺垫都是软建议，后续 review / polish 会检查；本轮不要为了完成风格指标牺牲事实和连续性
 11. 场景溯源规则：source_quote / source_paraphrase 可以具体写；source_inference 必须写成“从资料看 / 更像 / 需要实地确认”；author_needed 必须保留「[待作者补：...]」。不得编造买家原话、确切时间、气味声响、店铺动作、伪采访。
 12. 资料说“早晚高峰拥堵”时，只能写拥堵这个粗颗粒事实；不能升级成“早上七点半报春路电动车接送孩子”这类未在资料中出现的亲历场景。
+13. 事实型 claim 需要 [SC:id] 引用，但不是每个段落都需要 citation；不要把 optional evidence 强行塞进正文。
+14. judgement_essay 专项：开头必须抛出 centralTension，尽早回答 headline question；用 zones/assets 作 evidence，不要写 zone-by-zone board explanation。
+15. 如果项目原始 topic / selectedAngleTitle / StyleCore / HAMD / writingMoves 里有内部候选角度长句，以 ProjectIntent.cleanTitle / cleanQuestion / cleanThesis / cleanReaderPayoff 为准，不得把 forbiddenInternalPhrases 写入正文。
         `.trim(),
         user: `
 项目主题：${input.project?.topic}
 主命题：${input.project?.thesis}
 核心问题：${input.project?.coreQuestion}
+ProjectIntent（清洗后的写作意图，优先级高于原始 topic / coreQuestion / selectedAngleTitle）：
+${projectIntentText}
 开题卡：
 ${thinkCardText}
 
 风格核：
 ${styleCoreText}
+
+ArgumentFrame：
+${input.outlineDraft?.argumentFrame ? JSON.stringify(input.outlineDraft.argumentFrame, null, 2) : "暂无。没有 ArgumentFrame 时，仍要先服从 ContinuityLedger，避免写成资料地图导览。"}
+
+必须避开的 notThis：
+${input.outlineDraft?.argumentFrame?.notThis?.length ? input.outlineDraft.argumentFrame.notThis.map((item) => `- ${item}`).join("\n") : "暂无"}
 
 板块建模摘要：
 - 总判断：${input.sectorModel?.summaryJudgement}
@@ -735,6 +901,12 @@ ${(input.outlineDraft?.sections ?? [])
 
 ContinuityLedger：
 ${input.outlineDraft?.continuityLedger ? JSON.stringify(input.outlineDraft.continuityLedger, null, 2) : "暂无。没有 continuityLedger 时，请沿用现有提纲写法，但仍要避免独立任务卡式段落。"}
+
+写作优先级：
+1. ArgumentFrame.answer / supportingClaims / readerDecisionFrame
+2. ContinuityLedger 的 inheritedQuestion / answerThisSection / newInformation / leavesQuestionForNext
+3. Outline sections 的 heading / mustLandDetail / evidenceIds
+4. SectorModel 和 sourceCards 中能服务论点的材料
 
 风格样本：
 ${input.styleReference || "暂无风格样本"}
@@ -805,7 +977,7 @@ ${styleLearningRules}
 ${authorBrainText}
 你必须直接输出完整 Markdown 正文，不要输出 JSON，不要输出额外说明，不要加代码围栏。
 
-根据 ContinuityFlags：
+根据 ContinuityFlags 和 ArgumentQualityFlags：
 - 可以删节
 - 可以合并节
 - 可以重排节
@@ -825,16 +997,32 @@ ${authorBrainText}
 5. 保留所有仍然有效的 [SC:id] 引用；如果删掉引用所在句，必须把引用迁移到仍然使用该事实的句子。
 6. 如果正文没有兑现 ledger 的 answerThisSection / newInformation，重写本节主判断和关键事实，不要只调顺语气。
 7. 如果本节缺少 mustUseEvidenceIds，把资料卡织进对应判断；普通 evidenceIds 是推荐证据，不能为了保留引用而编造事实或硬塞材料。
+
+ArgumentQuality 结构重写规则：
+1. 如果 issueTypes 包含 map_tour_in_judgement_essay：不要删除有用的 zone facts；把 zone facts 移到 supporting claims 下面；把 zone headings 换成 claim headings。坏例子：北广场 / 南广场 / 商务区 / 春申。好例子：新房冷为什么不等于板块崩 / 成熟确定性为什么还能撑价 / 真正撑价的是少数核心资产 / 成熟为什么也是天花板 / 买房人怎么判断。
+2. 如果 issueTypes 包含 headline_not_answered：必须让 ArgumentFrame.answer 或同等明确的中心判断出现在全文前 20%-25%，不要把结论埋到结尾。
+3. 如果 issueTypes 包含 counterargument_missing：加入真实反方段落或反方处理段，先承认反方成立的边界，再收束回主判断；不要制造稻草人。
+4. 如果 issueTypes 包含 decision_frame_weak：结尾必须给读者决策框架，说明该问什么、该避开什么、谁可以买、谁不该买。
+5. 无论处理哪类 ArgumentQuality 问题，都要保留 citations、source-backed facts、ContinuityLedger handoff，且不能编造场景。
         `.trim(),
         user: `
 项目主题：${input.project?.topic}
 主命题：${input.project?.thesis}
+
+ArgumentFrame：
+${input.argumentFrame ? JSON.stringify(input.argumentFrame, null, 2) : input.outlineDraft?.argumentFrame ? JSON.stringify(input.outlineDraft.argumentFrame, null, 2) : "暂无"}
 
 当前正文：
 ${input.narrativeMarkdown || ""}
 
 ContinuityLedger：
 ${input.outlineDraft?.continuityLedger ? JSON.stringify(input.outlineDraft.continuityLedger, null, 2) : "暂无"}
+
+continuityFlags：
+${JSON.stringify(input.deterministicReview?.continuityFlags ?? [], null, 2)}
+
+argumentQualityFlags：
+${JSON.stringify(input.deterministicReview?.argumentQualityFlags ?? [], null, 2)}
 
 结构性重写意图：
 ${JSON.stringify(input.structuralRewriteIntent ?? input.rewriteIntent ?? {}, null, 2)}

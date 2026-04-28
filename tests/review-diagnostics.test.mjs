@@ -1158,3 +1158,143 @@ test("L1 failure hard blocks vitality and L2 failure semi blocks vitality", () =
   assert.equal(l2Vitality.hardBlocked, false);
   assert.equal(l2Vitality.semiBlocked, true);
 });
+
+function argumentReviewInput({ headings, answer = "莘庄不是简单高估，但安全边际不厚。", counter = "反方认为片区差异太大，不能一概而论。", markdownBody = "" } = {}) {
+  const outlineSections = headings.map((heading, index) => ({
+    id: `s${index + 1}`,
+    heading,
+    purpose: "论证判断",
+    sectionThesis: "服务主判断",
+    singlePurpose: "推进论证",
+    mustLandDetail: "价格支撑和风险边界",
+    sceneOrCost: "",
+    mainlineSentence: "回到高估问题",
+    callbackTarget: "",
+    microStoryNeed: "",
+    discoveryTurn: "",
+    opposingView: "",
+    readerUsefulness: "帮助读者判断",
+    evidenceIds: [`sc_${index + 1}`],
+    mustUseEvidenceIds: [],
+    tone: "",
+    move: "",
+    break: "",
+    bridge: "",
+    transitionTarget: "",
+    counterPoint: "",
+    styleObjective: "",
+    keyPoints: [],
+    expectedTakeaway: "形成判断",
+  }));
+  const body =
+    markdownBody ||
+    headings
+      .map((heading, index) => `## ${heading}\n${answer} 这一节说明价格支撑和风险边界。[SC:sc_${index + 1}]`)
+      .join("\n\n");
+
+  return {
+    ...baseReviewInput(),
+    thesis: answer,
+    outlineDraft: {
+      hook: "开头",
+      argumentFrame: {
+        primaryShape: "judgement_essay",
+        secondaryShapes: [],
+        centralTension: "价格支撑和安全边际之间的张力。",
+        answer,
+        notThis: ["不要写成板块分区说明书", "不要把 SectorModel.zones 直接变成章节目录"],
+        supportingClaims: [
+          {
+            id: "claim-1",
+            claim: "价格支撑来自成熟配套和供应约束。",
+            role: "prove",
+            evidenceIds: ["sc_1"],
+            mustUseEvidenceIds: ["sc_1"],
+            zonesAsEvidence: ["北广场", "南广场"],
+            shouldNotBecomeSection: true,
+          },
+        ],
+        strongestCounterArgument: counter,
+        howToHandleCounterArgument: "承认片区差异，但把片区作为判断边界。",
+        readerDecisionFrame: "读者按预算、等待周期和风险承受力判断。",
+      },
+      sections: outlineSections,
+      closing: "结尾",
+    },
+    sectorModel: {
+      summaryJudgement: "莘庄房价有支撑，但安全边际不厚。",
+      misconception: "只把莘庄看成外环外贵价板块。",
+      spatialBackbone: "南北广场、商务区和春申共同构成价格支撑。",
+      cutLines: ["铁路", "沪闵路"],
+      zones: [
+        { id: "z1", name: "北广场", label: "学区支撑", description: "学区和次新支撑价格。", evidenceIds: ["sc_1"], strengths: ["学区"], risks: ["贵"], suitableBuyers: ["改善"] },
+        { id: "z2", name: "南广场", label: "老城底盘", description: "老城生活底盘强。", evidenceIds: ["sc_2"], strengths: ["成熟"], risks: ["房龄"], suitableBuyers: ["刚需"] },
+        { id: "z3", name: "商务区", label: "TOD预期", description: "商务区承接规划预期。", evidenceIds: ["sc_3"], strengths: ["TOD"], risks: ["兑现慢"], suitableBuyers: ["改善"] },
+        { id: "z4", name: "春申", label: "外溢承接", description: "春申承接外溢。", evidenceIds: ["sc_4"], strengths: ["承接"], risks: ["通勤"], suitableBuyers: ["首改"] },
+      ],
+      supplyObservation: "新增供应有限。",
+      futureWatchpoints: ["TOD"],
+      evidenceIds: ["sc_1", "sc_2", "sc_3", "sc_4"],
+    },
+    articleDraft: {
+      analysisMarkdown: "",
+      editedMarkdown: "",
+      narrativeMarkdown: `# 莘庄房价高估了吗？\n\n${answer}\n\n${body}\n\n最后，读者要看预算、等待周期和风险承受力。`,
+    },
+    sourceCards: ["sc_1", "sc_2", "sc_3", "sc_4"].map((id) => ({
+      id,
+      title: `资料${id}`,
+      summary: "摘要",
+      evidence: "证据",
+      credibility: "高",
+      sourceType: "media",
+      supportLevel: "high",
+      claimType: "fact",
+      timeSensitivity: "timely",
+      intendedSection: "",
+      reliabilityNote: "",
+      tags: [],
+      zone: "",
+      rawText: "",
+      projectId: "p",
+      url: "",
+      note: "",
+      publishedAt: "",
+      createdAt: "",
+    })),
+  };
+}
+
+test("judgement essay zone-heading tour triggers argument quality map tour flag and structural rewrite", () => {
+  const review = runDeterministicReview(argumentReviewInput({ headings: ["北广场", "南广场", "商务区", "春申"] }));
+  const flag = review.argumentQualityFlags?.find((item) => item.type === "map_tour_in_judgement_essay");
+
+  assert.equal(flag?.severity, "fail");
+  assert.ok(review.argumentQualityFlags?.some((item) => item.type === "zones_used_as_structure_not_evidence"));
+  assert.ok(review.structuralRewriteIntents?.some((intent) => intent.issueTypes.includes("map_tour_in_judgement_essay")));
+  assert.ok(review.structuralRewriteIntents?.some((intent) => intent.suggestedRewriteMode === "rewrite_section_roles" || intent.suggestedRewriteMode === "merge_sections"));
+});
+
+test("judgement essay claim-led headings do not trigger map tour flag", () => {
+  const review = runDeterministicReview(argumentReviewInput({ headings: ["表面信号", "真正矛盾", "支撑判断", "反面风险", "买房人决策框架"] }));
+
+  assert.ok(!(review.argumentQualityFlags ?? []).some((item) => item.type === "map_tour_in_judgement_essay"));
+});
+
+test("generic argument answer triggers thesis_too_generic", () => {
+  const review = runDeterministicReview(argumentReviewInput({ headings: ["表面信号", "真正矛盾"], answer: "具体看情况" }));
+
+  assert.equal(review.argumentQualityFlags?.find((item) => item.type === "thesis_too_generic")?.severity, "fail");
+});
+
+test("counterargument_missing triggers when ArgumentFrame counterargument is not addressed", () => {
+  const review = runDeterministicReview(
+    argumentReviewInput({
+      headings: ["表面信号", "真正矛盾"],
+      counter: "反方认为新增供应会压低价格。",
+      markdownBody: "## 表面信号\n莘庄不是简单高估，但安全边际不厚。[SC:sc_1]\n\n## 真正矛盾\n价格支撑来自成熟配套和供应约束，所以读者要看预算和风险。[SC:sc_2]",
+    }),
+  );
+
+  assert.equal(review.argumentQualityFlags?.find((item) => item.type === "counterargument_missing")?.severity, "warn");
+});

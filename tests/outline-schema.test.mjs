@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+process.env.MODEL_MODE = "mock";
+
 const { buildPromptTask } = await import("../lib/prompt-engine.ts");
 const { buildProjectMarkdown } = await import("../lib/markdown.ts");
 const { runStructuredTask } = await import("../lib/llm.ts");

@@ -1,6 +1,7 @@
 import { runStructuredTask } from "@/lib/llm";
 import { buildAnalysisDraft } from "@/lib/markdown";
 import { extractMarkdownParagraphs, replaceMarkdownParagraphAt } from "@/lib/markdown-blocks";
+import { normalizeProjectIntent } from "@/lib/project-intent";
 import { buildStyleReference, getOutlineDraft, getProject, getSectorModel, listSourceCards, saveArticleDraft, updateProject } from "@/lib/repository";
 import { runDeterministicReview } from "@/lib/review";
 import { canGenerateDraft } from "@/lib/workflow";
@@ -35,6 +36,7 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
   if (!sectorModel || !outlineDraft) {
     throw new JobError("missing_prerequisites", "请先完成板块建模和提纲生成。");
   }
+  const projectIntent = normalizeProjectIntent(project);
   context.log("info", "bundle_loaded", "已读取 ProjectBundle。", {
     sourceCardCount: sourceCards.length,
     outlineSectionCount: outlineDraft.sections.length,
@@ -45,6 +47,7 @@ export async function generateDraftStep(input: { projectId: string; forceProceed
     "draft_writer",
     {
       project,
+      projectIntent,
       sourceCards,
       sectorModel,
       outlineDraft,
@@ -310,6 +313,7 @@ async function applyStructuralRewritePipeline(input: {
         project: input.project,
         sourceCards: input.sourceCards,
         sectorModel: input.sectorModel,
+        argumentFrame: input.outlineDraft.argumentFrame ?? null,
         outlineDraft: input.outlineDraft,
         narrativeMarkdown: nextMarkdown,
         deterministicReview: input.review,
