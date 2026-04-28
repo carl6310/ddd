@@ -74,6 +74,28 @@ test("outline writer prompt requires continuity ledger relay-card rules", () => 
   assert.match(task.system, /不是彼此独立的任务卡/);
 });
 
+test("outline writer downgrades style action fields to optional suggestions", () => {
+  const task = buildPromptTask("outline_writer", {
+    project: projectFixture({ hkrr: {} }),
+    sectorModel: {
+      summaryJudgement: "总判断",
+      misconception: "误解点",
+      spatialBackbone: "骨架",
+      cutLines: ["路"],
+      zones: [],
+      supplyObservation: "供应",
+      futureWatchpoints: [],
+      evidenceIds: [],
+    },
+  });
+
+  assert.match(task.system, /ContinuityLedger|continuityLedger/);
+  assert.match(task.user, /move \/ break \/ bridge \/ styleObjective \/ discoveryTurn \/ counterView \/ callbackTarget 只是编辑建议，可以留空/);
+  assert.match(task.system, /可选：这一段可参考的写作动作/);
+  assert.doesNotMatch(task.user, /每个 section 的 move \/ break \/ bridge \/ styleObjective \/ singlePurpose \/ transitionTarget \/ discoveryTurn 都必须可执行/);
+  assert.doesNotMatch(task.user, /不能写空词/);
+});
+
 test("mock outline output includes optional continuity ledger while old outlines remain compatible", async () => {
   const outline = await runStructuredTask("outline_writer", {
     project: {

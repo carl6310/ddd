@@ -120,6 +120,15 @@ ${constraintPack.articleTypeProfile.specializedChecks.map((item) => `- ${item}`)
 口语化要求：全文至少用到 5 个以上口语化转场/情绪/谦逊词组，让文章读起来像真人在聊天。
 节奏要求：全文至少 3 处短句独立成段制造停顿，至少 2 处疑问句作节奏打破。
 谦逊要求：在给出核心判断前，至少有 1 处谦逊铺垫。`;
+  const languageSuggestionText = `禁用表达：${constraintPack.languageAssets.bannedPhrases.join("、")}
+可参考句式：${constraintPack.languageAssets.preferredPatterns.join("、")}
+可参考口语化转场：${constraintPack.languageAssets.transitionPhrases.join("、")}
+可参考情绪表达：${constraintPack.languageAssets.emotionPhrases.join("、")}
+可参考谦逊铺垫：${constraintPack.languageAssets.humblePhrases.join("、")}
+命名原则：${constraintPack.languageAssets.namingPatterns.join("、")}
+高光动作：${constraintPack.languageAssets.highSignalMoves.join("、")}
+
+这些是风格候选，不是硬性计数。只有在服务连续推进、事实表达和读者判断时才使用；不要为了凑风格指标硬塞短句、疑问句、口语词或谦逊铺垫。`;
   const thinkCardText = input.project?.thinkCard ? formatThinkCard(input.project.thinkCard) : "暂无 ThinkCard。";
   const styleCoreText = input.project?.styleCore ? formatStyleCore(input.project.styleCore) : "暂无 StyleCore。";
 
@@ -533,22 +542,22 @@ JSON 结构：
       "sectionThesis": "这一段唯一的一句话主判断",
       "singlePurpose": "这一段唯一动作，例如先纠偏/再搭骨架/再落场景",
       "mustLandDetail": "这一段必须落地的具体细节或判断",
-      "sceneOrCost": "这一段必须落的人物场景或现实代价，没有就写为什么没有",
+      "sceneOrCost": "可选：这一段如果需要人物场景或现实代价，写清材料依据；没有就留空",
       "mainlineSentence": "这一段怎么把全文主线重新拽回来",
-      "callbackTarget": "这一段要回扣哪一个前文锚点",
-      "microStoryNeed": "这里是否需要一个微型故事或人物体感",
-      "discoveryTurn": "这一段最关键的发现转折",
-      "opposingView": "这一段要回应的反面理解或相反证据",
+      "callbackTarget": "可选：这一段可回扣的前文锚点",
+      "microStoryNeed": "可选：这里是否需要一个微型故事或人物体感",
+      "discoveryTurn": "可选：这一段最关键的发现转折",
+      "opposingView": "可选：这一段要回应的反面理解或相反证据",
       "readerUsefulness": "这一段对读者当前决策最有用的地方",
       "evidenceIds": ["source card id"],
       "mustUseEvidenceIds": ["这一段必须真正写进正文的证据 id"],
-      "tone": "节奏/情绪说明",
-      "move": "这一段执行的写作动作，例如纠偏/搭地图/落人物/升维/回环",
-      "break": "这一段在哪里故意打破节奏",
-      "bridge": "这一段如何把读者带到下一段",
+      "tone": "可选：节奏/情绪说明",
+      "move": "可选：这一段可参考的写作动作，例如纠偏/搭地图/落人物/升维/回环",
+      "break": "可选：这一段是否需要故意打破节奏",
+      "bridge": "可选：这一段如何把读者带到下一段；不要写独立过渡句",
       "transitionTarget": "下一段承接目标是什么",
       "counterPoint": "这一段要回应的反面理解或误判",
-      "styleObjective": "这一段要兑现 StyleCore 里的哪一种风格动作",
+      "styleObjective": "可选：这一段可参考的 StyleCore 风格动作",
       "keyPoints": ["要覆盖的点"],
       "expectedTakeaway": "读者看完这一段会得到什么"
     }
@@ -577,14 +586,13 @@ ${input.styleReference || "暂无风格样本"}
 ${profileText}
 
 语言资产：
-${languageText}
+${languageSuggestionText}
 
 要求：先纠偏，再讲空间骨架，再分区拆解，再讲供应和未来，最后回到购房者视角。
 要求：先写 continuityLedger，再写 sections；每个 section 的 id 必须能在 continuityLedger.beats 里找到对应 sectionId。
 要求：每个 section 必须接住 inheritedQuestion，回答 answerThisSection，并在结尾留下 leavesQuestionForNext。
-要求：至少有一个 section 负责落人物或生活场景，至少有一个 section 负责升维，结尾 section 必须明确回环；这些是整体配置，不要机械摊派到每一节。
-要求：每个 section 必须有唯一主判断、唯一推进动作、必须落地细节、承接目标、反面理解、mainlineSentence、callbackTarget、readerUsefulness。
-要求：每个 section 的 move / break / bridge / styleObjective / singlePurpose / transitionTarget / discoveryTurn 都必须可执行，不能写空词。
+要求：section 的硬约束只保留 id / heading / purpose / sectionThesis / singlePurpose / mustLandDetail / readerUsefulness / evidenceIds / mustUseEvidenceIds / transitionTarget / expectedTakeaway。
+要求：move / break / bridge / styleObjective / discoveryTurn / counterView / callbackTarget 只是编辑建议，可以留空；不要为了填满字段把每节写成同一种任务卡。
 要求：每个 section 的 mustUseEvidenceIds 至少 1 个，并且必须是这段正文后续真正要挂进文中的证据。
         `.trim(),
       };
@@ -613,14 +621,12 @@ ${authorBrainText}
 2. 必须有一句话主判断
 3. 必须解释空间结构
 4. 必须体现 sectorModel 中已有片区的拆解，不要把片区强行压缩成固定数量
-5. 必须把写作动作卡真正写进正文，而不是只完成结构
-6. 全文整体至少落一个具体人物/生活场景、一处文化升维、一处现实代价、一句短促断裂句，并让结尾回扣开头；不要机械分摊到每一节
+5. 必须沿着 ContinuityLedger 写：回应 inheritedQuestion，回答 answerThisSection，写出 newInformation，并留下 leavesQuestionForNext
+6. 每一节必须给读者一个新的判断、事实、机制解释或决策用途，不能只是完成风格动作
 7. 不要写成中介软文
 8. 只输出 narrativeMarkdown，不要额外生成第二篇文章
-9. 口语化转场、短句、疑问句服务自然推进，不能为了凑数量硬塞；有把握时全文可以使用 5 个左右口语化表达、3 处短句、2 处疑问句
-10. 在核心判断前至少有 1 处谦逊铺垫（说实话我也不确定、这只是个人理解）
-11. 如果某段需要实地体感但你没有素材，用「（待作者补：XXX）」标注，不要编造假体感。具体人物场景如果是推测的，也要标注「（待作者确认：XXX）」
-12. 如果某段的 microStoryNeed / sceneOrCost 缺少证据支撑，必须显式用待作者补标注，不要假装亲历
+9. 如果某段需要实地体感但你没有素材，用「（待作者补：XXX）」标注，不要编造假体感。具体人物场景如果是推测的，也要标注「（待作者确认：XXX）」
+10. 节奏、短句、疑问句、口语化、文化升维、代价感和谦逊铺垫都是软建议，后续 review / polish 会检查；本轮不要为了完成风格指标牺牲事实和连续性
         `.trim(),
         user: `
 项目主题：${input.project?.topic}
@@ -651,7 +657,7 @@ ${(input.sectorModel?.zones ?? [])
 ${(input.outlineDraft?.sections ?? [])
   .map(
     (section, index) =>
-      `${index + 1}. ${section.heading} | 目标：${section.purpose} | 段落主判断：${section.sectionThesis || "待补"} | 唯一动作：${section.singlePurpose || "待补"} | 主线句：${section.mainlineSentence || "待补"} | 回环目标：${section.callbackTarget || "待补"} | 微型故事：${section.microStoryNeed || "待补"} | 发现转折：${section.discoveryTurn || "待补"} | 必须落地：${section.mustLandDetail || "待补"} | 场景/代价：${section.sceneOrCost || "待补"} | 对立观点：${section.opposingView || section.counterPoint || "待补"} | 读者用途：${section.readerUsefulness || "待补"} | 动作：${section.move} | 打破：${section.break} | 承接：${section.bridge} | 承接目标：${section.transitionTarget || "待补"} | 风格目标：${section.styleObjective} | 重点：${section.keyPoints.join("、")} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"} | 证据：${section.evidenceIds.join("、")}`,
+      `${index + 1}. ${section.heading} | 目标：${section.purpose} | 段落主判断：${section.sectionThesis || "待补"} | 本节推进：${section.singlePurpose || "待补"} | 必须落地：${section.mustLandDetail || "待补"} | 读者用途：${section.readerUsefulness || "待补"} | 承接目标：${section.transitionTarget || "待补"} | 重点：${section.keyPoints.join("、")} | 强约束证据：${section.mustUseEvidenceIds?.join("、") || "待补"} | 可选风格建议：${[section.move, section.break, section.bridge, section.styleObjective].filter(Boolean).join(" / ") || "无"}`,
   )
   .join("\n")}
 
@@ -670,7 +676,7 @@ ${(input.sourceCards || [])
 ${profileText}
 
 语言资产：
-${languageText}
+${languageSuggestionText}
         `.trim(),
       };
     case "draft_polisher":
@@ -684,7 +690,7 @@ ${languageText}
 1. 保留原有核心判断、板块结构和资料事实，不得编造新信息
 2. 保留并修正资料卡引用，格式必须是 [SC:sourceId]
 3. 开头前三段必须兑现 Hook 和主判断
-4. 中段必须补转场句，不能让论证像散装资料堆叠
+4. 不要补独立过渡句；重写上一节结尾和下一节开头，让下一节成为上一节问题的自然答案
 5. 结尾必须明确回扣开头判断或锚点
 6. 如果已有生活场景、文化升维、代价感，优先保留并压得更顺
 7. 不要把文章修成更平的“标准稿”，而是要修得更像作者本人

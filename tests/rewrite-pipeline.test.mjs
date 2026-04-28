@@ -119,14 +119,30 @@ test("draft writer prompt uses continuity ledger without requiring it", () => {
 
   assert.match(prompt.system, /沿着 ContinuityLedger/);
   assert.match(prompt.system, /不像 5 张独立卡片/);
+  assert.match(prompt.system, /节奏、短句、疑问句、口语化、文化升维、代价感和谦逊铺垫都是软建议/);
+  assert.match(prompt.system, /回应 inheritedQuestion，回答 answerThisSection，写出 newInformation/);
   assert.match(prompt.user, /ContinuityLedger/);
   assert.match(prompt.user, /为什么会误读/);
+  assert.doesNotMatch(prompt.system, /全文整体至少落一个具体人物\/生活场景、一处文化升维、一处现实代价、一句短促断裂句/);
+  assert.doesNotMatch(prompt.system, /全文至少用 5 个|至少 3 处短句|至少 2 处疑问句|至少有 1 处谦逊铺垫/);
+  assert.doesNotMatch(prompt.user, /口语化要求：全文至少|节奏要求：全文至少|谦逊要求：/);
 
   const fallback = buildPromptTask("draft_writer", {
     project: projectFixture({ topic: "塘桥", thesis: "主判断" }),
     outlineDraft: { hook: "开头", sections: [], closing: "结尾" },
   });
   assert.match(fallback.user, /暂无。没有 continuityLedger/);
+});
+
+test("draft polisher rejects standalone bridge insertion", () => {
+  const prompt = buildPromptTask("draft_polisher", {
+    project: projectFixture(),
+    narrativeMarkdown: "# 标题\n\n第一节。\n\n第二节。",
+  });
+
+  assert.match(prompt.system, /不要补独立过渡句/);
+  assert.match(prompt.system, /上一节结尾和下一节开头/);
+  assert.doesNotMatch(prompt.system, /中段必须补转场句/);
 });
 
 test("structural rewriter prompt includes continuity flags and ledger", () => {
