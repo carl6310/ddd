@@ -412,7 +412,7 @@ export function OverviewTab({
             </div>
             <CompatibilityDiagnostics selectedBundle={selectedBundle} compact />
             {selectedBundle.project.topicMeta.signalBrief ? (
-              <Card className="status-block">
+              <Card className="overview-insight-card">
                 <h3>信号简报</h3>
                 <ul className="compact-list">
                   {selectedBundle.project.topicMeta.signalBrief.signals.slice(0, 4).map((signal) => (
@@ -425,7 +425,7 @@ export function OverviewTab({
               </Card>
             ) : null}
             {selectedBundle.project.topicMeta.topicScorecard ? (
-              <Card className="status-block">
+              <Card className="overview-insight-card">
                 <h3>选题评分</h3>
                 <ul className="compact-list">
                   <li>
@@ -447,7 +447,7 @@ export function OverviewTab({
               </Card>
             ) : null}
             {selectedBundle.reviewReport?.qualityPyramid?.length ? (
-              <Card className="status-block">
+              <Card className="overview-insight-card">
                 <h3>质量金字塔</h3>
                 <ul className="compact-list">
                   {selectedBundle.reviewReport.qualityPyramid.map((layer) => (
@@ -459,7 +459,7 @@ export function OverviewTab({
                 </ul>
               </Card>
             ) : null}
-            <Card className="status-block writing-quality-card">
+            <Card className="writing-quality-card">
               <div className="quality-card-head">
                 <div>
                   <h3>写作质量</h3>
@@ -720,7 +720,7 @@ export function OverviewTab({
               <EditorStatCard label="是否硬阻塞" value={selectedBundle.project.vitalityCheck.hardBlocked ? "是" : "否"} note={selectedBundle.project.vitalityCheck.hardBlocked ? "先不要进发布整理。" : "可以继续润色或进入下一步。"} />
             </div>
             <ContainedScrollArea className="vitality-scroll-panel">
-              <Card className="status-block compact-status-block">
+              <Card className="vitality-detail-card">
                 <h3>当前不达标的是哪些</h3>
                 <p>{selectedBundle.project.vitalityCheck.overallVerdict}</p>
                 <div className="vitality-issue-strip">
@@ -734,7 +734,7 @@ export function OverviewTab({
 
               <div className="vitality-guidance-list">
                 {vitalityGuidance.map((item) => (
-                  <Card className="status-block compact-status-block vitality-guidance-card" key={item.key}>
+                  <Card className="vitality-detail-card vitality-guidance-card" key={item.key}>
                     <div className="vitality-guidance-head">
                       <div>
                         <h3>{item.title}</h3>
@@ -781,7 +781,7 @@ export function OverviewTab({
               </div>
 
               {selectedBundle.reviewReport?.revisionSuggestions?.length ? (
-                <Card className="status-block compact-status-block">
+                <Card className="vitality-detail-card">
                   <h3>模型给你的补充修稿建议</h3>
                   <ul className="compact-list compact-inline-list">
                     {selectedBundle.reviewReport.revisionSuggestions.slice(0, 6).map((tip) => (
@@ -794,7 +794,7 @@ export function OverviewTab({
               ) : null}
 
               {selectedBundle.reviewReport?.rewriteIntents?.length ? (
-                <Card className="status-block compact-status-block">
+                <Card className="vitality-detail-card">
                   <h3>定位式返工建议</h3>
                   <ul className="compact-list compact-inline-list">
                     {selectedBundle.reviewReport.rewriteIntents.slice(0, 6).map((intent) => (
@@ -810,7 +810,7 @@ export function OverviewTab({
               ) : null}
 
               {selectedBundle.reviewReport?.paragraphFlags?.length ? (
-                <Card className="status-block compact-status-block">
+                <Card className="vitality-detail-card">
                   <h3>最卡的段落</h3>
                   <ul className="compact-list compact-inline-list">
                     {selectedBundle.reviewReport.paragraphFlags.slice(0, 4).map((flag) => (
@@ -825,7 +825,7 @@ export function OverviewTab({
               ) : null}
 
               {vitalityPassed.length ? (
-                <details className="ui-card status-block">
+                <details className="ui-card vitality-detail-card">
                   <summary>已达标项（{vitalityPassed.length}）</summary>
                   <ul className="compact-list compact-inline-list mt-3">
                     {vitalityPassed.map((entry) => (

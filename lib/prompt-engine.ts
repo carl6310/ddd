@@ -354,8 +354,6 @@ JSON 结构：
     "readerAddress": "这篇最该直接点给谁看",
     "costSense": "这篇必须写清的现实代价或不成立条件"
   }
-}
-
 要求：
 1. 先写 ThinkCard，再写 StyleCore，最后再回填兼容字段 hkrr / hamd / writingMoves
 2. ThinkCard 的 topicVerdict 只能是 strong / rework / weak
@@ -450,7 +448,9 @@ JSON 结构：
   "futureWatchpoints": ["未来要看的事"],
   "evidenceIds": ["全局关键证据 id"]
 }
-zones 必须是 3-5 个，且每个 zone 至少绑定 1 个 evidenceId。
+zones 数量不要写死，必须跟随资料里的真实边界、镇街、功能组团、交通切割和生活半径来决定。
+通常可以是 3-8 个；如果资料里明确出现 6 个镇、多个独立组团或多个开发主体，不要为了凑固定数量合并成 4 个。
+确实需要合并时，必须在 description 中说明合并依据。每个 zone 至少绑定 1 个 evidenceId。
         `.trim(),
         user: `
 项目主题：${input.project?.topic}
@@ -474,11 +474,7 @@ ${profileText}
 ${languageText}
 
 资料卡：
-${(input.sourceCards || [])
-  .map(
-    (card) => `- ${card.id} | ${card.title} | ${card.summary} | 证据：${card.evidence} | 标签：${card.tags.join("/") || "无"}`,
-  )
-  .join("\n")}
+${formatSectorModelSourceCards(input.sourceCards || [])}
 
 请从真实生活边界而不是行政边界出发拆板块。
         `.trim(),
@@ -568,7 +564,7 @@ ${authorBrainText}
 1. 关键判断后必须插入资料卡引用标记，格式固定为 [SC:sourceId]
 2. 必须有一句话主判断
 3. 必须解释空间结构
-4. 必须体现 3-5 个片区的拆解
+4. 必须体现 sectorModel 中已有片区的拆解，不要把片区强行压缩成固定数量
 5. 必须把写作动作卡真正写进正文，而不是只完成结构
 6. 至少落一个具体人物/生活场景、一处文化升维、一处现实代价、一句短促断裂句，并让结尾回扣开头
 7. 不要写成中介软文
@@ -908,4 +904,30 @@ ${input.narrativeMarkdown}
         `.trim(),
       };
   }
+}
+
+function formatSectorModelSourceCards(sourceCards: SourceCard[]): string {
+  if (sourceCards.length === 0) {
+    return "暂无资料卡";
+  }
+
+  return sourceCards
+    .map((card) => {
+      const rawClue = compactText(card.rawText).slice(0, 1200);
+      return [
+        `- ${card.id} | ${card.title}`,
+        `  摘要：${card.summary}`,
+        `  证据：${card.evidence}`,
+        `  资料片区：${card.zone || "未标注"}`,
+        `  标签：${card.tags.join("/") || "无"}`,
+        rawClue ? `  原文片区线索：${rawClue}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n");
+}
+
+function compactText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }

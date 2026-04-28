@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectBundle, SourceCard } from "@/lib/types";
 import { getResearchGaps } from "@/lib/workflow";
+import { AccordionCard } from "@/components/ui/accordion-card";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { EmptyState } from "@/components/ui/empty-state";
+import { InlineTextAreaEdit, InlineTextEdit } from "@/components/ui/inline-edit";
 import { Card, Panel, Surface } from "@/components/ui/surface";
 import { useJobAction } from "@/hooks/use-job-action";
 import { analyzeEvidenceCoverage } from "@/lib/evidence/coverage";
@@ -367,127 +369,160 @@ export function ResearchTab({
               {selectedBundle.researchBrief ? <Chip tone="accent">{selectedBundle.researchBrief.mustResearch.length} 个维度</Chip> : null}
             </div>
             {selectedBundle.researchBrief ? (
-              <div className="stack">
-                <label className="research-angle-field">
-                  研究角度
-                  <AutoGrowTextarea
-                    value={selectedBundle.researchBrief.angle}
-                    onChange={(event) =>
-                      updateResearchBrief(setSelectedBundle, {
-                        ...selectedBundle.researchBrief!,
-                        angle: event.target.value,
-                      })
-                    }
-                    rows={3}
-                  />
-                </label>
+              <div className="stack research-brief-edit-shell">
+                <div className="editor-group-grid research-brief-edit-grid">
+                  <AccordionCard
+                    title="研究角度"
+                    description={briefText(selectedBundle.researchBrief.angle, "决定这一轮资料搜集围绕什么判断展开。")}
+                    defaultOpen
+                  >
+                    <label>
+                      研究角度
+                      <InlineTextAreaEdit
+                        value={selectedBundle.researchBrief.angle}
+                        onChange={(value) =>
+                          updateResearchBrief(setSelectedBundle, {
+                            ...selectedBundle.researchBrief!,
+                            angle: value,
+                          })
+                        }
+                        rows={3}
+                      />
+                    </label>
+                  </AccordionCard>
+                  <AccordionCard title="关键问题" description={`${selectedBundle.researchBrief.questions.length} 个待回答问题`}>
+                    <label>
+                      关键问题
+                      <InlineTextAreaEdit
+                        value={selectedBundle.researchBrief.questions.join("\n")}
+                        onChange={(value) =>
+                          updateResearchBrief(setSelectedBundle, {
+                            ...selectedBundle.researchBrief!,
+                            questions: splitLines(value),
+                          })
+                        }
+                        rows={6}
+                      />
+                    </label>
+                  </AccordionCard>
+                  <AccordionCard title="盲区提醒" description={`${selectedBundle.researchBrief.blindSpots.length} 个风险点`}>
+                    <label>
+                      盲区提醒
+                      <InlineTextAreaEdit
+                        value={selectedBundle.researchBrief.blindSpots.join("\n")}
+                        onChange={(value) =>
+                          updateResearchBrief(setSelectedBundle, {
+                            ...selectedBundle.researchBrief!,
+                            blindSpots: splitLines(value),
+                          })
+                        }
+                        rows={6}
+                      />
+                    </label>
+                  </AccordionCard>
+                  <AccordionCard title="阶段清单" description={`${selectedBundle.researchBrief.stageChecklist.length} 个推进动作`}>
+                    <label>
+                      阶段清单
+                      <InlineTextAreaEdit
+                        value={selectedBundle.researchBrief.stageChecklist.join("\n")}
+                        onChange={(value) =>
+                          updateResearchBrief(setSelectedBundle, {
+                            ...selectedBundle.researchBrief!,
+                            stageChecklist: splitLines(value),
+                          })
+                        }
+                        rows={5}
+                      />
+                    </label>
+                  </AccordionCard>
+                </div>
                 <ContainedScrollArea className="editor-card-grid editor-scroll-stack research-brief-list">
                   {selectedBundle.researchBrief.mustResearch.map((item, index) => (
-                    <Card className="status-block stack compact-editor-card research-brief-item" key={`must-research-${index}`}>
-                      <label>
-                        研究维度
-                        <input
-                          value={item.dimension}
-                          onChange={(event) =>
-                            updateResearchBrief(setSelectedBundle, {
-                              ...selectedBundle.researchBrief!,
-                              mustResearch: selectedBundle.researchBrief!.mustResearch.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, dimension: event.target.value } : entry,
-                              ),
-                            })
-                          }
-                        />
-                      </label>
-                      <label>
-                        为什么要研究
-                        <AutoGrowTextarea
-                          value={item.reason}
-                          onChange={(event) =>
-                            updateResearchBrief(setSelectedBundle, {
-                              ...selectedBundle.researchBrief!,
-                              mustResearch: selectedBundle.researchBrief!.mustResearch.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, reason: event.target.value } : entry,
-                              ),
-                            })
-                          }
-                          rows={3}
-                        />
-                      </label>
-                      <label>
-                        期望证据
-                        <AutoGrowTextarea
-                          value={item.expectedEvidence}
-                          onChange={(event) =>
-                            updateResearchBrief(setSelectedBundle, {
-                              ...selectedBundle.researchBrief!,
-                              mustResearch: selectedBundle.researchBrief!.mustResearch.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, expectedEvidence: event.target.value } : entry,
-                              ),
-                            })
-                          }
-                          rows={3}
-                        />
-                      </label>
-                    </Card>
+                    <details
+                      className="accordion-card research-dimension-card"
+                      key={`must-research-${index}`}
+                    >
+                      <summary className="accordion-head">
+                        <div className="accordion-title-block">
+                          <h4>{`${index + 1}. ${item.dimension || "未命名研究维度"}`}</h4>
+                          <p className="subtle">{buildResearchDimensionDescription(item)}</p>
+                        </div>
+                        <div className="accordion-icon">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
+                        </div>
+                      </summary>
+                      <div className="accordion-body stack">
+                        <label>
+                          研究维度
+                          <InlineTextEdit
+                            value={item.dimension}
+                            onChange={(value) =>
+                              updateResearchBrief(setSelectedBundle, {
+                                ...selectedBundle.researchBrief!,
+                                mustResearch: selectedBundle.researchBrief!.mustResearch.map((entry, entryIndex) =>
+                                  entryIndex === index ? { ...entry, dimension: value } : entry,
+                                ),
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          为什么要研究
+                          <InlineTextAreaEdit
+                            value={item.reason}
+                            onChange={(value) =>
+                              updateResearchBrief(setSelectedBundle, {
+                                ...selectedBundle.researchBrief!,
+                                mustResearch: selectedBundle.researchBrief!.mustResearch.map((entry, entryIndex) =>
+                                  entryIndex === index ? { ...entry, reason: value } : entry,
+                                ),
+                              })
+                            }
+                            rows={3}
+                          />
+                        </label>
+                        <label>
+                          期望证据
+                          <InlineTextAreaEdit
+                            value={item.expectedEvidence}
+                            onChange={(value) =>
+                              updateResearchBrief(setSelectedBundle, {
+                                ...selectedBundle.researchBrief!,
+                                mustResearch: selectedBundle.researchBrief!.mustResearch.map((entry, entryIndex) =>
+                                  entryIndex === index ? { ...entry, expectedEvidence: value } : entry,
+                                ),
+                              })
+                            }
+                            rows={3}
+                          />
+                        </label>
+                      </div>
+                    </details>
                   ))}
                 </ContainedScrollArea>
-                <div className="two-column">
-                  <label>
-                    关键问题
-                    <AutoGrowTextarea
-                      value={selectedBundle.researchBrief.questions.join("\n")}
-                      onChange={(event) =>
-                        updateResearchBrief(setSelectedBundle, {
-                          ...selectedBundle.researchBrief!,
-                          questions: splitLines(event.target.value),
-                        })
-                      }
-                      rows={6}
-                    />
-                  </label>
-                  <label>
-                    盲区提醒
-                    <AutoGrowTextarea
-                      value={selectedBundle.researchBrief.blindSpots.join("\n")}
-                      onChange={(event) =>
-                        updateResearchBrief(setSelectedBundle, {
-                          ...selectedBundle.researchBrief!,
-                          blindSpots: splitLines(event.target.value),
-                        })
-                      }
-                      rows={6}
-                    />
-                  </label>
-                </div>
-                <label>
-                  阶段清单
-                  <AutoGrowTextarea
-                    value={selectedBundle.researchBrief.stageChecklist.join("\n")}
-                    onChange={(event) =>
-                      updateResearchBrief(setSelectedBundle, {
-                        ...selectedBundle.researchBrief!,
-                        stageChecklist: splitLines(event.target.value),
-                      })
-                    }
-                    rows={5}
-                  />
-                </label>
                 <Button type="button" variant="secondary" size="md" onClick={saveResearchBrief} disabled={isPending}>
                   保存研究清单
                 </Button>
               </div>
             ) : (
-              <EmptyState className="stack" title="还没有研究清单">
-                <p>还没有研究清单。</p>
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="lg"
-                  onClick={() => void runProjectStep("research-brief", "研究清单已生成。")}
-                  disabled={isPending}
-                >
-                  生成研究清单
-                </Button>
+              <EmptyState
+                className="workbench-empty-state"
+                title="还没有研究清单"
+                action={
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="lg"
+                    onClick={() => void runProjectStep("research-brief", "研究清单已生成。")}
+                    disabled={isPending}
+                  >
+                    生成研究清单
+                  </Button>
+                }
+              >
+                <p>先生成研究问题和证据方向，再进入资料录入。</p>
               </EmptyState>
             )}
           </Panel>
@@ -557,11 +592,12 @@ export function ResearchTab({
                 </div>
                 <label className="source-raw-field">
                   粘贴资料原文
-                  <textarea
-                    className="source-raw-textarea"
+                  <InlineTextAreaEdit
+                    className="source-raw-editor"
                     value={sourceCardForm.rawText}
-                    onChange={(event) => setSourceCardForm({ ...sourceCardForm, rawText: event.target.value })}
+                    onChange={(value) => setSourceCardForm({ ...sourceCardForm, rawText: value })}
                     placeholder="粘贴完整原文、访谈记录或网页正文。"
+                    rows={12}
                   />
                 </label>
               </Card>
@@ -575,11 +611,23 @@ export function ResearchTab({
                 </div>
                 <label>
                   摘要
-                  <AutoGrowTextarea value={sourceCardForm.summary} onChange={(event) => setSourceCardForm({ ...sourceCardForm, summary: event.target.value })} rows={4} />
+                  <InlineTextAreaEdit
+                    className="source-digest-editor"
+                    value={sourceCardForm.summary}
+                    onChange={(value) => setSourceCardForm({ ...sourceCardForm, summary: value })}
+                    placeholder="点击补充资料摘要。"
+                    rows={5}
+                  />
                 </label>
                 <label>
                   证据片段
-                  <AutoGrowTextarea value={sourceCardForm.evidence} onChange={(event) => setSourceCardForm({ ...sourceCardForm, evidence: event.target.value })} rows={5} />
+                  <InlineTextAreaEdit
+                    className="source-digest-editor"
+                    value={sourceCardForm.evidence}
+                    onChange={(value) => setSourceCardForm({ ...sourceCardForm, evidence: value })}
+                    placeholder="点击摘出可以进入正文的证据片段。"
+                    rows={5}
+                  />
                 </label>
               </Card>
 
@@ -695,7 +743,7 @@ export function ResearchTab({
               <Chip tone="accent">{selectedBundle.sourceCards.length} 张</Chip>
             </div>
             <div className="two-column evidence-summary-grid">
-              <Card className="status-block evidence-summary-card">
+              <Card className="evidence-summary-card">
                 <div className="evidence-summary-head">
                   <div>
                     <h3>证据摘要</h3>
@@ -714,7 +762,7 @@ export function ResearchTab({
                   ))}
                 </div>
               </Card>
-              <Card className="status-block evidence-gap-card">
+              <Card className="evidence-gap-card">
                 <h3>待补证据</h3>
                 <ul className="compact-list">
                   {evidenceAnalysis.criticalJudgementAlerts.length > 0 ? (
@@ -733,7 +781,7 @@ export function ResearchTab({
               </Card>
             </div>
             {orphanSourceCards.length > 0 ? (
-              <Card className="status-block evidence-action-block">
+              <Card className="evidence-action-block">
                 <div className="evidence-action-head">
                   <div>
                     <h3>未进入正文链路的资料卡</h3>
@@ -829,11 +877,16 @@ export function ResearchTab({
                   );
                 })
               ) : (
-                <EmptyState className="stack" title="还没有资料卡">
-                  <p>还没有资料卡。</p>
-                  <Button variant="primary" size="lg" type="button" onClick={() => setActiveSection("source-form")}>
-                    去录入第一张资料卡
-                  </Button>
+                <EmptyState
+                  className="workbench-empty-state"
+                  title="还没有资料卡"
+                  action={
+                    <Button variant="primary" size="lg" type="button" onClick={() => setActiveSection("source-form")}>
+                      去录入第一张资料卡
+                    </Button>
+                  }
+                >
+                  <p>资料索引会在这里展示可引用资料、证据片段和来源状态。</p>
                 </EmptyState>
               )}
             </ContainedScrollArea>
@@ -843,7 +896,7 @@ export function ResearchTab({
                 <small>按片区 / 可信度</small>
               </summary>
               <div className="two-column source-library-groups">
-                <Card className="status-block source-library-group">
+                <Card className="source-library-group">
                   <h3>按片区分组</h3>
                   <ul className="compact-list">
                     {Object.entries(sourceCardGroups.byZone).map(([group, cards]) => (
@@ -854,7 +907,7 @@ export function ResearchTab({
                     ))}
                   </ul>
                 </Card>
-                <Card className="status-block source-library-group">
+                <Card className="source-library-group">
                   <h3>按可信度分组</h3>
                   <ul className="compact-list">
                     {Object.entries(sourceCardGroups.byCredibility).map(([group, cards]) => (
@@ -893,6 +946,18 @@ function splitLines(value: string) {
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function briefText(value: string, fallback: string, maxLength = 38) {
+  const compact = value.trim().replace(/\s+/g, " ");
+  if (!compact) return fallback;
+  return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
+}
+
+function buildResearchDimensionDescription(item: NonNullable<ProjectBundle["researchBrief"]>["mustResearch"][number]) {
+  const reason = briefText(item.reason, "", 28);
+  const evidence = briefText(item.expectedEvidence, "", 28);
+  return [reason ? `原因：${reason}` : "", evidence ? `证据：${evidence}` : ""].filter(Boolean).join(" / ") || "点击补研究理由和证据方向。";
 }
 
 function splitTagText(value: string) {

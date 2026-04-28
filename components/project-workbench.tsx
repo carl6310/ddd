@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
 
-type ActiveTab = "overview" | "research" | "drafts" | "publish";
+type ActiveTab = "overview" | "research" | "structure" | "drafts" | "publish";
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
 type StaleArtifact = "research-brief" | "sector-model" | "outline" | "drafts" | "review" | "publish-prep";
 type WorkspaceSection =
@@ -158,10 +158,6 @@ export function ProjectWorkbench({
     }
   }, [selectedProjectId]);
 
-  const highlightedJob = useMemo(() => {
-    return jobs.find((job) => job.status === "queued" || job.status === "running") ?? jobs.find((job) => job.status === "failed") ?? null;
-  }, [jobs]);
-
   const updateProjectStaleArtifacts = useCallback((projectId: string, updater: (current: StaleArtifact[]) => StaleArtifact[]) => {
     setStaleArtifactsByProject((currentMap) => {
       const nextItems = updater(currentMap[projectId] ?? []);
@@ -199,21 +195,6 @@ export function ProjectWorkbench({
   );
 
   useEffect(() => {
-    if (!highlightedJob) {
-      setJobDetail(null);
-      return;
-    }
-
-    void loadJobDetail(highlightedJob.id)
-      .then((detail) => {
-        setJobDetail(detail);
-      })
-      .catch((error) => {
-        showFeedback(error instanceof Error ? error.message : "读取任务详情失败。");
-      });
-  }, [highlightedJob, loadJobDetail]);
-
-  useEffect(() => {
     if (!selectedProjectId) {
       return;
     }
@@ -243,6 +224,7 @@ export function ProjectWorkbench({
 
     if (completedJobs.length > 0) {
       const latestCompletedJob = completedJobs[0];
+      setJobDetail(null);
       setActiveTab(getResultTabForJobStep(latestCompletedJob.step));
       setFocusedSection(getResultSectionForJobStep(latestCompletedJob.step));
       showFeedback(getSuccessMessageForJobStep(latestCompletedJob.step), "success");
@@ -373,6 +355,7 @@ export function ProjectWorkbench({
         throw new Error(payload.error || "任务重试失败。");
       }
       await refreshJobs();
+      setJobDetail(null);
       showFeedback(payload.job?.deduped ? "已有同类任务在后台执行，已继续跟踪。" : "失败任务已重新入队。", "info");
     } catch (error) {
       showFeedback(error instanceof Error ? error.message : "任务重试失败。");
@@ -381,8 +364,8 @@ export function ProjectWorkbench({
     }
   }
 
-  const detailedVisibleJob = jobDetail && highlightedJob && jobDetail.job.id === highlightedJob.id ? jobDetail.job : null;
-  const visibleJob = detailedVisibleJob ?? highlightedJob;
+  const detailedVisibleJob = jobDetail?.job ?? null;
+  const visibleJob = detailedVisibleJob;
 
   const appHeader = (
     <>
@@ -390,7 +373,10 @@ export function ProjectWorkbench({
           <h1 className="topbar-title">上海板块写作工作台</h1>
         </div>
         <div className="topbar-right">
-          <div className="mode-chip">{process.env.NEXT_PUBLIC_MODEL_MODE ? `模型模式：${process.env.NEXT_PUBLIC_MODEL_MODE}` : "本地服务已连接"}</div>
+          <div className="mode-chip service-status-chip">
+            <span className="service-status-dot" aria-hidden="true" />
+            {process.env.NEXT_PUBLIC_MODEL_MODE ? `模型模式：${process.env.NEXT_PUBLIC_MODEL_MODE}` : "本地服务已连接"}
+          </div>
           <button type="button" className="mode-chip task-center-trigger" onClick={() => setIsTaskCenterOpen(true)}>
             后台任务 {queueSummary.runningCount} 运行 / {queueSummary.queuedCount} 排队
           </button>
@@ -459,7 +445,7 @@ export function ProjectWorkbench({
   return (
     <AppShell header={appHeader} overlays={appOverlays} sidebar={appSidebar} inspector={appInspector}>
           {!selectedBundle ? (
-            <EmptyState title="还没有选中项目" className="blank-state">
+            <EmptyState title="还没有选中项目" className="blank-state workbench-empty-state">
               <p>请在左侧选择或新建一个项目。</p>
             </EmptyState>
           ) : (
@@ -488,7 +474,8 @@ export function ProjectWorkbench({
                   id="workbench-tab-overview"
                   tabIndex={activeTab === "overview" ? 0 : -1}
                 >
-                  判断
+                  <StageIcon name="overview" />
+                  <span>判断</span>
                 </button>
                 <button
                   type="button"
@@ -504,7 +491,25 @@ export function ProjectWorkbench({
                   id="workbench-tab-research"
                   tabIndex={activeTab === "research" ? 0 : -1}
                 >
-                  资料
+                  <StageIcon name="research" />
+                  <span>资料</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  className={`tab-button ${activeTab === "structure" ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveTab("structure");
+                    setFocusedSection(null);
+                  }}
+                  data-tab="structure"
+                  aria-selected={activeTab === "structure"}
+                  aria-controls="workbench-panel-structure"
+                  id="workbench-tab-structure"
+                  tabIndex={activeTab === "structure" ? 0 : -1}
+                >
+                  <StageIcon name="structure" />
+                  <span>结构</span>
                 </button>
                 <button
                   type="button"
@@ -520,7 +525,8 @@ export function ProjectWorkbench({
                   id="workbench-tab-drafts"
                   tabIndex={activeTab === "drafts" ? 0 : -1}
                 >
-                  写作
+                  <StageIcon name="drafts" />
+                  <span>写作</span>
                 </button>
                 <button
                   type="button"
@@ -536,7 +542,8 @@ export function ProjectWorkbench({
                   id="workbench-tab-publish"
                   tabIndex={activeTab === "publish" ? 0 : -1}
                 >
-                  发布
+                  <StageIcon name="publish" />
+                  <span>发布</span>
                 </button>
               </div>
 
@@ -572,8 +579,12 @@ export function ProjectWorkbench({
                 </section>
               )}
 
-              {(activeTab === "drafts" || activeTab === "publish") && (
-                <section role="tabpanel" id={activeTab === "publish" ? "workbench-panel-publish" : "workbench-panel-drafts"} aria-labelledby={activeTab === "publish" ? "workbench-tab-publish" : "workbench-tab-drafts"}>
+              {(activeTab === "structure" || activeTab === "drafts" || activeTab === "publish") && (
+                <section
+                  role="tabpanel"
+                  id={activeTab === "structure" ? "workbench-panel-structure" : activeTab === "publish" ? "workbench-panel-publish" : "workbench-panel-drafts"}
+                  aria-labelledby={activeTab === "structure" ? "workbench-tab-structure" : activeTab === "publish" ? "workbench-tab-publish" : "workbench-tab-drafts"}
+                >
                 <DraftsTab 
                   selectedBundle={selectedBundle}
                   setSelectedBundle={setSelectedBundle}
@@ -585,12 +596,19 @@ export function ProjectWorkbench({
                   markArtifactsStale={markArtifactsStale}
                   runProjectStep={runProjectStep}
                   generatePublishPrep={generatePublishPrep}
-                  surfaceTitle={activeTab === "publish" ? "发布" : "写作"}
+                  surfaceTitle={activeTab === "structure" ? "结构" : activeTab === "publish" ? "发布" : "写作"}
+                  surfaceMode={activeTab === "structure" ? "structure" : activeTab === "publish" ? "publish" : "writing"}
                   onOpenVitalityCheck={() => {
                     setActiveTab("overview");
                     setFocusedSection("overview-vitality");
                   }}
-                  focusSection={activeTab === "publish" ? "publish-prep" : mapDraftsFocus(focusedSection)}
+                  focusSection={
+                    activeTab === "structure"
+                      ? mapStructureFocus(focusedSection)
+                      : activeTab === "publish"
+                        ? "publish-prep"
+                        : mapWritingFocus(focusedSection)
+                  }
                 />
                 </section>
               )}
@@ -606,6 +624,51 @@ export function ProjectWorkbench({
     }
     setFeedback({ text, kind: forcedKind ?? inferMessageKind(text) });
   }
+}
+
+function StageIcon({ name }: { name: ActiveTab }) {
+  if (name === "overview") {
+    return (
+      <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 3.5 19 6v5.5c0 4.1-2.4 7.2-7 9-4.6-1.8-7-4.9-7-9V6l7-2.5Z" />
+        <path d="m9.5 12 1.7 1.7 3.8-4.1" />
+      </svg>
+    );
+  }
+  if (name === "research") {
+    return (
+      <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M7 4.5h8l2 2V19a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 6 19V6A1.5 1.5 0 0 1 7.5 4.5Z" />
+        <path d="M15 4.5V7h2.5" />
+        <path d="M9 10h6M9 14h6M9 17h4" />
+      </svg>
+    );
+  }
+  if (name === "structure") {
+    return (
+      <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 4.5v5M7 14h10M7 14v5M17 14v5" />
+        <rect x="9" y="3" width="6" height="4" rx="1.2" />
+        <rect x="4" y="17" width="6" height="4" rx="1.2" />
+        <rect x="14" y="17" width="6" height="4" rx="1.2" />
+      </svg>
+    );
+  }
+  if (name === "drafts") {
+    return (
+      <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M5 19.5 6.1 15 15.4 5.7a2 2 0 0 1 2.8 2.8L8.9 17.8 5 19.5Z" />
+        <path d="m14 7 3 3" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 12h12" />
+      <path d="m13 7 5 5-5 5" />
+      <path d="M6 6.5h4M6 17.5h4" />
+    </svg>
+  );
 }
 
 function handleTabListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -742,9 +805,9 @@ function getArtifactTarget(artifact: StaleArtifact): { tab: ActiveTab; section: 
     case "research-brief":
       return { tab: "research", section: "research-brief" };
     case "sector-model":
-      return { tab: "drafts", section: "sector-model" };
+      return { tab: "structure", section: "sector-model" };
     case "outline":
-      return { tab: "drafts", section: "outline" };
+      return { tab: "structure", section: "outline" };
     case "drafts":
       return { tab: "drafts", section: "drafts" };
     case "review":
@@ -760,6 +823,7 @@ function getResultTabForStep(path: WorkbenchStepPath): ActiveTab {
       return "research";
     case "sector-model":
     case "outline":
+      return "structure";
     case "drafts":
       return "drafts";
     case "review":
@@ -809,7 +873,9 @@ function getResultTabForJobStep(step: JobStep): ActiveTab {
       return "research";
     case "sector-model":
     case "outline":
+      return "structure";
     case "drafts":
+      return "drafts";
     case "publish-prep":
       return "publish";
     case "review":
@@ -920,8 +986,15 @@ function mapResearchFocus(section: WorkspaceSection) {
   return null;
 }
 
-function mapDraftsFocus(section: WorkspaceSection) {
-  if (section === "sector-model" || section === "outline" || section === "drafts" || section === "publish-prep" || section === null) {
+function mapStructureFocus(section: WorkspaceSection) {
+  if (section === "sector-model" || section === "outline" || section === null) {
+    return section;
+  }
+  return null;
+}
+
+function mapWritingFocus(section: WorkspaceSection) {
+  if (section === "drafts" || section === null) {
     return section;
   }
   return null;
@@ -938,9 +1011,9 @@ function getProjectViewState(stage?: ProjectStage): { tab: ActiveTab; section: W
     case "资料卡整理":
       return { tab: "research", section: "source-form" };
     case "板块建模":
-      return { tab: "drafts", section: "sector-model" };
+      return { tab: "structure", section: "sector-model" };
     case "提纲生成":
-      return { tab: "drafts", section: "outline" };
+      return { tab: "structure", section: "outline" };
     case "正文生成":
       return { tab: "drafts", section: "drafts" };
     case "VitalityCheck":

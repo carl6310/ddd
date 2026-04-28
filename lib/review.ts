@@ -107,11 +107,11 @@ export function runDeterministicReview(input: {
   checks.push({
     key: "zones",
     title: "片区拆解完整性",
-    status: zoneCount >= 3 && zoneCount <= 5 ? "pass" : "fail",
+    status: zoneCount >= 2 ? "pass" : "fail",
     detail:
-      zoneCount >= 3 && zoneCount <= 5
+      zoneCount >= 2
         ? `当前共拆出 ${zoneCount} 个片区。`
-        : `当前片区数量为 ${zoneCount}，不满足 3-5 个片区的约束。`,
+        : `当前片区数量为 ${zoneCount}，还没有形成可比较的片区拆解。`,
     evidenceIds: sectorModel?.zones.flatMap((zone) => zone.evidenceIds) ?? [],
   });
 
@@ -726,7 +726,7 @@ function buildRevisionSuggestions(checks: ReviewCheck[]): string[] {
         case "citations":
           return "先把关键判断补上资料卡引用，再继续润色文风。";
         case "zones":
-          return "把板块再拆成 3-5 个可理解片区，避免只按行政边界平铺。";
+          return "按真实生活边界、镇街、交通切割或功能组团拆片区，不要强行凑固定数量。";
         case "soft-sell":
           return "加一段风险、门槛或代价，压住软文感。";
         case "ai-tone":

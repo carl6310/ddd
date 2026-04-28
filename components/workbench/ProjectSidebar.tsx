@@ -561,6 +561,14 @@ export function ProjectSidebar({
               </ContainedScrollArea>
             </details>
           ) : null}
+          <div className="sidebar-user-strip" aria-label="当前本地用户">
+            <span className="sidebar-user-avatar" aria-hidden="true">GTJ</span>
+            <div>
+              <strong>GTJ</strong>
+              <span><i aria-hidden="true" /> 本地模式</span>
+            </div>
+            <span className="sidebar-user-chevron" aria-hidden="true">⌄</span>
+          </div>
         </Card>
       </Panel>
 
@@ -770,8 +778,8 @@ export function ProjectSidebar({
                     <summary>预资料池：{coCreationPreSourceCards.length} 条 · 可用 {readyPreSourceCount} · 已选 {selectedPreSourceCardIds.length}</summary>
                     <div className="stack subtle">
                       {coCreationPreSourceCards.map((card) => (
-                        <article className="status-block stack compact-editor-card" key={card.id}>
-                          <label className="project-item-meta">
+                        <article className="cocreation-diagnostic-card stack" key={card.id}>
+                          <label className="cocreation-meta-row">
                             <input
                               type="checkbox"
                               checked={selectedPreSourceCardIds.includes(card.id)}
@@ -804,8 +812,8 @@ export function ProjectSidebar({
                       )}
                       <p><strong>新鲜度提醒：</strong>{coCreationSignalBrief.freshnessNote}</p>
                       {coCreationSignalBrief.signals.map((signal, index) => (
-                        <article className="status-block stack compact-editor-card" key={`${signal.title}-${index}`}>
-                          <div className="project-item-meta">
+                        <article className="cocreation-diagnostic-card stack" key={`${signal.title}-${index}`}>
+                          <div className="cocreation-meta-row">
                             <strong>{signal.title}</strong>
                             <Chip className="cocreation-filter-chip">{signal.signalType}</Chip>
                           </div>

@@ -34,6 +34,7 @@ export function JobLogPanel({
           : "info";
   const detailId = `job-toast-detail-${job.id}`;
   const toggleExpanded = () => setExpanded((value) => !value);
+  const summaryCopy = getSummaryCopy(job);
 
   return (
     <section className={`job-toast job-toast-${statusTone}`}>
@@ -50,14 +51,14 @@ export function JobLogPanel({
         tabIndex={0}
         aria-expanded={expanded}
         aria-controls={detailId}
-        aria-label={`${getStepLabel(job.step)}：${job.progressMessage || getStatusCopy(job)}`}
+        aria-label={`${getStepLabel(job.step)}：${summaryCopy}`}
       >
         <div className="job-toast-icon">
           {statusTone === "error" ? "✕" : statusTone === "success" ? "✓" : statusTone === "running" ? "⟳" : "◷"}
         </div>
         <div className="job-toast-summary">
           <span className="job-toast-step">{getStepLabel(job.step)}</span>
-          <span className="job-toast-msg">{job.progressMessage || getStatusCopy(job)}</span>
+          <span className="job-toast-msg">{summaryCopy}</span>
         </div>
         <div className="job-toast-actions">
           <JobStatusChip status={job.status} />
@@ -133,6 +134,13 @@ function getStepLabel(step: ProjectJobSummary["step"]) {
     default:
       return step;
   }
+}
+
+function getSummaryCopy(job: ProjectJobSummary) {
+  if (job.status === "failed") {
+    return job.errorMessage || getStatusCopy(job);
+  }
+  return job.progressMessage || getStatusCopy(job);
 }
 
 function getStatusCopy(job: ProjectJobSummary) {

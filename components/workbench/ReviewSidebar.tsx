@@ -7,7 +7,7 @@ import { Panel } from "@/components/ui/surface";
 import { formatProjectStage } from "@/lib/project-stage-labels";
 import { canPreparePublish } from "@/lib/workflow";
 
-type ActiveTab = "overview" | "research" | "drafts" | "publish";
+type ActiveTab = "overview" | "research" | "structure" | "drafts" | "publish";
 type WorkspaceSection =
   | "overview-think-card"
   | "overview-style-core"
@@ -311,15 +311,19 @@ function getActiveViewLabel(activeTab: ActiveTab, focusedSection: WorkspaceSecti
     return "发布 / 发布整理";
   }
 
+  if (activeTab === "structure") {
+    switch (focusedSection) {
+      case "outline":
+        return "结构 / 段落提纲";
+      case "sector-model":
+      default:
+        return "结构 / 板块建模";
+    }
+  }
+
   switch (focusedSection) {
-    case "outline":
-      return "写作 / 段落提纲";
     case "drafts":
-      return "写作 / 双稿编辑";
-    case "publish-prep":
-      return "发布 / 发布整理";
-    case "sector-model":
     default:
-      return "写作 / 板块建模";
+      return "写作 / 正文编辑";
   }
 }

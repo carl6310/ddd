@@ -17,6 +17,11 @@ export function AppShell({
   return (
     <main className="page-shell app-shell" data-ui="app-shell">
       <header className="page-topbar" data-ui="app-shell-header">
+        <div className="mac-window-controls" aria-hidden="true">
+          <span className="mac-window-control mac-window-control-close" />
+          <span className="mac-window-control mac-window-control-minimize" />
+          <span className="mac-window-control mac-window-control-zoom" />
+        </div>
         {header}
       </header>
       {overlays}
