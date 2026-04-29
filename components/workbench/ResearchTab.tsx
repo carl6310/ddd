@@ -13,6 +13,8 @@ import { InlineTextAreaEdit, InlineTextEdit } from "@/components/ui/inline-edit"
 import { Card, Panel, Surface } from "@/components/ui/surface";
 import { useJobAction } from "@/hooks/use-job-action";
 import { analyzeEvidenceCoverage } from "@/lib/evidence/coverage";
+import type { WorkbenchInspectorSelection } from "./WorkbenchInspector";
+import type { WorkbenchDisplayMode } from "./display-mode";
 
 type ResearchSection = "research-brief" | "source-form" | "source-library";
 type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
@@ -66,6 +68,8 @@ interface ResearchTabProps {
   setMessage: (msg: string) => void;
   markArtifactsStale: (artifacts: StaleArtifact[]) => void;
   runProjectStep: (step: WorkbenchStepPath, successMessage: string) => Promise<void>;
+  onInspectorSelectionChange: (selection: WorkbenchInspectorSelection) => void;
+  displayMode: WorkbenchDisplayMode;
   focusSection: "research-brief" | "source-form" | "source-library" | "sector-model" | "outline" | "drafts" | "publish-prep" | null;
 }
 
@@ -79,6 +83,8 @@ export function ResearchTab({
   setMessage,
   markArtifactsStale,
   runProjectStep,
+  onInspectorSelectionChange,
+  displayMode,
   focusSection,
 }: ResearchTabProps) {
   const [sourceCardForm, setSourceCardForm] = useState<SourceCardFormState>(emptySourceCardForm);
@@ -792,7 +798,7 @@ export function ResearchTab({
                 <ul className="compact-list evidence-action-list">
                   {orphanSourceCards.slice(0, 6).map((card) => (
                     <li key={card.id}>
-                      <strong>{card.title || card.id}</strong>
+                      <strong>{card.title || (displayMode === "debug" ? card.id : "未命名资料卡")}</strong>
                       <span>{card.intendedSection ? `预期落段：${card.intendedSection}` : "未设置预期落段"}</span>
                     </li>
                   ))}
@@ -830,9 +836,19 @@ export function ResearchTab({
                             <Chip>{formatClaimType(card.claimType)}</Chip>
                           </div>
                         </div>
-                        <Button type="button" variant="danger" size="sm" className="source-card-delete" onClick={() => deleteCard(card.id)} disabled={isPending}>
-                          删除
-                        </Button>
+                        <div className="source-card-actions">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => onInspectorSelectionChange({ kind: "source-card", sourceCardId: card.id })}
+                          >
+                            查看
+                          </Button>
+                          <Button type="button" variant="danger" size="sm" className="source-card-delete" onClick={() => deleteCard(card.id)} disabled={isPending}>
+                            删除
+                          </Button>
+                        </div>
                       </div>
                       <div className="source-card-body-grid">
                         <div className="source-card-main-copy">
@@ -856,10 +872,12 @@ export function ResearchTab({
                             <dt>来源</dt>
                             <dd>{formatSourceType(card.sourceType)} · {formatTimeSensitivity(card.timeSensitivity)}</dd>
                           </div>
-                          <div>
-                            <dt>资料 ID</dt>
-                            <dd><code>{card.id}</code></dd>
-                          </div>
+                          {displayMode === "debug" ? (
+                            <div>
+                              <dt>资料 ID</dt>
+                              <dd><code>{card.id}</code></dd>
+                            </div>
+                          ) : null}
                         </dl>
                       </div>
                       <div className="source-card-footer">

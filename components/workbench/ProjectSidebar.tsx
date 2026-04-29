@@ -10,6 +10,7 @@ import {
   type SignalProviderMode,
   type TopicAngle,
   type TopicAngleType,
+  type TopicCoCreationDepth,
   type TopicCoCreationResponse,
   type TopicDiscoveryBundle,
   type TopicDiscoverySession,
@@ -23,6 +24,7 @@ import { Card, Panel } from "@/components/ui/surface";
 import { formatProjectStage } from "@/lib/project-stage-labels";
 import { filterAnglesByType } from "@/lib/topic-cocreate-postprocess";
 import { extractUrls } from "@/lib/utils";
+import type { WorkbenchDisplayMode } from "./display-mode";
 
 interface ProjectSidebarProps {
   projects: ArticleProject[];
@@ -33,14 +35,14 @@ interface ProjectSidebarProps {
   setMessage: (msg: string) => void;
   refreshProjectsAndBundle: (id?: string) => Promise<void>;
   sampleDigest: string;
+  displayMode: WorkbenchDisplayMode;
 }
 
 type DiscoveryStep = "pre-source-extract" | "signal-brief" | "topic-discovery-cocreate";
 
 const discoveryStepWaitMs = 20 * 60 * 1000;
 const discoveryPollMs = 1200;
-const signalModeOptions: Array<{ value: SignalProviderMode; label: string; title: string }> = [
-  { value: "input_only", label: "仅输入", title: "只基于当前填写内容和已抽取链接信号" },
+const deepSignalModeOptions: Array<{ value: SignalProviderMode; label: string; title: string }> = [
   { value: "url_enriched", label: "链接增强", title: "处理输入里的文章链接，不额外搜索" },
   { value: "search_enabled", label: "联网检索", title: "自动搜索并抓取少量结果补充信号" },
 ];
@@ -54,6 +56,7 @@ export function ProjectSidebar({
   setMessage,
   refreshProjectsAndBundle,
   sampleDigest,
+  displayMode,
 }: ProjectSidebarProps) {
   const [projectForm, setProjectForm] = useState({
     topic: "",
@@ -70,6 +73,7 @@ export function ProjectSidebar({
     avoidAngles: "不想写成泛板块介绍和中介稿",
     signalMode: "input_only" as SignalProviderMode,
   });
+  const [coCreationDepth, setCoCreationDepth] = useState<TopicCoCreationDepth>("fast");
   const [coCreationSessionId, setCoCreationSessionId] = useState<string | null>(null);
   const [coCreationSessionStatus, setCoCreationSessionStatus] = useState<TopicDiscoverySession["status"] | null>(null);
   const [coCreationJobId, setCoCreationJobId] = useState<string | null>(null);
@@ -81,7 +85,6 @@ export function ProjectSidebar({
   const [selectedPreSourceCardIds, setSelectedPreSourceCardIds] = useState<string[]>([]);
   const [coCreationInsights, setCoCreationInsights] = useState<TopicCoCreationResponse["result"]["materialInsights"] | null>(null);
   const [coCreationAngleFilter, setCoCreationAngleFilter] = useState<TopicAngleType | "all">("all");
-  const [showAngleLonglist, setShowAngleLonglist] = useState(false);
   const [openModal, setOpenModal] = useState<"create" | "cocreate" | null>(projects.length === 0 ? "create" : null);
   const [projectSearch, setProjectSearch] = useState("");
   const [showTestProjects, setShowTestProjects] = useState(false);
@@ -102,27 +105,26 @@ export function ProjectSidebar({
   const historicalProjects = visibleProjects.slice(5);
   const recommendedAngles = useMemo(() => coCreationResult?.recommendedAngles ?? coCreationResult?.angles ?? [], [coCreationResult]);
   const angleLonglist = useMemo(() => coCreationResult?.angleLonglist ?? [], [coCreationResult]);
-  const visibleRecommendedAngles = useMemo(() => recommendedAngles.slice(0, 3), [recommendedAngles]);
   const extraAngles = useMemo(
     () => angleLonglist.filter((angle) => !recommendedAngles.some((recommended) => recommended.id === angle.id)),
     [angleLonglist, recommendedAngles],
   );
-  const overflowAngles = useMemo(() => [...recommendedAngles.slice(3), ...extraAngles], [extraAngles, recommendedAngles]);
-  const filteredOverflowAngles = useMemo(
-    () => filterAnglesByType(overflowAngles, coCreationAngleFilter),
-    [coCreationAngleFilter, overflowAngles],
-  );
   const allCoCreationAngles = useMemo(() => [...recommendedAngles, ...extraAngles], [extraAngles, recommendedAngles]);
+  const filteredCoCreationAngles = useMemo(
+    () => filterAnglesByType(allCoCreationAngles, coCreationAngleFilter),
+    [allCoCreationAngles, coCreationAngleFilter],
+  );
   const selectedCoCreationAngle = useMemo(
     () => allCoCreationAngles.find((angle) => angle.id === selectedCoCreationAngleId) ?? null,
     [allCoCreationAngles, selectedCoCreationAngleId],
   );
+  const articleUrls = useMemo(() => extractUrls(coCreationForm.articleLinks), [coCreationForm.articleLinks]);
   const availableAngleTypes = useMemo(() => coCreationResult?.coverageSummary.includedTypes ?? [], [coCreationResult]);
   const readyPreSourceCount = useMemo(
     () => coCreationPreSourceCards.filter((card) => card.extractStatus === "ready").length,
     [coCreationPreSourceCards],
   );
-  const hasCoCreationOutput = recommendedAngles.length > 0;
+  const hasCoCreationOutput = allCoCreationAngles.length > 0;
 
   useEffect(() => {
     if (!hasCoCreationOutput) {
@@ -134,9 +136,25 @@ export function ProjectSidebar({
     }
   }, [allCoCreationAngles, hasCoCreationOutput, recommendedAngles, selectedCoCreationAngleId]);
 
+  function getEffectiveCoCreationSignalMode() {
+    if (coCreationDepth === "fast") {
+      return "input_only" as SignalProviderMode;
+    }
+    return coCreationForm.signalMode === "input_only" ? "url_enriched" : coCreationForm.signalMode;
+  }
+
+  function selectCoCreationDepth(depth: TopicCoCreationDepth) {
+    setCoCreationDepth(depth);
+    setCoCreationForm((current) => ({
+      ...current,
+      signalMode: depth === "fast" ? "input_only" : current.signalMode === "input_only" ? "url_enriched" : current.signalMode,
+    }));
+  }
+
   function hydrateFromDiscoveryBundle(bundle: TopicDiscoveryBundle) {
     setCoCreationSessionId(bundle.session.id);
     setCoCreationSessionStatus(bundle.session.status);
+    setCoCreationDepth(bundle.session.searchMode === "input_only" ? "fast" : "full");
     if (typeof window !== "undefined") {
       window.localStorage.setItem("topic-discovery-session-id", bundle.session.id);
     }
@@ -171,6 +189,9 @@ export function ProjectSidebar({
           error: card.extractStatus === "failed" ? card.riskHints.join("；") : undefined,
         })),
       );
+    } else {
+      setCoCreationSignalBrief(null);
+      setCoCreationSourceDigests([]);
     }
     if (bundle.topicAngles.length > 0) {
       setCoCreationResult({
@@ -207,12 +228,12 @@ export function ProjectSidebar({
     return payload.bundle as TopicDiscoveryBundle;
   }
 
-  async function runDiscoveryJob(sessionId: string, step: DiscoveryStep) {
+  async function runDiscoveryJob(sessionId: string, step: DiscoveryStep, options: { depth?: TopicCoCreationDepth } = {}) {
     setMessage(`${formatDiscoveryStepLabel(step)}已开始，正在后台处理。`);
     const response = await fetch(`/api/topic-discovery/sessions/${sessionId}/jobs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step }),
+      body: JSON.stringify({ step, ...(options.depth ? { depth: options.depth } : {}) }),
     });
     const payload = await response.json();
     if (!response.ok) {
@@ -244,6 +265,7 @@ export function ProjectSidebar({
   }
 
   async function ensureTopicDiscoverySession() {
+    const searchMode = getEffectiveCoCreationSignalMode();
     if (coCreationSessionId) {
       const patchResponse = await fetch(`/api/topic-discovery/sessions/${coCreationSessionId}`, {
         method: "PATCH",
@@ -254,7 +276,7 @@ export function ProjectSidebar({
           focusPoints: splitLines(coCreationForm.focusPoints),
           rawMaterials: coCreationForm.rawMaterials,
           avoidAngles: coCreationForm.avoidAngles,
-          searchMode: coCreationForm.signalMode,
+          searchMode,
         }),
       });
       const patchPayload = await patchResponse.json();
@@ -274,7 +296,7 @@ export function ProjectSidebar({
         focusPoints: splitLines(coCreationForm.focusPoints),
         rawMaterials: coCreationForm.rawMaterials,
         avoidAngles: coCreationForm.avoidAngles,
-        searchMode: coCreationForm.signalMode,
+        searchMode,
       }),
     });
     const createPayload = await createResponse.json();
@@ -324,11 +346,20 @@ export function ProjectSidebar({
     try {
       setMessage("");
       const sessionId = await ensureTopicDiscoverySession();
+      if (coCreationDepth === "fast") {
+        const cocreateResult = await runDiscoveryJob(sessionId, "topic-discovery-cocreate", { depth: "fast" });
+        hydrateFromDiscoveryBundle(await loadDiscoveryBundle(sessionId));
+        setCoCreationInsights(cocreateResult.result?.materialInsights ?? null);
+        setCoCreationAngleFilter("all");
+        setMessage(`快速共创已产出 ${cocreateResult.result?.recommendedAngles?.length ?? 0} 个推荐角度、${cocreateResult.result?.angleLonglist?.length ?? 0} 个候选角度。`);
+        return;
+      }
+
       const linkResponse = await fetch(`/api/topic-discovery/sessions/${sessionId}/links`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          urls: extractUrls(coCreationForm.articleLinks),
+          urls: articleUrls,
         }),
       });
       const linkPayload = await linkResponse.json();
@@ -336,7 +367,6 @@ export function ProjectSidebar({
         throw new Error(linkPayload.error || "保存文章链接失败。");
       }
 
-      const articleUrls = extractUrls(coCreationForm.articleLinks);
       const currentBundle = await loadDiscoveryBundle(sessionId);
       if (hasReusablePreSourceCards(currentBundle, articleUrls)) {
         hydrateFromDiscoveryBundle(currentBundle);
@@ -345,13 +375,12 @@ export function ProjectSidebar({
         await runDiscoveryJob(sessionId, "pre-source-extract");
       }
       await runDiscoveryJob(sessionId, "signal-brief");
-      const cocreateResult = await runDiscoveryJob(sessionId, "topic-discovery-cocreate");
+      const cocreateResult = await runDiscoveryJob(sessionId, "topic-discovery-cocreate", { depth: "full" });
 
       hydrateFromDiscoveryBundle(await loadDiscoveryBundle(sessionId));
       setCoCreationInsights(cocreateResult.result?.materialInsights ?? null);
       setCoCreationAngleFilter("all");
-      setShowAngleLonglist(false);
-      setMessage(`Signal Brief 已生成，并产出 ${cocreateResult.result?.recommendedAngles?.length ?? 0} 个推荐角度、${cocreateResult.result?.angleLonglist?.length ?? 0} 个长名单角度。`);
+      setMessage(`深度共创已完成，并产出 ${cocreateResult.result?.recommendedAngles?.length ?? 0} 个推荐角度、${cocreateResult.result?.angleLonglist?.length ?? 0} 个长名单角度。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "选题共创失败。");
     } finally {
@@ -371,7 +400,7 @@ export function ProjectSidebar({
       }
     }
 
-    const notes = buildAngleNotes(candidate);
+    const notes = buildAngleNotes(candidate, displayMode);
     setIsPending(true);
     try {
       setMessage("");
@@ -614,13 +643,43 @@ export function ProjectSidebar({
         <details className="cocreation-input-panel" open={!hasCoCreationOutput}>
           <summary className="cocreation-input-summary">
             <span>{hasCoCreationOutput ? "生成条件" : "填写生成条件"}</span>
-            <small>{coCreationForm.sector.trim() || "未填写板块"} · {formatSignalModeLabel(coCreationForm.signalMode)}</small>
+            <small>
+              {coCreationForm.sector.trim() || "未填写板块"} · {coCreationDepth === "fast" ? "快速共创" : `深度共创 · ${formatSignalModeLabel(getEffectiveCoCreationSignalMode())}`}
+            </small>
           </summary>
           <div className="stack cocreation-input-body">
             <label>
               只讲哪个板块/片区？
               <input value={coCreationForm.sector} onChange={(event) => setCoCreationForm({ ...coCreationForm, sector: event.target.value })} placeholder="例如：唐镇" />
             </label>
+            <div className="cocreation-depth-field">
+              <span className="field-label">共创方式</span>
+              <div className="cocreation-depth-options" role="radiogroup" aria-label="共创方式">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={coCreationDepth === "fast"}
+                  className={`cocreation-depth-card ${coCreationDepth === "fast" ? "active" : ""}`}
+                  onClick={() => selectCoCreationDepth("fast")}
+                >
+                  <strong>快速共创</strong>
+                  <span>6-8 个轻量角度，不读取链接，适合先找方向。</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={coCreationDepth === "full"}
+                  className={`cocreation-depth-card ${coCreationDepth === "full" ? "active" : ""}`}
+                  onClick={() => selectCoCreationDepth("full")}
+                >
+                  <strong>深度共创</strong>
+                  <span>读取链接或联网补信号，候选更完整但耗时更久。</span>
+                </button>
+              </div>
+              {coCreationDepth === "fast" && articleUrls.length > 0 ? (
+                <p className="subtle cocreation-fast-note">快速共创不会读取链接；需要读取链接请用深度共创。</p>
+              ) : null}
+            </div>
             <label>
               你对它现有的碎片直觉？
               <AutoGrowTextarea className="cocreation-auto-field" value={coCreationForm.currentIntuition} onChange={(event) => setCoCreationForm({ ...coCreationForm, currentIntuition: event.target.value })} placeholder="例如：感觉现在去接盘唐镇的都是冤大头，但新盘还在日光。" rows={1} />
@@ -635,33 +694,35 @@ export function ProjectSidebar({
             </label>
             <label>
               文章链接
-              <AutoGrowTextarea className="cocreation-auto-field cocreation-link-field" value={coCreationForm.articleLinks} onChange={(event) => setCoCreationForm({ ...coCreationForm, articleLinks: event.target.value })} placeholder="每行一条文章链接，系统会先抽取为预资料卡" rows={2} />
+              <AutoGrowTextarea className="cocreation-auto-field cocreation-link-field" value={coCreationForm.articleLinks} onChange={(event) => setCoCreationForm({ ...coCreationForm, articleLinks: event.target.value })} placeholder={coCreationDepth === "fast" ? "快速共创会忽略这里的链接；深度共创才会读取。" : "每行一条文章链接，系统会先抽取为预资料卡"} rows={2} />
             </label>
-            <div className="cocreation-mode-field">
-              <span className="field-label">信号来源</span>
-              <div className="cocreation-mode-segment" role="radiogroup" aria-label="Signal Brief 模式">
-                {signalModeOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={coCreationForm.signalMode === option.value}
-                    title={option.title}
-                    className={`cocreation-mode-button ${coCreationForm.signalMode === option.value ? "active" : ""}`}
-                    onClick={() => setCoCreationForm({ ...coCreationForm, signalMode: option.value })}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+            {coCreationDepth === "full" ? (
+              <div className="cocreation-mode-field cocreation-advanced-signal">
+                <span className="field-label">深度信号来源</span>
+                <div className="cocreation-mode-segment" role="radiogroup" aria-label="深度共创信号来源">
+                  {deepSignalModeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={getEffectiveCoCreationSignalMode() === option.value}
+                      title={option.title}
+                      className={`cocreation-mode-button ${getEffectiveCoCreationSignalMode() === option.value ? "active" : ""}`}
+                      onClick={() => setCoCreationForm({ ...coCreationForm, signalMode: option.value })}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : null}
             <label>
               要避开什么烂大街角度？
               <AutoGrowTextarea className="cocreation-auto-field" value={coCreationForm.avoidAngles} onChange={(event) => setCoCreationForm({ ...coCreationForm, avoidAngles: event.target.value })} rows={1} />
             </label>
             {!coCreationForm.sector.trim() ? <p className="subtle action-hint">先填板块或片区，才能生成候选角度。</p> : null}
             <Button type="button" variant={hasCoCreationOutput ? "secondary" : "primary"} onClick={runTopicCoCreation} disabled={isPending || !coCreationForm.sector.trim()}>
-              {hasCoCreationOutput ? "重新生成候选池" : "生成选题候选池"}
+              {hasCoCreationOutput ? "重新生成候选池" : coCreationDepth === "fast" ? "快速生成候选池" : "深度生成候选池"}
             </Button>
           </div>
         </details>
@@ -682,88 +743,68 @@ export function ProjectSidebar({
                 <span>可用资料</span>
               </div>
               <div>
-                <strong>{formatSignalModeLabel(coCreationSignalMode)}</strong>
-                <span>信号来源</span>
+                <strong>{coCreationDepth === "fast" ? "快速" : formatSignalModeLabel(coCreationSignalMode)}</strong>
+                <span>共创模式</span>
               </div>
             </div>
             {coCreationSessionId ? (
-              <p className="subtle cocreation-session-meta">
-                会话 {coCreationSessionId} · {coCreationSessionStatus || "draft"}{coCreationJobId ? ` · 最近任务 ${coCreationJobId}` : ""}
-              </p>
+              displayMode === "debug" ? (
+                <p className="subtle cocreation-session-meta">
+                  会话 {coCreationSessionId} · {coCreationSessionStatus || "draft"}{coCreationJobId ? ` · 最近任务 ${coCreationJobId}` : ""}
+                </p>
+              ) : null
             ) : null}
 
-            <div className="cocreation-selection-bar">
-              <div>
-                <span>当前选择</span>
-                <strong>{selectedCoCreationAngle?.title ?? "先选择一个推荐角度"}</strong>
-              </div>
-              <Button type="button" variant="primary" onClick={() => selectedCoCreationAngle ? void createProjectFromCandidate(selectedCoCreationAngle) : undefined} disabled={isPending || !selectedCoCreationAngle}>
-                用选中角度立项
-              </Button>
-            </div>
-
-            <h3>推荐角度 ({visibleRecommendedAngles.length} / {recommendedAngles.length})</h3>
-            <div className="cocreation-candidates-grid">
-              {visibleRecommendedAngles.map((angle, index) => (
-                <TopicAngleCard
-                  key={angle.id}
-                  angle={angle}
-                  rank={index + 1}
-                  isPending={isPending}
-                  isSelected={angle.id === selectedCoCreationAngleId}
-                  onChoose={setSelectedCoCreationAngleId}
-                />
+            <div className="cocreation-filter-row">
+              <button
+                type="button"
+                className={`section-subnav-button ${coCreationAngleFilter === "all" ? "active" : ""}`}
+                onClick={() => setCoCreationAngleFilter("all")}
+              >
+                全部
+              </button>
+              {availableAngleTypes.map((type) => (
+                <button
+                  type="button"
+                  key={type}
+                  className={`section-subnav-button ${coCreationAngleFilter === type ? "active" : ""}`}
+                  onClick={() => setCoCreationAngleFilter(type)}
+                >
+                  {TOPIC_ANGLE_TYPE_LABELS[type]}
+                </button>
               ))}
             </div>
 
-            {overflowAngles.length > 0 ? (
-              <section className="stack">
-                <div className="cocreation-more-head">
-                  <h3>更多角度 ({overflowAngles.length})</h3>
-                  <Button type="button" variant="secondary" onClick={() => setShowAngleLonglist((value) => !value)}>
-                    {showAngleLonglist ? "收起更多角度" : "展开更多角度"}
-                  </Button>
+            <section className="cocreation-master-detail" aria-label="候选角度列表和详情">
+              <div className="cocreation-angle-list-panel">
+                <div className="cocreation-list-head">
+                  <div>
+                    <span>候选角度</span>
+                    <strong>{filteredCoCreationAngles.length} / {allCoCreationAngles.length}</strong>
+                  </div>
+                  <small>{recommendedAngles.length} 个推荐</small>
                 </div>
-
-                {showAngleLonglist ? (
-                  <>
-                    <div className="cocreation-filter-row">
-                      <button
-                        type="button"
-                        className={`section-subnav-button ${coCreationAngleFilter === "all" ? "active" : ""}`}
-                        onClick={() => setCoCreationAngleFilter("all")}
-                      >
-                        全部
-                      </button>
-                      {availableAngleTypes.map((type) => (
-                        <button
-                          type="button"
-                          key={type}
-                          className={`section-subnav-button ${coCreationAngleFilter === type ? "active" : ""}`}
-                          onClick={() => setCoCreationAngleFilter(type)}
-                        >
-                          {TOPIC_ANGLE_TYPE_LABELS[type]}
-                        </button>
-                      ))}
-                    </div>
-                    <ContainedScrollArea className="cocreation-longlist-scroll">
-                      <div className="cocreation-candidates-grid">
-                        {filteredOverflowAngles.map((angle) => (
-                          <TopicAngleCard
-                            key={angle.id}
-                            angle={angle}
-                            isPending={isPending}
-                            isSelected={angle.id === selectedCoCreationAngleId}
-                            onChoose={setSelectedCoCreationAngleId}
-                            compact
-                          />
-                        ))}
-                      </div>
-                    </ContainedScrollArea>
-                  </>
-                ) : null}
-              </section>
-            ) : null}
+                <ContainedScrollArea className="cocreation-angle-list-scroll">
+                  <div className="cocreation-angle-list">
+                    {filteredCoCreationAngles.map((angle, index) => (
+                      <TopicAngleListItem
+                        key={angle.id}
+                        angle={angle}
+                        rank={allCoCreationAngles.findIndex((item) => item.id === angle.id) + 1 || index + 1}
+                        isSelected={angle.id === selectedCoCreationAngleId}
+                        onChoose={setSelectedCoCreationAngleId}
+                      />
+                    ))}
+                  </div>
+                </ContainedScrollArea>
+              </div>
+              <TopicAngleDetailPanel
+                angle={selectedCoCreationAngle}
+                isPending={isPending}
+                displayMode={displayMode}
+                onCreateProject={(angle) => void createProjectFromCandidate(angle)}
+              />
+            </section>
 
             <details className="cocreation-coverage cocreation-collapsible">
               <summary className="cocreation-summary-row">
@@ -887,73 +928,113 @@ export function ProjectSidebar({
   );
 }
 
-function TopicAngleCard({
+function TopicAngleListItem({
   angle,
   rank,
-  isPending,
   isSelected,
   onChoose,
-  compact = false,
 }: {
   angle: TopicAngle;
-  rank?: number;
-  isPending: boolean;
+  rank: number;
   isSelected: boolean;
   onChoose: (angleId: string) => void;
-  compact?: boolean;
 }) {
+  return (
+    <button
+      type="button"
+      className={`cocreation-angle-list-item ${isSelected ? "is-selected" : ""}`}
+      onClick={() => onChoose(angle.id)}
+      aria-pressed={isSelected}
+    >
+      <span className="cocreation-angle-rank">{rank}</span>
+      <span className="cocreation-angle-list-main">
+        <strong title={angle.title}>{angle.title}</strong>
+        <small>{angle.coreJudgement}</small>
+      </span>
+      <span className="cocreation-angle-list-meta">
+        <Chip className="cocreation-filter-chip">{angle.angleTypeLabel}</Chip>
+        <span>{formatScorecardStatus(angle.topicScorecard.status)}</span>
+      </span>
+    </button>
+  );
+}
+
+function TopicAngleDetailPanel({
+  angle,
+  isPending,
+  displayMode,
+  onCreateProject,
+}: {
+  angle: TopicAngle | null;
+  isPending: boolean;
+  displayMode: WorkbenchDisplayMode;
+  onCreateProject: (angle: TopicAngle) => void;
+}) {
+  if (!angle) {
+    return (
+      <article className="cocreation-angle-detail empty-state">
+        <h3>选择一个角度</h3>
+        <p>左侧点选候选角度后，这里会显示完整判断、读者价值、风险和下一步。</p>
+      </article>
+    );
+  }
+
   const readerLensLabels = Array.isArray(angle.readerLens)
     ? angle.readerLens.map((item) => TOPIC_READER_PERSONA_LABELS[item]).join(" / ")
     : "";
 
   return (
-    <article className={`zone-card stack cocreation-angle-card ${isSelected ? "is-selected" : ""} ${compact ? "cocreation-angle-card-compact" : ""}`}>
-      <div className="cocreation-angle-head">
-        <div className="cocreation-angle-title-row">
-          {rank ? <span className="cocreation-angle-rank">{rank}</span> : null}
-          <strong className="cocreation-angle-title" title={angle.title}>{angle.title}</strong>
+    <article className="cocreation-angle-detail">
+      <div className="cocreation-detail-head">
+        <div className="stack">
+          <div className="project-item-meta">
+            <Chip className="cocreation-filter-chip">{angle.angleTypeLabel}</Chip>
+            <span className="project-stage-pill">{angle.articleType}</span>
+            <span className="project-stage-pill">{ARTICLE_PROTOTYPE_LABELS[angle.articlePrototype]}</span>
+          </div>
+          <h3>{angle.title}</h3>
+          <p>{angle.coreJudgement}</p>
         </div>
-        <div className="project-item-meta">
-          <Chip className="cocreation-filter-chip">{angle.angleTypeLabel}</Chip>
-          <span className="project-stage-pill">{angle.articleType}</span>
-        </div>
+        <Button type="button" variant="primary" onClick={() => onCreateProject(angle)} disabled={isPending}>
+          用这个角度立项
+        </Button>
       </div>
-      <p className="subtle cocreation-angle-judgement" title={angle.coreJudgement}>{angle.coreJudgement}</p>
-      <div className="cocreation-angle-score">
-        <span>HKR {angle.hkr.h}/{angle.hkr.k}/{angle.hkr.r}</span>
-        <span>{formatScorecardStatus(angle.topicScorecard.status)}</span>
-        <span>{ARTICLE_PROTOTYPE_LABELS[angle.articlePrototype]}</span>
+
+      <div className="cocreation-detail-grid">
+        <DetailBlock label="开题建议" value={`${formatScorecardStatus(angle.topicScorecard.status)}：${angle.topicScorecard.recommendation}`} />
+        <DetailBlock label="HKR" value={`${angle.hkr.h}/${angle.hkr.k}/${angle.hkr.r}（总分 ${angle.hkr.total}）`} />
+        <DetailBlock label="目标读者" value={TOPIC_READER_PERSONA_LABELS[angle.targetReaderPersona]} />
+        <DetailBlock label="读者视角" value={readerLensLabels || "未记录"} />
+        <DetailBlock label="反常识" value={angle.counterIntuition} />
+        <DetailBlock label="读者价值" value={angle.readerValue} />
+        <DetailBlock label="为什么现在" value={angle.whyNow} />
+        <DetailBlock label="创作锚点" value={angle.creativeAnchor} />
+        <DetailBlock label="需要补的证据" value={angle.neededEvidence.join(" / ") || "暂无"} />
+        <DetailBlock label="容易写偏的点" value={angle.riskOfMisfire} />
+        <DetailBlock label="风险解释" value={angle.topicScorecard.evidenceRisk || "暂无"} />
+        <DetailBlock label="建议下一步" value={angle.recommendedNextStep} />
+        {displayMode === "debug" && angle.signalRefs?.length > 0 ? <DetailBlock label="引用信号" value={angle.signalRefs.join(" / ")} /> : null}
+        {angle.sourceBasis?.length > 0 ? <DetailBlock label="材料依据" value={angle.sourceBasis.join(" / ")} /> : null}
       </div>
-      <details className="cocreation-card-detail">
-        <summary>展开判断依据</summary>
-        <div className="stack subtle">
-          <p><strong>目标读者：</strong>{TOPIC_READER_PERSONA_LABELS[angle.targetReaderPersona]}</p>
-          <p><strong>读者视角：</strong>{readerLensLabels || "未记录"}</p>
-          <p><strong>反常识：</strong>{angle.counterIntuition}</p>
-          <p><strong>读者价值：</strong>{angle.readerValue}</p>
-          <p><strong>为什么现在：</strong>{angle.whyNow}</p>
-          <p><strong>Signal refs：</strong>{angle.signalRefs.join(" / ") || "暂无"}</p>
-          <p><strong>创作锚点：</strong>{angle.creativeAnchor}</p>
-          <p><strong>Scorecard：</strong>{angle.topicScorecard.recommendation}</p>
-          <p><strong>风险解释：</strong>{angle.topicScorecard.evidenceRisk}</p>
-          <p><strong>需要补的证据：</strong>{angle.neededEvidence.join(" / ")}</p>
-          <p><strong>容易写偏的点：</strong>{angle.riskOfMisfire}</p>
-          <p><strong>建议下一步：</strong>{angle.recommendedNextStep}</p>
-        </div>
-      </details>
-      <Button variant="secondary" className="cocreation-select-button" type="button" onClick={() => onChoose(angle.id)} disabled={isPending}>
-        {isSelected ? "已选中" : "选中角度"}
-      </Button>
     </article>
   );
 }
 
-function buildAngleNotes(angle: TopicAngle) {
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="cocreation-detail-block">
+      <span>{label}</span>
+      <p>{value}</p>
+    </div>
+  );
+}
+
+function buildAngleNotes(angle: TopicAngle, displayMode: WorkbenchDisplayMode) {
   const readerLensLabels = Array.isArray(angle.readerLens)
     ? angle.readerLens.map((item) => TOPIC_READER_PERSONA_LABELS[item]).join(" / ")
     : "未记录";
 
-  return [
+  const notes = [
     `【角度类型】${angle.angleTypeLabel}`,
     `【文章原型】${ARTICLE_PROTOTYPE_LABELS[angle.articlePrototype]}`,
     `【目标读者】${TOPIC_READER_PERSONA_LABELS[angle.targetReaderPersona]}`,
@@ -964,12 +1045,15 @@ function buildAngleNotes(angle: TopicAngle) {
     `【开题建议】${formatScorecardStatus(angle.topicScorecard.status)}：${angle.topicScorecard.recommendation}`,
     `【读者价值】${angle.readerValue}`,
     `【为什么现在】${angle.whyNow}`,
-    `【Signal refs】${angle.signalRefs.join("；") || "暂无"}`,
     `【创作锚点】${angle.creativeAnchor}`,
     `【需要补的证据】${angle.neededEvidence.join("；")}`,
     `【容易写偏】${angle.riskOfMisfire}`,
     `【建议下一步】${angle.recommendedNextStep}`,
-  ].join("\n");
+  ];
+  if (displayMode === "debug") {
+    notes.splice(10, 0, `【Signal refs】${angle.signalRefs.join("；") || "暂无"}`);
+  }
+  return notes.join("\n");
 }
 
 function formatSignalModeLabel(mode: SignalProviderMode) {

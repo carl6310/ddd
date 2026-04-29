@@ -12,24 +12,24 @@ import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { AccordionCard } from "@/components/ui/accordion-card";
 import { Card, Panel, Surface } from "@/components/ui/surface";
 import { buildWritingQualitySnapshot } from "@/lib/writing-quality/summary";
+import type { ActiveTab, WorkbenchStepPath, WorkspaceSection } from "./workflow-state";
+import type { WorkbenchInspectorSelection } from "./WorkbenchInspector";
 
-type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
-type ActiveTab = "overview" | "research" | "drafts";
-type WorkspaceSection =
-  | "overview-think-card"
-  | "overview-style-core"
-  | "overview-compatibility"
-  | "overview-vitality"
-  | "research-brief"
-  | "source-form"
-  | "source-library"
-  | "sector-model"
-  | "outline"
-  | "drafts"
-  | "publish-prep"
-  | null;
 type OverviewEditorSection = "think-card" | "style-core" | "compatibility" | "vitality";
 type OverviewSurface = "dashboard" | "editor";
+type ReviewRepairGroupId = "must" | "should" | "optional";
+
+interface ReviewRepairTask {
+  id: string;
+  group: ReviewRepairGroupId;
+  title: string;
+  reason: string;
+  suggestedAction?: string;
+  sourceLabel: string;
+  locationLabel: string;
+  targetTab: ActiveTab;
+  targetSection: WorkspaceSection;
+}
 
 interface OverviewTabProps {
   selectedBundle: ProjectBundle;
@@ -40,6 +40,8 @@ interface OverviewTabProps {
   saveProjectFrame: () => Promise<void>;
   setFocusedSection: (section: WorkspaceSection) => void;
   focusSection: WorkspaceSection;
+  onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
+  onInspectorSelectionChange: (selection: WorkbenchInspectorSelection) => void;
 }
 
 export function OverviewTab({
@@ -51,9 +53,12 @@ export function OverviewTab({
   saveProjectFrame,
   setFocusedSection,
   focusSection,
+  onNavigate,
+  onInspectorSelectionChange,
 }: OverviewTabProps) {
   const [localEditorSection, setLocalEditorSection] = useState<OverviewEditorSection>("think-card");
   const [localSurface, setLocalSurface] = useState<OverviewSurface>("dashboard");
+  const [handledRepairTaskIds, setHandledRepairTaskIds] = useState<string[]>([]);
 
   const hasResearchBrief = Boolean(selectedBundle.researchBrief);
   const hasSourceCards = selectedBundle.sourceCards.length > 0;
@@ -240,15 +245,13 @@ export function OverviewTab({
     selectedBundle.project.styleCore.unsupportedSceneDetector,
   ]);
   const vitalityIssueCount = selectedBundle.project.vitalityCheck.entries.filter((entry) => entry.status !== "pass").length;
-  const vitalityIssues = selectedBundle.project.vitalityCheck.entries.filter(
-    (entry): entry is typeof entry & { status: "warn" | "fail" } => entry.status !== "pass",
-  );
   const vitalityPassed = selectedBundle.project.vitalityCheck.entries.filter((entry) => entry.status === "pass");
-  const vitalityGuidance = buildVitalityGuidance(vitalityIssues, selectedBundle.reviewReport);
   const writingQuality = buildWritingQualitySnapshot(selectedBundle);
   const topicReaderLens = getTopicReaderLens(selectedBundle.project.topicMeta);
   const argumentFrame = selectedBundle.outlineDraft?.argumentFrame ?? null;
-  const argumentQualityFlags = selectedBundle.reviewReport?.argumentQualityFlags ?? [];
+  const reviewRepairTasks = buildReviewRepairTasks(selectedBundle);
+  const visibleReviewRepairTasks = reviewRepairTasks.filter((task) => !handledRepairTaskIds.includes(task.id));
+  const handledReviewRepairCount = reviewRepairTasks.length - visibleReviewRepairTasks.length;
   const writingQualityMetrics = [
     {
       label: "总体质量分",
@@ -743,144 +746,31 @@ export function OverviewTab({
             </div>
             <div className="editor-overview-grid">
               <EditorStatCard label="总体状态" value={selectedBundle.project.vitalityCheck.overallStatus} note={selectedBundle.project.vitalityCheck.overallVerdict || "还没有总体判断。"} />
-              <EditorStatCard label="待修问题" value={String(vitalityIssueCount)} note="优先看 `fail`，再看 `warn`。" />
+              <EditorStatCard label="待修任务" value={String(visibleReviewRepairTasks.length)} note="优先处理必须先修，再看建议修。" />
               <EditorStatCard label="是否硬阻塞" value={selectedBundle.project.vitalityCheck.hardBlocked ? "是" : "否"} note={selectedBundle.project.vitalityCheck.hardBlocked ? "先不要进发布整理。" : "可以继续润色或进入下一步。"} />
             </div>
             <ContainedScrollArea className="vitality-scroll-panel">
-              <Card className="vitality-detail-card">
-                <h3>当前不达标的是哪些</h3>
-                <p>{selectedBundle.project.vitalityCheck.overallVerdict}</p>
-                <div className="vitality-issue-strip">
-                  {vitalityIssues.map((entry) => (
-                    <Chip key={entry.key} tone={entry.status === "fail" ? "danger" : "warning"}>
-                      {entry.title}
-                    </Chip>
-                  ))}
-                </div>
-              </Card>
-
-              <div className="vitality-guidance-list">
-                {vitalityGuidance.map((item) => (
-                  <Card className="vitality-detail-card vitality-guidance-card" key={item.key}>
-                    <div className="vitality-guidance-head">
-                      <div>
-                        <h3>{item.title}</h3>
-                        <Chip tone={item.status === "fail" ? "danger" : "warning"}>{item.status}</Chip>
-                      </div>
-                    </div>
-                    <p className="subtle">{item.why}</p>
-                    <div>
-                      <strong>怎么改</strong>
-                      <ul className="compact-list compact-inline-list">
-                        {item.how.map((tip) => (
-                          <li key={tip}>
-                            <span>{tip}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    {item.examples.length > 0 ? (
-                      <div>
-                        <strong>可以直接借用的句子</strong>
-                        <ul className="compact-list compact-inline-list">
-                          {item.examples.map((example) => (
-                            <li key={example}>
-                              <span>{example}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {item.related.length > 0 ? (
-                      <div>
-                        <strong>为什么判你不过</strong>
-                        <ul className="compact-list compact-inline-list">
-                          {item.related.map((detail) => (
-                            <li key={detail}>
-                              <span>{detail}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </Card>
-                ))}
-              </div>
-
-              {selectedBundle.reviewReport?.revisionSuggestions?.length ? (
-                <Card className="vitality-detail-card">
-                  <h3>模型给你的补充修稿建议</h3>
-                  <ul className="compact-list compact-inline-list">
-                    {selectedBundle.reviewReport.revisionSuggestions.slice(0, 6).map((tip) => (
-                      <li key={tip}>
-                        <span>{tip}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              ) : null}
-
-              {selectedBundle.reviewReport?.rewriteIntents?.length ? (
-                <Card className="vitality-detail-card">
-                  <h3>定位式返工建议</h3>
-                  <ul className="compact-list compact-inline-list">
-                    {selectedBundle.reviewReport.rewriteIntents.slice(0, 6).map((intent) => (
-                      <li key={`${intent.targetRange}-${intent.issueType}`}>
-                        <strong>{intent.targetRange}</strong>
-                        <span>{intent.issueType}</span>
-                        <span>{intent.whyItFails}</span>
-                        <span>{intent.suggestedRewriteMode}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              ) : null}
-
-              {selectedBundle.reviewReport?.continuityFlags?.length ? (
-                <Card className="vitality-detail-card">
-                  <h3>连续性问题</h3>
-                  <ul className="compact-list compact-inline-list">
-                    {selectedBundle.reviewReport.continuityFlags.slice(0, 6).map((flag) => (
-                      <li key={`${flag.type}-${flag.sectionIds.join("-")}-${flag.reason}`}>
-                        <strong>{flag.sectionIds.length ? `章节：${flag.sectionIds.join(" / ")}` : flag.type}</strong>
-                        <span>{flag.reason}</span>
-                        <span>{flag.suggestedAction}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              ) : null}
-
-              {argumentQualityFlags.length ? (
-                <Card className="vitality-detail-card">
-                  <h3>论证质量问题</h3>
-                  <ul className="compact-list compact-inline-list">
-                    {argumentQualityFlags.slice(0, 8).map((flag) => (
-                      <li key={`${flag.type}-${flag.sectionIds.join("-")}-${flag.reason}`}>
-                        <strong>{formatArgumentQualityTitle(flag.type)}</strong>
-                        <span>{flag.severity}{flag.sectionIds.length ? ` · 章节：${flag.sectionIds.join(" / ")}` : ""}</span>
-                        <span>{formatArgumentQualityMessage(flag.type, flag.reason)}</span>
-                        <span>{flag.suggestedAction}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              ) : null}
-
-              {selectedBundle.reviewReport?.paragraphFlags?.length ? (
-                <Card className="vitality-detail-card">
-                  <h3>最卡的段落</h3>
-                  <ul className="compact-list compact-inline-list">
-                    {selectedBundle.reviewReport.paragraphFlags.slice(0, 4).map((flag) => (
-                      <li key={`${flag.paragraphIndex}-${flag.preview}`}>
-                        <strong>{flag.sectionHeading || `段落 ${flag.paragraphIndex + 1}`}</strong>
-                        <span>{flag.preview}</span>
-                        <span>{flag.detail}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              ) : null}
+              <ReviewRepairList
+                tasks={visibleReviewRepairTasks}
+                totalCount={reviewRepairTasks.length}
+                handledCount={handledReviewRepairCount}
+                onNavigate={onNavigate}
+                onInspectTask={(task) =>
+                  onInspectorSelectionChange({
+                    kind: "review-issue",
+                    title: task.title,
+                    reason: task.reason,
+                    sourceLabel: task.sourceLabel,
+                    locationLabel: task.locationLabel,
+                    suggestedAction: task.suggestedAction,
+                    targetTab: task.targetTab,
+                    targetSection: task.targetSection,
+                  })
+                }
+                onMarkHandled={(taskId) => {
+                  setHandledRepairTaskIds((current) => (current.includes(taskId) ? current : [...current, taskId]));
+                }}
+              />
 
               {vitalityPassed.length ? (
                 <details className="ui-card vitality-detail-card">
@@ -901,6 +791,441 @@ export function OverviewTab({
       </Surface>
     </>
   );
+}
+
+function ReviewRepairList({
+  tasks,
+  totalCount,
+  handledCount,
+  onNavigate,
+  onInspectTask,
+  onMarkHandled,
+}: {
+  tasks: ReviewRepairTask[];
+  totalCount: number;
+  handledCount: number;
+  onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
+  onInspectTask: (task: ReviewRepairTask) => void;
+  onMarkHandled: (taskId: string) => void;
+}) {
+  const groups: Array<{
+    id: ReviewRepairGroupId;
+    title: string;
+    description: string;
+    emptyText: string;
+    tone: "danger" | "warning" | "neutral";
+  }> = [
+    {
+      id: "must",
+      title: "必须先修",
+      description: "会阻止发布整理，或者会让文章判断失真。",
+      emptyText: "没有硬阻塞。",
+      tone: "danger",
+    },
+    {
+      id: "should",
+      title: "建议修",
+      description: "不一定阻塞，但会影响连贯性、论证力度或证据可信度。",
+      emptyText: "暂时没有建议修复项。",
+      tone: "warning",
+    },
+    {
+      id: "optional",
+      title: "可选润色",
+      description: "更偏表达和作者像，适合主要问题修完后再看。",
+      emptyText: "暂无额外润色建议。",
+      tone: "neutral",
+    },
+  ];
+
+  if (totalCount === 0) {
+    return (
+      <Card className="vitality-detail-card review-repair-empty-state">
+        <h3>修复任务</h3>
+        <p>当前没有需要处理的质检项。可以继续人工润色，或进入发布整理。</p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="review-repair-list">
+      <Card className="vitality-detail-card review-repair-summary">
+        <div>
+          <h3>修复任务</h3>
+          <p>先处理“必须先修”，再看“建议修”。每条任务都可以直接定位到应该改的区域。</p>
+        </div>
+        <div className="review-repair-summary-chips">
+          <Chip tone={tasks.some((task) => task.group === "must") ? "danger" : "success"}>待处理 {tasks.length}</Chip>
+          {handledCount > 0 ? <Chip tone="neutral">已标记 {handledCount}</Chip> : null}
+        </div>
+      </Card>
+
+      {groups.map((group) => {
+        const groupTasks = tasks.filter((task) => task.group === group.id);
+        return (
+          <section className={`review-repair-group review-repair-group-${group.id}`} key={group.id}>
+            <div className="review-repair-group-head">
+              <div>
+                <h3>{group.title}</h3>
+                <p>{group.description}</p>
+              </div>
+              <Chip tone={group.tone}>{groupTasks.length}</Chip>
+            </div>
+            {groupTasks.length ? (
+              <div className="review-repair-cards">
+                {groupTasks.map((task) => (
+                  <article className="review-repair-card" key={task.id}>
+                    <div className="review-repair-card-top">
+                      <div>
+                        <span className="review-repair-source">{task.sourceLabel}</span>
+                        <h4>{task.title}</h4>
+                      </div>
+                      <Chip tone={group.tone}>{task.locationLabel}</Chip>
+                    </div>
+                    <p>{task.reason}</p>
+                    {task.suggestedAction ? <small>{task.suggestedAction}</small> : null}
+                    <div className="review-repair-actions">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          onInspectTask(task);
+                          onNavigate(task.targetTab, task.targetSection);
+                        }}
+                      >
+                        定位
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => onMarkHandled(task.id)}>
+                        标记已处理
+                      </Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="review-repair-empty">{group.emptyText}</p>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function buildReviewRepairTasks(selectedBundle: ProjectBundle): ReviewRepairTask[] {
+  const tasks: ReviewRepairTask[] = [];
+  const projectId = selectedBundle.project.id;
+  const reviewReport = selectedBundle.reviewReport;
+  const vitalityIssues = selectedBundle.project.vitalityCheck.entries.filter(
+    (entry): entry is typeof entry & { status: "warn" | "fail" } => entry.status !== "pass",
+  );
+
+  if (selectedBundle.project.vitalityCheck.hardBlocked && vitalityIssues.every((entry) => entry.status !== "fail")) {
+    tasks.push({
+      id: buildRepairTaskId(projectId, "vitality-hard-block", selectedBundle.project.vitalityCheck.overallVerdict),
+      group: "must",
+      title: "发布整理被硬阻塞",
+      reason: selectedBundle.project.vitalityCheck.overallVerdict || "当前 VitalityCheck 判定还不能进入发布整理。",
+      sourceLabel: "发布门槛",
+      locationLabel: "全文",
+      targetTab: "overview",
+      targetSection: "overview-vitality",
+    });
+  }
+
+  for (const item of buildVitalityGuidance(vitalityIssues, reviewReport)) {
+    tasks.push({
+      id: buildRepairTaskId(projectId, "vitality", item.key, item.why),
+      group: item.status === "fail" ? "must" : "should",
+      title: item.title,
+      reason: item.why,
+      suggestedAction: item.how[0],
+      sourceLabel: "生命力门槛",
+      locationLabel: "全文",
+      targetTab: "overview",
+      targetSection: "overview-vitality",
+    });
+  }
+
+  if (!reviewReport) {
+    return tasks;
+  }
+
+  for (const layer of reviewReport.qualityPyramid.filter((item) => item.status !== "pass")) {
+    const fixTip = layer.status === "fail" ? layer.mustFix[0] : layer.shouldFix[0] ?? layer.optionalPolish[0];
+    tasks.push({
+      id: buildRepairTaskId(projectId, "quality-pyramid", layer.level, layer.summary),
+      group: layer.status === "fail" ? "must" : "should",
+      title: formatQualityLayerTitle(layer.level, layer.title),
+      reason: layer.summary,
+      suggestedAction: fixTip,
+      sourceLabel: "质量金字塔",
+      locationLabel: layer.level,
+      targetTab: "overview",
+      targetSection: "overview-vitality",
+    });
+  }
+
+  for (const check of reviewReport.checks.filter((item) => item.status !== "pass")) {
+    const isUnsupportedScene = hasUnsupportedSceneSignal(check.key, check.title, check.detail);
+    tasks.push({
+      id: buildRepairTaskId(projectId, "review-check", check.key, check.detail),
+      group: check.status === "fail" || isUnsupportedScene ? "must" : "should",
+      title: isUnsupportedScene ? "不可靠场景细节" : check.title,
+      reason: check.detail,
+      sourceLabel: check.layer ? `检查项 ${check.layer}` : "检查项",
+      locationLabel: check.evidenceIds.length ? `证据 ${check.evidenceIds.length}` : "全文",
+      targetTab: isUnsupportedScene ? "drafts" : "overview",
+      targetSection: isUnsupportedScene ? "drafts" : "overview-vitality",
+    });
+  }
+
+  for (const intent of reviewReport.structuralRewriteIntents ?? []) {
+    tasks.push({
+      id: buildRepairTaskId(projectId, "structural-rewrite", intent.issueTypes.join("-"), intent.whyItFails),
+      group: "must",
+      title: formatStructuralRewriteTitle(intent.issueTypes),
+      reason: intent.whyItFails,
+      suggestedAction: formatRewriteMode(intent.suggestedRewriteMode),
+      sourceLabel: "结构重写",
+      locationLabel: getSectionLabel(selectedBundle, intent.affectedSectionIds),
+      targetTab: shouldReviewTaskOpenOutline(intent.issueTypes) ? "structure" : "drafts",
+      targetSection: shouldReviewTaskOpenOutline(intent.issueTypes) ? "outline" : "drafts",
+    });
+  }
+
+  for (const intent of reviewReport.deferredStructuralRewriteIntents ?? []) {
+    tasks.push({
+      id: buildRepairTaskId(projectId, "deferred-structural-rewrite", intent.issueTypes.join("-"), intent.whyItFails),
+      group: "should",
+      title: `后续结构修复：${formatStructuralRewriteTitle(intent.issueTypes)}`,
+      reason: intent.whyItFails,
+      suggestedAction: formatRewriteMode(intent.suggestedRewriteMode),
+      sourceLabel: "延后重写",
+      locationLabel: getSectionLabel(selectedBundle, intent.affectedSectionIds),
+      targetTab: shouldReviewTaskOpenOutline(intent.issueTypes) ? "structure" : "drafts",
+      targetSection: shouldReviewTaskOpenOutline(intent.issueTypes) ? "outline" : "drafts",
+    });
+  }
+
+  for (const flag of reviewReport.continuityFlags ?? []) {
+    tasks.push({
+      id: buildRepairTaskId(projectId, "continuity", flag.type, flag.sectionIds.join("-"), flag.reason),
+      group: flag.severity === "fail" ? "must" : "should",
+      title: formatContinuityTitle(flag.type),
+      reason: flag.reason,
+      suggestedAction: flag.suggestedAction,
+      sourceLabel: "连续性",
+      locationLabel: getSectionLabel(selectedBundle, flag.sectionIds),
+      targetTab: "drafts",
+      targetSection: "drafts",
+    });
+  }
+
+  for (const flag of reviewReport.argumentQualityFlags ?? []) {
+    const openOutline = shouldReviewTaskOpenOutline([flag.type]);
+    tasks.push({
+      id: buildRepairTaskId(projectId, "argument", flag.type, flag.sectionIds.join("-"), flag.reason),
+      group: flag.severity === "fail" ? "must" : "should",
+      title: formatArgumentQualityTitle(flag.type),
+      reason: formatArgumentQualityMessage(flag.type, flag.reason),
+      suggestedAction: flag.suggestedAction,
+      sourceLabel: "论证质量",
+      locationLabel: getSectionLabel(selectedBundle, flag.sectionIds),
+      targetTab: openOutline ? "structure" : "drafts",
+      targetSection: openOutline ? "outline" : "drafts",
+    });
+  }
+
+  for (const intent of reviewReport.rewriteIntents) {
+    tasks.push({
+      id: buildRepairTaskId(projectId, "rewrite-intent", intent.targetRange, intent.issueType, intent.whyItFails),
+      group: hasUnsupportedSceneSignal(intent.issueType, intent.whyItFails) ? "must" : "should",
+      title: formatRewriteIssueTitle(intent.issueType),
+      reason: intent.whyItFails,
+      suggestedAction: intent.suggestedRewriteMode,
+      sourceLabel: "段落返工",
+      locationLabel: intent.targetRange,
+      targetTab: "drafts",
+      targetSection: "drafts",
+    });
+  }
+
+  for (const flag of reviewReport.paragraphFlags) {
+    const isUnsupportedScene = hasUnsupportedSceneSignal(flag.issueTypes.join(" "), flag.detail, flag.preview);
+    tasks.push({
+      id: buildRepairTaskId(projectId, "paragraph", String(flag.paragraphIndex), flag.issueTypes.join("-"), flag.preview),
+      group: isUnsupportedScene ? "must" : "should",
+      title: isUnsupportedScene ? "段落含不可靠场景" : `段落需要${formatParagraphAction(flag.suggestedAction)}`,
+      reason: `${flag.detail}${flag.preview ? `：${flag.preview}` : ""}`,
+      suggestedAction: formatParagraphAction(flag.suggestedAction),
+      sourceLabel: "段落检查",
+      locationLabel: flag.sectionHeading || `段落 ${flag.paragraphIndex + 1}`,
+      targetTab: "drafts",
+      targetSection: "drafts",
+    });
+  }
+
+  for (const tip of reviewReport.revisionSuggestions.slice(0, 8)) {
+    tasks.push({
+      id: buildRepairTaskId(projectId, "revision-suggestion", tip),
+      group: "optional",
+      title: "补充修稿建议",
+      reason: tip,
+      sourceLabel: "润色建议",
+      locationLabel: "全文",
+      targetTab: "drafts",
+      targetSection: "drafts",
+    });
+  }
+
+  for (const pattern of reviewReport.missingPatterns.slice(0, 6)) {
+    tasks.push({
+      id: buildRepairTaskId(projectId, "missing-pattern", pattern),
+      group: "optional",
+      title: "补回作者动作",
+      reason: pattern,
+      sourceLabel: "作者像",
+      locationLabel: "全文",
+      targetTab: "drafts",
+      targetSection: "drafts",
+    });
+  }
+
+  return dedupeRepairTasks(tasks);
+}
+
+function dedupeRepairTasks(tasks: ReviewRepairTask[]) {
+  const seen = new Set<string>();
+  return tasks.map((task) => ({
+    ...task,
+    title: formatRepairText(task.title),
+    reason: formatRepairText(task.reason),
+    suggestedAction: task.suggestedAction ? formatRepairText(task.suggestedAction) : undefined,
+    sourceLabel: formatRepairText(task.sourceLabel),
+    locationLabel: formatRepairText(task.locationLabel),
+  })).filter((task) => {
+    const key = `${task.group}|${task.title}|${task.reason}|${task.locationLabel}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildRepairTaskId(...parts: string[]) {
+  return parts
+    .join("|")
+    .replace(/\s+/g, " ")
+    .slice(0, 220);
+}
+
+function getSectionLabel(selectedBundle: ProjectBundle, sectionIds: string[]) {
+  if (sectionIds.length === 0) {
+    return "全文";
+  }
+  const sections = selectedBundle.outlineDraft?.sections ?? [];
+  const labels = sectionIds.map((id) => sections.find((section) => section.id === id)?.heading || id);
+  return `章节：${labels.slice(0, 3).join(" / ")}${labels.length > 3 ? "…" : ""}`;
+}
+
+function shouldReviewTaskOpenOutline(issueTypes: string[]) {
+  return issueTypes.some((type) => type === "map_tour_in_judgement_essay" || type === "factor_tour_in_judgement_essay" || type === "zones_used_as_structure_not_evidence");
+}
+
+function hasUnsupportedSceneSignal(...values: string[]) {
+  const text = values.join(" ").toLowerCase();
+  return /unsupported[-_ ]?scene|scene[_-]?unsupported|unsupported scene|编造|不可靠场景|伪现场|买家 quote|pseudo[-_ ]?interview/.test(text);
+}
+
+function formatRepairText(text: string) {
+  return text
+    .replaceAll("Unsupported Scene", "不可靠场景")
+    .replaceAll("unsupported-scene", "不可靠场景")
+    .replaceAll("unsupported_scene", "不可靠场景")
+    .replaceAll("WritingLint", "写作硬伤")
+    .replaceAll("StructureFlow", "结构推进")
+    .replaceAll("StyleCore", "表达策略")
+    .replaceAll("ThinkCard", "选题判断")
+    .replaceAll("mustUseEvidenceIds", "必要证据")
+    .replaceAll("continuityLedger", "连续性台账");
+}
+
+function formatQualityLayerTitle(level: string, title: string) {
+  const labels: Record<string, string> = {
+    WritingLint: "写作硬伤",
+    StructureFlow: "结构推进",
+    EvidenceDepth: "证据深度",
+    AuthorVoice: "作者像",
+  };
+  return `${level} ${labels[title] ?? title}`;
+}
+
+function formatStructuralRewriteTitle(issueTypes: string[]) {
+  if (issueTypes.includes("map_tour_in_judgement_essay") || issueTypes.includes("factor_tour_in_judgement_essay")) {
+    return "判断稿结构需要改成论点驱动";
+  }
+  if (issueTypes.includes("headline_not_answered") || issueTypes.includes("thesis_too_generic")) {
+    return "开头需要更早回答标题问题";
+  }
+  if (issueTypes.includes("counterargument_missing")) {
+    return "需要补真实反方处理";
+  }
+  return issueTypes.map((type) => formatContinuityTitle(type)).join(" / ");
+}
+
+function formatContinuityTitle(type: string) {
+  const labels: Record<string, string> = {
+    does_not_answer_previous: "没有回答上一节问题",
+    no_new_information: "这一节没有新增信息",
+    can_be_swapped: "相邻章节可以互换",
+    section_redundant: "章节可能冗余",
+    repeated_claim: "重复同一个判断",
+    fake_bridge: "转场只是表面连接",
+    section_does_not_deliver_new_information: "没有兑现提纲的新信息",
+    section_does_not_answer_ledger: "没有回答论证台账的问题",
+    section_missing_required_evidence: "缺少必要证据",
+    section_missing_optional_evidence: "可选证据未使用",
+    unlinked_adjacency: "相邻章节没有接上",
+  };
+  return labels[type] ?? type;
+}
+
+function formatRewriteIssueTitle(type: string) {
+  const labels: Record<string, string> = {
+    weak_opening: "开头不够有力",
+    missing_anchor: "缺少具体锚点",
+    weak_transition: "段落衔接弱",
+    evidence_not_integrated: "证据没有融进判断",
+    generic_language: "表达太泛",
+    missing_scene: "缺少场景或代价感",
+    missing_cost: "缺少现实代价",
+    weak_ending_echo: "结尾回扣不够",
+  };
+  return labels[type] ?? type;
+}
+
+function formatRewriteMode(mode: string) {
+  const labels: Record<string, string> = {
+    merge_sections: "合并相关章节",
+    delete_redundant_section: "删除冗余章节",
+    reorder_sections: "调整章节顺序",
+    rewrite_section_roles: "重写章节角色",
+    rewrite_opening_and_next_section: "重写开头和下一节承接",
+  };
+  return labels[mode] ?? mode;
+}
+
+function formatParagraphAction(action: string) {
+  const labels: Record<string, string> = {
+    rewrite: "重写",
+    split: "拆分",
+    move: "移动",
+    trim: "压缩",
+  };
+  return labels[action] ?? action;
 }
 
 function updateProjectField(
@@ -1026,6 +1351,7 @@ function formatArgumentQualityTitle(type: string) {
     headline_not_answered: "标题问题没有回答",
     thesis_too_generic: "主判断太泛",
     map_tour_in_judgement_essay: "判断稿写成片区巡游",
+    factor_tour_in_judgement_essay: "判断稿写成因素目录",
     zones_used_as_structure_not_evidence: "片区成了目录",
     counterargument_missing: "缺少反方处理",
     decision_frame_weak: "决策框架弱",
@@ -1320,7 +1646,7 @@ function getFixSteps(key: string) {
       ];
     case "momentum":
       return [
-        "在大段之间补一句“为什么下一段会接这一段”的过渡句。",
+        "不要补独立过渡句；重写上一节结尾和下一节开头，让下一节成为上一节问题的自然答案。",
         "把最重的一段拆成两到三段，每段只推进一个判断。",
         "先讲表象，再讲结构原因，最后讲后果，不要一段里同时讲三层。",
       ];

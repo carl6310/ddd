@@ -6,7 +6,7 @@ import { ProjectSidebar } from "./workbench/ProjectSidebar";
 import { OverviewTab } from "./workbench/OverviewTab";
 import { ResearchTab } from "./workbench/ResearchTab";
 import { DraftsTab } from "./workbench/DraftsTab";
-import { ReviewSidebar } from "./workbench/ReviewSidebar";
+import { WorkbenchInspector, type WorkbenchInspectorSelection } from "./workbench/WorkbenchInspector";
 import { JobLogPanel } from "./workbench/job-log-panel";
 import { TaskCenterModal } from "./workbench/task-center-modal";
 import { useJobPolling, type JobDetail, type ProjectJobSummary } from "@/hooks/use-job-polling";
@@ -26,6 +26,11 @@ import {
   type WorkbenchWorkflowStep,
   type WorkspaceSection,
 } from "./workbench/workflow-state";
+import {
+  normalizeWorkbenchDisplayMode,
+  workbenchDisplayModeStorageKey,
+  type WorkbenchDisplayMode,
+} from "./workbench/display-mode";
 type MessageKind = "success" | "error" | "info";
 
 type FeedbackState = {
@@ -55,6 +60,8 @@ export function ProjectWorkbench({
   const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialView.tab);
   const [focusedSection, setFocusedSection] = useState<WorkspaceSection>(initialView.section);
+  const [inspectorSelection, setInspectorSelection] = useState<WorkbenchInspectorSelection>(null);
+  const [displayMode, setDisplayMode] = useState<WorkbenchDisplayMode>("writing");
   const [staleArtifactsByProject, setStaleArtifactsByProject] = useState<Record<string, StaleArtifact[]>>({});
   const lastAutoNavigatedProjectId = useRef(initialSelectedBundle?.project.id ?? "");
   const previousJobStatuses = useRef(new Map<string, JobStatus>());
@@ -68,6 +75,7 @@ export function ProjectWorkbench({
       return;
     }
     try {
+      setDisplayMode(normalizeWorkbenchDisplayMode(window.localStorage.getItem(workbenchDisplayModeStorageKey)));
       const stored = window.localStorage.getItem("workbench-stale-artifacts");
       if (stored) {
         setStaleArtifactsByProject(JSON.parse(stored) as Record<string, StaleArtifact[]>);
@@ -76,6 +84,13 @@ export function ProjectWorkbench({
       setStaleArtifactsByProject({});
     }
   }, []);
+
+  function changeDisplayMode(mode: WorkbenchDisplayMode) {
+    setDisplayMode(mode);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(workbenchDisplayModeStorageKey, mode);
+    }
+  }
 
   useEffect(() => {
     if (!selectedProjectId && projects[0]?.id) {
@@ -113,6 +128,7 @@ export function ProjectWorkbench({
     previousJobStatuses.current.clear();
     handledTerminalJobs.current.clear();
     setJobDetail(null);
+    setInspectorSelection(null);
   }, [selectedProjectId]);
 
   const sampleDigest = useMemo(
@@ -374,9 +390,27 @@ export function ProjectWorkbench({
           <h1 className="topbar-title">上海板块写作工作台</h1>
         </div>
         <div className="topbar-right">
+          <div className="workbench-display-toggle" role="group" aria-label="界面模式">
+            <button
+              type="button"
+              className={displayMode === "writing" ? "active" : ""}
+              onClick={() => changeDisplayMode("writing")}
+              aria-pressed={displayMode === "writing"}
+            >
+              写作模式
+            </button>
+            <button
+              type="button"
+              className={displayMode === "debug" ? "active" : ""}
+              onClick={() => changeDisplayMode("debug")}
+              aria-pressed={displayMode === "debug"}
+            >
+              调试模式
+            </button>
+          </div>
           <div className="mode-chip service-status-chip">
             <span className="service-status-dot" aria-hidden="true" />
-            {process.env.NEXT_PUBLIC_MODEL_MODE ? `模型模式：${process.env.NEXT_PUBLIC_MODEL_MODE}` : "本地服务已连接"}
+            {displayMode === "debug" && process.env.NEXT_PUBLIC_MODEL_MODE ? `模型模式：${process.env.NEXT_PUBLIC_MODEL_MODE}` : "本地服务已连接"}
           </div>
           <button type="button" className="mode-chip task-center-trigger" onClick={() => setIsTaskCenterOpen(true)}>
             后台任务 {queueSummary.runningCount} 运行 / {queueSummary.queuedCount} 排队
@@ -404,6 +438,7 @@ export function ProjectWorkbench({
         queueSummary={queueSummary}
         onRetry={visibleJob?.status === "failed" ? () => void retryFailedJob(visibleJob.id) : null}
         isRetrying={isRetryingJob}
+        displayMode={displayMode}
       />
 
       {feedback?.text ? (
@@ -426,20 +461,24 @@ export function ProjectWorkbench({
           setMessage={showFeedback}
           refreshProjectsAndBundle={refreshProjectsAndBundle}
           sampleDigest={sampleDigest}
+          displayMode={displayMode}
         />
   );
 
   const appInspector = selectedBundle ? (
-    <ReviewSidebar
+    <WorkbenchInspector
       selectedBundle={selectedBundle}
       activeTab={activeTab}
       focusedSection={focusedSection}
+      selection={inspectorSelection}
+      onClearSelection={() => setInspectorSelection(null)}
       isPending={uiPending}
       onNavigate={(tab, section) => {
         setActiveTab(tab);
         setFocusedSection(section);
       }}
       onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+      displayMode={displayMode}
     />
   ) : null;
 
@@ -571,6 +610,11 @@ export function ProjectWorkbench({
                   saveProjectFrame={saveProjectFrame}
                   setFocusedSection={setFocusedSection}
                   focusSection={focusedSection}
+                  onNavigate={(tab, section) => {
+                    setActiveTab(tab);
+                    setFocusedSection(section);
+                  }}
+                  onInspectorSelectionChange={setInspectorSelection}
                 />
                 </section>
               )}
@@ -587,7 +631,9 @@ export function ProjectWorkbench({
 	                  setMessage={showFeedback}
                   markArtifactsStale={markArtifactsStale}
 	                  runProjectStep={runProjectStep}
-	                  focusSection={mapResearchFocus(focusedSection)}
+                  focusSection={mapResearchFocus(focusedSection)}
+                  onInspectorSelectionChange={setInspectorSelection}
+                  displayMode={displayMode}
                 />
                 </section>
               )}
@@ -615,6 +661,8 @@ export function ProjectWorkbench({
                     setActiveTab("overview");
                     setFocusedSection("overview-vitality");
                   }}
+                  onInspectorSelectionChange={setInspectorSelection}
+                  displayMode={displayMode}
                   focusSection={
                     activeTab === "structure"
                       ? mapStructureFocus(focusedSection)

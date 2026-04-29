@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ProjectBundle, SourceCard } from "@/lib/types";
+import type { OutlineSection, ProjectBundle, SourceCard } from "@/lib/types";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { InlineTextEdit, InlineTextAreaEdit } from "@/components/ui/inline-edit";
+import { InlineTextAreaEdit } from "@/components/ui/inline-edit";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
-import { AccordionCard } from "@/components/ui/accordion-card";
 import { DisclosureList, DisclosureRow } from "@/components/ui/disclosure-list";
 import { EditableSettingRow, GroupedSettings, SettingRow } from "@/components/ui/editable-setting-row";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, Panel, Surface } from "@/components/ui/surface";
 import { canPreparePublish } from "@/lib/workflow";
 import { classifyEditorialFeedbackEvents } from "@/lib/editorial-feedback/classifier";
+import type { WorkbenchInspectorSelection } from "./WorkbenchInspector";
+import type { WorkbenchDisplayMode } from "./display-mode";
 
 type DraftsSection = "sector-model" | "outline" | "drafts" | "publish-prep";
 type DraftsSurfaceMode = "structure" | "writing" | "publish";
@@ -34,6 +35,8 @@ interface DraftsTabProps {
   surfaceTitle?: string;
   surfaceMode?: DraftsSurfaceMode;
   onOpenVitalityCheck: () => void;
+  onInspectorSelectionChange: (selection: WorkbenchInspectorSelection) => void;
+  displayMode: WorkbenchDisplayMode;
   focusSection: "research-brief" | "source-form" | "source-library" | "sector-model" | "outline" | "drafts" | "publish-prep" | null;
 }
 
@@ -51,11 +54,14 @@ export function DraftsTab({
   surfaceTitle = "写作",
   surfaceMode = "writing",
   onOpenVitalityCheck,
+  onInspectorSelectionChange,
+  displayMode,
   focusSection,
 }: DraftsTabProps) {
   const [draftMessage, setDraftMessage] = useState("");
   const [activeSection, setActiveSection] = useState<DraftsSection>("sector-model");
   const [draftPreviewMode, setDraftPreviewMode] = useState<"analysis" | "narrative">("narrative");
+  const [selectedOutlineSectionId, setSelectedOutlineSectionId] = useState<string | null>(null);
   const hasOutlineDraft = Boolean(selectedBundle.outlineDraft);
   const canPublish = canPreparePublish(selectedBundle.reviewReport, selectedBundle.project.vitalityCheck);
   const exportHref = `/api/projects/${selectedProjectId}/export/markdown`;
@@ -66,6 +72,10 @@ export function DraftsTab({
   );
 
   const visibleSections = useMemo(() => getVisibleDraftSections(surfaceMode), [surfaceMode]);
+  const outlineSections = useMemo(() => selectedBundle.outlineDraft?.sections ?? [], [selectedBundle.outlineDraft?.sections]);
+  const selectedOutlineSectionIndex = outlineSections.findIndex((section) => section.id === selectedOutlineSectionId);
+  const selectedOutlineSection = selectedOutlineSectionIndex >= 0 ? outlineSections[selectedOutlineSectionIndex] : outlineSections[0] ?? null;
+  const effectiveSelectedOutlineIndex = selectedOutlineSectionIndex >= 0 ? selectedOutlineSectionIndex : selectedOutlineSection ? 0 : -1;
 
   useEffect(() => {
     if (
@@ -86,6 +96,26 @@ export function DraftsTab({
       setActiveSection("sector-model");
     }
   }, [focusSection, selectedProjectId, hasOutlineDraft, surfaceMode, visibleSections]);
+
+  useEffect(() => {
+    if (outlineSections.length === 0) {
+      if (selectedOutlineSectionId !== null) {
+        setSelectedOutlineSectionId(null);
+      }
+      return;
+    }
+
+    if (!selectedOutlineSectionId || !outlineSections.some((section) => section.id === selectedOutlineSectionId)) {
+      setSelectedOutlineSectionId(outlineSections[0].id);
+    }
+  }, [outlineSections, selectedOutlineSectionId]);
+
+  useEffect(() => {
+    if (activeSection !== "outline" || !selectedOutlineSection) {
+      return;
+    }
+    onInspectorSelectionChange({ kind: "outline-section", sectionId: selectedOutlineSection.id });
+  }, [activeSection, onInspectorSelectionChange, selectedOutlineSection]);
 
   async function saveEditedDraft(value: string) {
     if (!selectedProjectId) return;
@@ -177,6 +207,16 @@ export function DraftsTab({
     } finally {
       setIsPending(false);
     }
+  }
+
+  function updateOutlineSection(sectionIndex: number, patch: Partial<OutlineSection>) {
+    if (!selectedBundle.outlineDraft || sectionIndex < 0) return;
+    updateOutlineDraft(setSelectedBundle, {
+      ...selectedBundle.outlineDraft,
+      sections: selectedBundle.outlineDraft.sections.map((entry, entryIndex) =>
+        entryIndex === sectionIndex ? { ...entry, ...patch } : entry,
+      ),
+    });
   }
 
   return (
@@ -347,6 +387,7 @@ export function DraftsTab({
                               sourceCards={sourceCards}
                               sourceCardMap={sourceCardMap}
                               helperText="给这个片区挑几张最能支撑判断的资料卡。"
+                              displayMode={displayMode}
                               onChange={(nextIds) =>
                                 updateSectorModel(setSelectedBundle, {
                                   ...selectedBundle.sectorModel!,
@@ -386,287 +427,83 @@ export function DraftsTab({
         ) : null}
 
         {activeSection === "outline" ? (
-          <div className="document-flow-container outline-stage structure-stage">
+          <div className="canvas-layout outline-split-stage outline-stage structure-stage">
             {selectedBundle.outlineDraft ? (
               <>
-                <div className="structure-stage-head">
-                  <div>
-                    <p className="writing-section-label">段落提纲</p>
-                    <h3>文章结构</h3>
+                <div className="canvas-main stack outline-canvas">
+                  <div className="structure-stage-head">
+                    <div>
+                      <p className="writing-section-label">段落提纲</p>
+                      <h3>文章结构</h3>
+                    </div>
+                    <Button type="button" variant="secondary" size="md" onClick={saveOutlineDraft} disabled={isPending}>
+                      保存段落提纲
+                    </Button>
                   </div>
-                  <Button type="button" variant="secondary" size="md" onClick={saveOutlineDraft} disabled={isPending}>
-                    保存段落提纲
-                  </Button>
-                </div>
-                {draftMessage ? <p className="subtle structure-stage-message">{draftMessage}</p> : null}
+                  {draftMessage ? <p className="subtle structure-stage-message">{draftMessage}</p> : null}
 
-                {selectedBundle.outlineDraft.argumentFrame ? (
-                  <ArgumentFrameCard argumentFrame={selectedBundle.outlineDraft.argumentFrame} />
-                ) : null}
+                  {selectedBundle.outlineDraft.argumentFrame ? (
+                    <ArgumentFrameCard
+                      argumentFrame={selectedBundle.outlineDraft.argumentFrame}
+                      onSelectClaim={(claimId) => onInspectorSelectionChange({ kind: "argument-claim", claimId })}
+                      displayMode={displayMode}
+                    />
+                  ) : null}
 
-                <div className="document-block outline-block">
-                  <div className="document-block-title">引子</div>
-                  <div className="apple-form-group">
-                    <label className="apple-form-item">
-                      <span>开头钩子</span>
+                  <div className="outline-frame-grid">
+                    <Card className="outline-frame-card">
+                      <div className="document-block-title">引子</div>
                       <InlineTextAreaEdit value={selectedBundle.outlineDraft.hook} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                             ...selectedBundle.outlineDraft!,
                             hook: val,
                           })
                         } rows={4} />
-                    </label>
-                  </div>
-                </div>
-
-                <div className="document-block outline-block outline-sections-block">
-                  <div className="document-block-title">
-                    正文段落 <Chip tone="accent">{selectedBundle.outlineDraft.sections.length} 段</Chip>
-                  </div>
-                  <div className="outline-list stack">
-                    {selectedBundle.outlineDraft.sections.map((section, index) => (
-                      <AccordionCard
-                        title={`段落 ${index + 1}: ${section.heading || "未命名段落"}`}
-                        description={buildOutlineSectionDescription(section)}
-                        className="outline-item"
-                        defaultOpen={index === 0}
-                        key={section.id}
-                      >
-                      <div className="apple-form-group flush">
-                      <label className="apple-form-item">
-                        <span>段落标题</span>
-                        <InlineTextEdit value={section.heading} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, heading: val } : entry,
-                              ),
-                            })
-                          } />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>段落目的</span>
-                        <InlineTextAreaEdit value={section.purpose} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, purpose: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>段落主判断</span>
-                        <InlineTextAreaEdit value={section.sectionThesis} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, sectionThesis: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>唯一动作</span>
-                        <InlineTextAreaEdit value={section.singlePurpose} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, singlePurpose: val } : entry,
-                              ),
-                            })
-                          } rows={2} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>必须落地</span>
-                        <InlineTextAreaEdit value={section.mustLandDetail} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, mustLandDetail: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                    </div>
-                      <details className="outline-advanced-fields">
-                        <summary>叙事与转折约束</summary>
-                        <div className="outline-advanced-grid">
-                      <label className="apple-form-item">
-                        <span>场景 / 代价</span>
-                        <InlineTextAreaEdit value={section.sceneOrCost} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, sceneOrCost: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>主线句</span>
-                        <InlineTextAreaEdit value={section.mainlineSentence} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, mainlineSentence: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>回环目标</span>
-                        <InlineTextAreaEdit value={section.callbackTarget} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, callbackTarget: val } : entry,
-                              ),
-                            })
-                          } rows={2} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>微型故事需求</span>
-                        <InlineTextAreaEdit value={section.microStoryNeed} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, microStoryNeed: val } : entry,
-                              ),
-                            })
-                          } rows={2} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>发现转折</span>
-                        <InlineTextAreaEdit value={section.discoveryTurn} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, discoveryTurn: val } : entry,
-                              ),
-                            })
-                          } rows={2} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>推进动作</span>
-                        <InlineTextAreaEdit value={section.move} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, move: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                        </div>
-                      </details>
-                      <label className="apple-form-item">
-                        <span>强约束证据</span>
-                        <EvidenceSelector
-                          selectedIds={section.mustUseEvidenceIds}
-                          sourceCards={sourceCards}
-                          sourceCardMap={sourceCardMap}
-                          helperText="这几张资料卡必须真的写进正文，不只是备选。"
-                          onChange={(nextIds) =>
-                            updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, mustUseEvidenceIds: nextIds } : entry,
-                              ),
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>参考证据</span>
-                        <EvidenceSelector
-                          selectedIds={section.evidenceIds}
-                          sourceCards={sourceCards}
-                          sourceCardMap={sourceCardMap}
-                          helperText="这些资料卡会参与这段的论证，不一定每张都强制落笔。"
-                          onChange={(nextIds) =>
-                            updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, evidenceIds: nextIds } : entry,
-                              ),
-                            })
-                          }
-                        />
-                      </label>
-                      <details className="outline-advanced-fields">
-                        <summary>节奏、反证与读者用途</summary>
-                        <div className="outline-advanced-grid">
-                      <div className="two-column">
-                        <label className="apple-form-item">
-                        <span>节奏</span>
-                        <InlineTextEdit value={section.tone} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                                ...selectedBundle.outlineDraft!,
-                                sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                  entryIndex === index ? { ...entry, tone: val } : entry,
-                                ),
-                              })
-                            } />
-                        </label>
-                        <label className="apple-form-item">
-                        <span>承接目标</span>
-                        <InlineTextEdit value={section.transitionTarget} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                                ...selectedBundle.outlineDraft!,
-                                sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                  entryIndex === index ? { ...entry, transitionTarget: val } : entry,
-                                ),
-                              })
-                            } />
-                        </label>
-                        <label className="apple-form-item">
-                        <span>打破</span>
-                        <InlineTextEdit value={section.break} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                                ...selectedBundle.outlineDraft!,
-                                sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                  entryIndex === index ? { ...entry, break: val } : entry,
-                                ),
-                              })
-                            } />
-                        </label>
-                      </div>
-                      <label className="apple-form-item">
-                        <span>反面理解 / 反证</span>
-                        <InlineTextAreaEdit value={section.counterPoint} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, counterPoint: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>对立观点</span>
-                        <InlineTextAreaEdit value={section.opposingView} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, opposingView: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                      <label className="apple-form-item">
-                        <span>读者用途</span>
-                        <InlineTextAreaEdit value={section.readerUsefulness} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                              ...selectedBundle.outlineDraft!,
-                              sections: selectedBundle.outlineDraft!.sections.map((entry, entryIndex) =>
-                                entryIndex === index ? { ...entry, readerUsefulness: val } : entry,
-                              ),
-                            })
-                          } rows={3} />
-                      </label>
-                        </div>
-                      </details>
-                    </AccordionCard>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="document-block outline-block">
-                  <div className="document-block-title">收尾</div>
-                  <div className="apple-form-group">
-                    <label className="apple-form-item">
-                      <span>结尾收束</span>
+                    </Card>
+                    <Card className="outline-frame-card">
+                      <div className="document-block-title">收尾</div>
                       <InlineTextAreaEdit value={selectedBundle.outlineDraft.closing} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
                             ...selectedBundle.outlineDraft!,
                             closing: val,
                           })
                         } rows={4} />
-                    </label>
+                    </Card>
+                  </div>
+
+                  <div className="outline-section-list-panel">
+                    <div className="document-block-title">
+                      正文段落 <Chip tone="accent">{selectedBundle.outlineDraft.sections.length} 段</Chip>
+                    </div>
+                    <div className="outline-section-card-list" role="list" aria-label="正文段落">
+                      {selectedBundle.outlineDraft.sections.map((section, index) => (
+                        <OutlineSectionCard
+                          key={section.id}
+                          section={section}
+                          index={index}
+                          isSelected={selectedOutlineSection?.id === section.id}
+                          supportingClaim={getOutlineSectionClaim(section, selectedBundle.outlineDraft?.argumentFrame ?? null, index)}
+                          flags={getOutlineSectionFlags(section, selectedBundle.reviewReport)}
+                          onSelect={() => {
+                            setSelectedOutlineSectionId(section.id);
+                            onInspectorSelectionChange({ kind: "outline-section", sectionId: section.id });
+                          }}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
+
+                <aside className="canvas-inspector outline-section-inspector" aria-label="段落详情编辑">
+                  <OutlineSectionInspector
+                    section={selectedOutlineSection}
+                    sectionIndex={effectiveSelectedOutlineIndex}
+                    supportingClaim={selectedOutlineSection ? getOutlineSectionClaim(selectedOutlineSection, selectedBundle.outlineDraft.argumentFrame ?? null, effectiveSelectedOutlineIndex) : null}
+                    flags={selectedOutlineSection ? getOutlineSectionFlags(selectedOutlineSection, selectedBundle.reviewReport) : []}
+                    sourceCards={sourceCards}
+                    sourceCardMap={sourceCardMap}
+                    displayMode={displayMode}
+                    onChange={(patch) => updateOutlineSection(effectiveSelectedOutlineIndex, patch)}
+                  />
+                </aside>
               </>
             ) : (
               <EmptyState
@@ -1061,12 +898,14 @@ function EvidenceSelector({
   sourceCards,
   sourceCardMap,
   helperText,
+  displayMode,
   onChange,
 }: {
   selectedIds: string[];
   sourceCards: SourceCard[];
   sourceCardMap: Map<string, SourceCard>;
   helperText: string;
+  displayMode: WorkbenchDisplayMode;
   onChange: (nextIds: string[]) => void;
 }) {
   const selectedCards = selectedIds
@@ -1096,7 +935,7 @@ function EvidenceSelector({
               title={`点击移除：${card.title}`}
             >
               <strong>{card.title}</strong>
-              <span>{card.id}</span>
+              {displayMode === "debug" ? <span>{card.id}</span> : null}
             </button>
           ))}
         </div>
@@ -1118,7 +957,7 @@ function EvidenceSelector({
                 <div className="evidence-card-body">
                   <div className="evidence-card-head">
                     <strong>{card.title}</strong>
-                    <span>{card.id}</span>
+                    {displayMode === "debug" ? <span>{card.id}</span> : null}
                   </div>
                   <p>{card.summary || card.evidence || "这张资料卡还没有摘要。"}</p>
                 </div>
@@ -1128,14 +967,16 @@ function EvidenceSelector({
         </div>
       </ContainedScrollArea>
 
-      <details className="evidence-picker-advanced">
-        <summary>高级模式：直接看内部 ID</summary>
-        <AutoGrowTextarea
-          value={selectedIds.join("\n")}
-          onChange={(event) => onChange(splitLines(event.target.value))}
-          rows={4}
-        />
-      </details>
+      {displayMode === "debug" ? (
+        <details className="evidence-picker-advanced">
+          <summary>高级模式：直接看内部 ID</summary>
+          <AutoGrowTextarea
+            value={selectedIds.join("\n")}
+            onChange={(event) => onChange(splitLines(event.target.value))}
+            rows={4}
+          />
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -1147,21 +988,242 @@ function splitLines(value: string) {
     .filter(Boolean);
 }
 
-function buildOutlineSectionDescription(section: NonNullable<ProjectBundle["outlineDraft"]>["sections"][number]) {
-  const brief = (value: string, maxLength = 34) => (value.length > maxLength ? `${value.slice(0, maxLength)}...` : value);
-  const summaryItems = [
-    section.purpose ? `目的：${brief(section.purpose)}` : "",
-    section.sectionThesis ? `主判断：${brief(section.sectionThesis)}` : "",
-    section.singlePurpose || section.move ? `动作：${brief(section.singlePurpose || section.move, 28)}` : "",
-  ].filter(Boolean);
+type OutlineSupportingClaim = NonNullable<NonNullable<ProjectBundle["outlineDraft"]>["argumentFrame"]>["supportingClaims"][number];
 
-  return summaryItems.join(" / ") || "这一段还没有补充任务说明。";
+type OutlineSectionFlagSummary = {
+  label: string;
+  tone: "danger" | "warning" | "accent";
+};
+
+function OutlineSectionCard({
+  section,
+  index,
+  isSelected,
+  supportingClaim,
+  flags,
+  onSelect,
+}: {
+  section: OutlineSection;
+  index: number;
+  isSelected: boolean;
+  supportingClaim: OutlineSupportingClaim | null;
+  flags: OutlineSectionFlagSummary[];
+  onSelect: () => void;
+}) {
+  const evidenceCount = countUnique([...section.evidenceIds, ...section.mustUseEvidenceIds]);
+  const summary = section.sectionThesis || section.purpose || section.singlePurpose || "还没有段落主判断。";
+
+  return (
+    <article className={`outline-section-card ${isSelected ? "is-selected" : ""}`}>
+      <button type="button" className="outline-section-card-button" onClick={onSelect} aria-pressed={isSelected}>
+        <div className="outline-section-card-main">
+          <span className="outline-section-index">{index + 1}</span>
+          <div className="outline-section-copy">
+            <h4>{section.heading || "未命名段落"}</h4>
+            <p>{briefText(summary, 96)}</p>
+            {supportingClaim ? (
+              <small>论点：{briefText(supportingClaim.claim, 86)}</small>
+            ) : null}
+          </div>
+        </div>
+        <div className="outline-section-meta">
+          <Chip tone={evidenceCount > 0 ? "accent" : "warning"}>{evidenceCount} 证据</Chip>
+          {flags.slice(0, 3).map((flag) => (
+            <Chip tone={flag.tone} key={flag.label}>{flag.label}</Chip>
+          ))}
+        </div>
+      </button>
+    </article>
+  );
+}
+
+function OutlineSectionInspector({
+  section,
+  sectionIndex,
+  supportingClaim,
+  flags,
+  sourceCards,
+  sourceCardMap,
+  displayMode,
+  onChange,
+}: {
+  section: OutlineSection | null;
+  sectionIndex: number;
+  supportingClaim: OutlineSupportingClaim | null;
+  flags: OutlineSectionFlagSummary[];
+  sourceCards: SourceCard[];
+  sourceCardMap: Map<string, SourceCard>;
+  displayMode: WorkbenchDisplayMode;
+  onChange: (patch: Partial<OutlineSection>) => void;
+}) {
+  if (!section) {
+    return (
+      <EmptyState className="workbench-empty-state" title="未选择段落">
+        <p>从左侧选择一个段落后，在这里编辑完整字段。</p>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <div className="outline-inspector-stack">
+      <div className="structure-inspector-head">
+        <div>
+          <p className="writing-section-label">段落 {sectionIndex + 1}</p>
+          <h3>{section.heading || "未命名段落"}</h3>
+        </div>
+        <Chip tone={flags.length ? "warning" : "accent"}>{flags.length ? `${flags.length} 提醒` : "可编辑"}</Chip>
+      </div>
+
+      {supportingClaim ? (
+        <Card className="outline-inspector-summary">
+          <span>匹配论点</span>
+          <p>{supportingClaim.claim}</p>
+        </Card>
+      ) : null}
+
+      {flags.length ? (
+        <div className="outline-inspector-flags">
+          {flags.map((flag) => (
+            <Chip tone={flag.tone} key={flag.label}>{flag.label}</Chip>
+          ))}
+        </div>
+      ) : null}
+
+      <GroupedSettings className="outline-inspector-settings" aria-label="段落核心字段">
+        <EditableSettingRow label="段落标题" value={section.heading} multiline={false} onChange={(value) => onChange({ heading: value })} />
+        <EditableSettingRow label="段落目的" value={section.purpose} rows={3} onChange={(value) => onChange({ purpose: value })} />
+        <EditableSettingRow label="段落主判断" value={section.sectionThesis} rows={4} onChange={(value) => onChange({ sectionThesis: value })} />
+        <EditableSettingRow label="唯一动作" value={section.singlePurpose} rows={3} onChange={(value) => onChange({ singlePurpose: value })} />
+        <EditableSettingRow label="必须落地" value={section.mustLandDetail} rows={4} onChange={(value) => onChange({ mustLandDetail: value })} />
+        <EditableSettingRow label="场景 / 代价" value={section.sceneOrCost} rows={4} onChange={(value) => onChange({ sceneOrCost: value })} />
+        <EditableSettingRow label="主线句" value={section.mainlineSentence} rows={4} onChange={(value) => onChange({ mainlineSentence: value })} />
+      </GroupedSettings>
+
+      <GroupedSettings className="outline-inspector-settings" aria-label="证据绑定">
+        <SettingRow label="强约束证据">
+          <EvidenceSelector
+            selectedIds={section.mustUseEvidenceIds}
+            sourceCards={sourceCards}
+            sourceCardMap={sourceCardMap}
+            helperText="这几张资料卡必须真的写进正文，不只是备选。"
+            displayMode={displayMode}
+            onChange={(nextIds) => onChange({ mustUseEvidenceIds: nextIds })}
+          />
+        </SettingRow>
+        <SettingRow label="参考证据">
+          <EvidenceSelector
+            selectedIds={section.evidenceIds}
+            sourceCards={sourceCards}
+            sourceCardMap={sourceCardMap}
+            helperText="这些资料卡会参与这段的论证，不一定每张都强制落笔。"
+            displayMode={displayMode}
+            onChange={(nextIds) => onChange({ evidenceIds: nextIds })}
+          />
+        </SettingRow>
+      </GroupedSettings>
+
+      <GroupedSettings className="outline-inspector-settings" aria-label="反证与读者用途">
+        <EditableSettingRow label="反面理解" value={section.counterPoint} rows={3} onChange={(value) => onChange({ counterPoint: value })} />
+        <EditableSettingRow label="对立观点" value={section.opposingView} rows={3} onChange={(value) => onChange({ opposingView: value })} />
+        <EditableSettingRow label="读者用途" value={section.readerUsefulness} rows={3} onChange={(value) => onChange({ readerUsefulness: value })} />
+      </GroupedSettings>
+
+      <details className="outline-inspector-advanced">
+        <summary>高级字段</summary>
+        <GroupedSettings className="outline-inspector-settings" aria-label="高级字段">
+          <EditableSettingRow label="回环目标" value={section.callbackTarget} rows={3} onChange={(value) => onChange({ callbackTarget: value })} />
+          <EditableSettingRow label="微型故事需求" value={section.microStoryNeed} rows={3} onChange={(value) => onChange({ microStoryNeed: value })} />
+          <EditableSettingRow label="发现转折" value={section.discoveryTurn} rows={3} onChange={(value) => onChange({ discoveryTurn: value })} />
+          <EditableSettingRow label="推进动作" value={section.move} rows={3} onChange={(value) => onChange({ move: value })} />
+          <EditableSettingRow label="打破" value={section.break} multiline={false} onChange={(value) => onChange({ break: value })} />
+          <EditableSettingRow label="桥接" value={section.bridge} rows={3} onChange={(value) => onChange({ bridge: value })} />
+          <EditableSettingRow label="承接目标" value={section.transitionTarget} multiline={false} onChange={(value) => onChange({ transitionTarget: value })} />
+          <EditableSettingRow label="节奏" value={section.tone} multiline={false} onChange={(value) => onChange({ tone: value })} />
+          <EditableSettingRow label="风格目标" value={section.styleObjective} rows={3} onChange={(value) => onChange({ styleObjective: value })} />
+          <EditableSettingRow label="要点" value={section.keyPoints.join("\n")} rows={4} onChange={(value) => onChange({ keyPoints: splitLines(value) })} />
+          <EditableSettingRow label="读完收获" value={section.expectedTakeaway} rows={3} onChange={(value) => onChange({ expectedTakeaway: value })} />
+        </GroupedSettings>
+      </details>
+    </div>
+  );
+}
+
+function getOutlineSectionClaim(
+  section: OutlineSection,
+  argumentFrame: NonNullable<ProjectBundle["outlineDraft"]>["argumentFrame"] | null,
+  index: number,
+) {
+  if (!argumentFrame?.supportingClaims.length) {
+    return null;
+  }
+
+  const sectionEvidenceIds = new Set([...section.evidenceIds, ...section.mustUseEvidenceIds]);
+  const evidenceMatch = argumentFrame.supportingClaims.find((claim) =>
+    [...claim.evidenceIds, ...claim.mustUseEvidenceIds].some((evidenceId) => sectionEvidenceIds.has(evidenceId)),
+  );
+  if (evidenceMatch) {
+    return evidenceMatch;
+  }
+
+  const text = `${section.heading} ${section.sectionThesis} ${section.purpose}`;
+  const textMatch = argumentFrame.supportingClaims.find((claim) => {
+    const claimLead = claim.claim.slice(0, 10);
+    return Boolean(claimLead && text.includes(claimLead));
+  });
+  return textMatch ?? argumentFrame.supportingClaims[index] ?? null;
+}
+
+function getOutlineSectionFlags(section: OutlineSection, reviewReport: ProjectBundle["reviewReport"]): OutlineSectionFlagSummary[] {
+  if (!reviewReport) {
+    return [];
+  }
+  const flags: OutlineSectionFlagSummary[] = [];
+  const sectionScore = reviewReport.sectionScores.find((score) => score.heading === section.heading && score.status !== "pass");
+  if (sectionScore) {
+    flags.push({ label: sectionScore.status === "fail" ? "质检失败" : "质检提醒", tone: sectionScore.status === "fail" ? "danger" : "warning" });
+  }
+  if (reviewReport.continuityFlags?.some((flag) => flag.sectionIds.includes(section.id))) {
+    flags.push({ label: "连续性", tone: "warning" });
+  }
+  if (reviewReport.argumentQualityFlags?.some((flag) => flag.sectionIds.includes(section.id))) {
+    flags.push({ label: "论证", tone: "warning" });
+  }
+  if (reviewReport.structuralRewriteIntents?.some((intent) => intent.affectedSectionIds.includes(section.id))) {
+    flags.push({ label: "需重写", tone: "danger" });
+  }
+  if (reviewReport.paragraphFlags.some((flag) => flag.sectionHeading === section.heading)) {
+    flags.push({ label: "段落", tone: "warning" });
+  }
+  return dedupeFlags(flags);
+}
+
+function dedupeFlags(flags: OutlineSectionFlagSummary[]) {
+  const seen = new Set<string>();
+  return flags.filter((flag) => {
+    if (seen.has(flag.label)) {
+      return false;
+    }
+    seen.add(flag.label);
+    return true;
+  });
+}
+
+function countUnique(values: string[]) {
+  return new Set(values.filter(Boolean)).size;
+}
+
+function briefText(value: string, maxLength = 34) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
 function ArgumentFrameCard({
   argumentFrame,
+  onSelectClaim,
+  displayMode,
 }: {
   argumentFrame: NonNullable<NonNullable<ProjectBundle["outlineDraft"]>["argumentFrame"]>;
+  onSelectClaim: (claimId: string) => void;
+  displayMode: WorkbenchDisplayMode;
 }) {
   return (
     <div className="document-block outline-block">
@@ -1195,17 +1257,20 @@ function ArgumentFrameCard({
           {argumentFrame.supportingClaims.map((claim) => (
             <Card className="outline-item" key={claim.id}>
               <div className="document-block-title">
-                {claim.role} <Chip>{claim.id}</Chip>
+                {claim.role} {displayMode === "debug" ? <Chip>{claim.id}</Chip> : null}
               </div>
               <p>{claim.claim}</p>
+              <Button type="button" variant="ghost" size="sm" className="argument-claim-inspect" onClick={() => onSelectClaim(claim.id)}>
+                查看论点
+              </Button>
               <ul className="compact-list compact-inline-list">
-                {claim.evidenceIds.length ? (
+                {displayMode === "debug" && claim.evidenceIds.length ? (
                   <li>
                     <strong>证据</strong>
                     <span>{claim.evidenceIds.join(" / ")}</span>
                   </li>
                 ) : null}
-                {claim.mustUseEvidenceIds.length ? (
+                {displayMode === "debug" && claim.mustUseEvidenceIds.length ? (
                   <li>
                     <strong>强约束证据</strong>
                     <span>{claim.mustUseEvidenceIds.join(" / ")}</span>

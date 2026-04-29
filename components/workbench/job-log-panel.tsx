@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { JobLog } from "@/lib/jobs/types";
 import type { ProjectJobSummary, ProjectQueueSummary } from "@/hooks/use-job-polling";
 import { JobStatusChip } from "./job-status-chip";
+import type { WorkbenchDisplayMode } from "./display-mode";
 
 export function JobLogPanel({
   job,
@@ -11,12 +12,14 @@ export function JobLogPanel({
   queueSummary,
   onRetry,
   isRetrying,
+  displayMode,
 }: {
   job: ProjectJobSummary | null;
   logs: JobLog[];
   queueSummary: ProjectQueueSummary;
   onRetry: (() => void) | null;
   isRetrying: boolean;
+  displayMode: WorkbenchDisplayMode;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -95,7 +98,7 @@ export function JobLogPanel({
             </p>
           ) : null}
           {job.errorMessage ? <p className="job-toast-error">{job.errorMessage}</p> : null}
-          {logs.length > 0 ? (
+          {displayMode === "debug" && logs.length > 0 ? (
             <ul className="job-toast-log-list">
               {logs.map((log) => (
                 <li key={log.id} className={`job-toast-log-item job-toast-log-${log.level}`}>
@@ -104,6 +107,8 @@ export function JobLogPanel({
                 </li>
               ))}
             </ul>
+          ) : displayMode === "writing" ? (
+            <p className="job-toast-empty">详细运行日志已隐藏；切到调试模式可以查看。</p>
           ) : (
             <p className="job-toast-empty">任务日志会随着运行逐步出现。</p>
           )}
