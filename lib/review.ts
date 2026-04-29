@@ -28,6 +28,7 @@ const TRANSITION_TOKENS = ["先说", "再看", "另外", "与此同时", "更关
 const SCENE_TOKENS = ["通勤", "地铁", "早高峰", "晚高峰", "早上", "接娃", "接送", "买菜", "小区", "商场", "下班", "一家人", "买家", "带看", "看房", "首改", "改善"];
 const CULTURAL_LIFT_TOKENS = ["上海", "城市", "承接", "梯度", "系统", "更新", "代际", "放到更大", "更大的", "长期趋势"];
 const OPENING_ANCHOR_MARKERS = ["不是", "真正", "误解", "高估", "低估", "问题在于", "这次", "变化", "代价", "门槛", "确定性", "分化", "重估"];
+const FACTOR_TOUR_HEADINGS = ["交通", "商业", "学区", "产业", "供应", "价格", "规划", "风险", "配套", "成交", "挂牌", "教育", "通勤"];
 
 export function runDeterministicReview(input: {
   articleType: ArticleType;
@@ -757,7 +758,9 @@ function buildArgumentQualityFlags(input: {
       "春申",
     ]),
   );
+  const zoneStructurePolicy = deriveZoneStructurePolicy(frame);
   const zoneHeadingStats = getZoneHeadingStats(allHeadings, zoneNames);
+  const factorHeadingStats = getFactorHeadingStats(allHeadings);
   const openingText = input.paragraphs.slice(0, 3).join("\n");
   const earlyText = input.paragraphs.slice(0, 5).join("\n");
   const endingText = input.paragraphs.slice(-3).join("\n");
@@ -783,7 +786,7 @@ function buildArgumentQualityFlags(input: {
     });
   }
 
-  if (frame.primaryShape === "judgement_essay" && zoneHeadingStats.maxConsecutive >= 3) {
+  if (zoneStructurePolicy === "claim_evidence_only" && zoneHeadingStats.maxConsecutive >= 3) {
     flags.push({
       type: "map_tour_in_judgement_essay",
       severity: "fail",
@@ -793,7 +796,17 @@ function buildArgumentQualityFlags(input: {
     });
   }
 
-  if (frame.primaryShape === "judgement_essay" && zoneHeadingStats.total >= 2) {
+  if (zoneStructurePolicy === "claim_evidence_only" && factorHeadingStats.maxConsecutive >= 3) {
+    flags.push({
+      type: "factor_tour_in_judgement_essay",
+      severity: "fail",
+      sectionIds: getSectionIdsByHeadings(input.outlineDraft, factorHeadingStats.consecutiveHeadings),
+      reason: "judgement_essay 出现 3 个以上连续因素标题，正文被写成因素目录。",
+      suggestedAction: "把因素章节合并进 supportingClaims，不要按因素目录写判断稿。",
+    });
+  }
+
+  if (zoneStructurePolicy === "claim_evidence_only" && zoneHeadingStats.total >= 2) {
     flags.push({
       type: "zones_used_as_structure_not_evidence",
       severity: zoneHeadingStats.maxConsecutive >= 3 ? "fail" : "warn",
@@ -806,7 +819,7 @@ function buildArgumentQualityFlags(input: {
   if (frame.strongestCounterArgument.trim() && !hasCounterargumentHandled(input.draft, frame.strongestCounterArgument)) {
     flags.push({
       type: "counterargument_missing",
-      severity: "warn",
+      severity: frame.primaryShape === "judgement_essay" ? "fail" : "warn",
       sectionIds: [],
       reason: "ArgumentFrame 提供了最强反方，但正文没有处理它。",
       suggestedAction: "补一个反方处理段，先承认反方成立的边界，再说明如何收束回主判断。",
@@ -912,18 +925,36 @@ function buildStructuralRewriteIntents(flags: ContinuityFlag[], argumentFlags: A
 }
 
 function buildArgumentStructuralRewriteIntents(flags: ArgumentQualityFlag[]): StructuralRewriteIntent[] {
-  const mapTourFlags = flags.filter((flag) => flag.type === "map_tour_in_judgement_essay" && flag.severity === "fail");
-  if (mapTourFlags.length === 0) {
-    return [];
-  }
-  return [
+  const groups: Array<{
+    types: ArgumentQualityFlag["type"][];
+    mode: StructuralRewriteIntent["suggestedRewriteMode"];
+  }> = [
     {
-      issueTypes: ["map_tour_in_judgement_essay"],
-      affectedSectionIds: Array.from(new Set(mapTourFlags.flatMap((flag) => flag.sectionIds))),
-      whyItFails: mapTourFlags.map((flag) => flag.reason).join("；"),
-      suggestedRewriteMode: "rewrite_section_roles",
+      types: ["map_tour_in_judgement_essay", "factor_tour_in_judgement_essay"],
+      mode: "rewrite_section_roles",
+    },
+    {
+      types: ["headline_not_answered", "thesis_too_generic", "too_much_background_before_answer"],
+      mode: "rewrite_opening_and_next_section",
+    },
+    {
+      types: ["decision_frame_weak", "counterargument_missing"],
+      mode: "rewrite_section_roles",
     },
   ];
+
+  return groups
+    .map((group) => {
+      const groupFlags = flags.filter((flag) => group.types.includes(flag.type) && flag.severity === "fail");
+      return { group, flags: groupFlags };
+    })
+    .filter((item) => item.flags.length > 0)
+    .map((item) => ({
+      issueTypes: Array.from(new Set(item.flags.map((flag) => flag.type))),
+      affectedSectionIds: Array.from(new Set(item.flags.flatMap((flag) => flag.sectionIds))),
+      whyItFails: item.flags.map((flag) => flag.reason).join("；"),
+      suggestedRewriteMode: item.group.mode,
+    }));
 }
 
 function chooseStructuralRewriteMode(flags: ContinuityFlag[]) {
@@ -997,9 +1028,52 @@ function getZoneHeadingStats(headings: string[], zoneNames: string[]) {
   };
 }
 
+function getFactorHeadingStats(headings: string[]) {
+  let maxConsecutive = 0;
+  let currentConsecutive: string[] = [];
+  let bestConsecutive: string[] = [];
+  const factorHeadings: string[] = [];
+
+  for (const heading of headings) {
+    const isFactorHeading = isFactorLikeHeading(heading);
+    if (isFactorHeading) {
+      factorHeadings.push(heading);
+      currentConsecutive.push(heading);
+      if (currentConsecutive.length > maxConsecutive) {
+        maxConsecutive = currentConsecutive.length;
+        bestConsecutive = [...currentConsecutive];
+      }
+    } else {
+      currentConsecutive = [];
+    }
+  }
+
+  return {
+    total: factorHeadings.length,
+    maxConsecutive,
+    factorHeadings,
+    consecutiveHeadings: bestConsecutive,
+  };
+}
+
 function isZoneLikeHeading(heading: string, zoneNames: string[]) {
   const compact = heading.replace(/\s+/g, "");
   return zoneNames.some((zoneName) => zoneName && compact.includes(zoneName.replace(/\s+/g, "")));
+}
+
+function isFactorLikeHeading(heading: string) {
+  const compact = heading.replace(/\s+/g, "");
+  return FACTOR_TOUR_HEADINGS.some((factor) => compact === factor || compact.endsWith(factor) || compact.startsWith(factor));
+}
+
+function deriveZoneStructurePolicy(frame: NonNullable<OutlineDraft["argumentFrame"]>) {
+  if (frame.primaryShape === "judgement_essay") {
+    return "claim_evidence_only" as const;
+  }
+  if (["comparison_benchmark", "planning_reality_check", "buyer_persona_split", "asset_tiering"].includes(frame.primaryShape)) {
+    return "zone_sections_allowed" as const;
+  }
+  return "claim_led_with_context" as const;
 }
 
 function getSectionIdsByHeadings(outlineDraft: OutlineDraft | null | undefined, headings: string[]) {

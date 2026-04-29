@@ -84,6 +84,7 @@ export const ARGUMENT_QUALITY_ISSUE_TYPES = [
   "headline_not_answered",
   "thesis_too_generic",
   "map_tour_in_judgement_essay",
+  "factor_tour_in_judgement_essay",
   "zones_used_as_structure_not_evidence",
   "counterargument_missing",
   "decision_frame_weak",

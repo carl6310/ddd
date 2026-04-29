@@ -1000,10 +1000,11 @@ ${authorBrainText}
 
 ArgumentQuality 结构重写规则：
 1. 如果 issueTypes 包含 map_tour_in_judgement_essay：不要删除有用的 zone facts；把 zone facts 移到 supporting claims 下面；把 zone headings 换成 claim headings。坏例子：北广场 / 南广场 / 商务区 / 春申。好例子：新房冷为什么不等于板块崩 / 成熟确定性为什么还能撑价 / 真正撑价的是少数核心资产 / 成熟为什么也是天花板 / 买房人怎么判断。
-2. 如果 issueTypes 包含 headline_not_answered：必须让 ArgumentFrame.answer 或同等明确的中心判断出现在全文前 20%-25%，不要把结论埋到结尾。
-3. 如果 issueTypes 包含 counterargument_missing：加入真实反方段落或反方处理段，先承认反方成立的边界，再收束回主判断；不要制造稻草人。
-4. 如果 issueTypes 包含 decision_frame_weak：结尾必须给读者决策框架，说明该问什么、该避开什么、谁可以买、谁不该买。
-5. 无论处理哪类 ArgumentQuality 问题，都要保留 citations、source-backed facts、ContinuityLedger handoff，且不能编造场景。
+2. 如果 issueTypes 包含 factor_tour_in_judgement_essay：不要按交通 / 商业 / 学区 / 供应这类因素目录平铺；把因素事实合并进 supportingClaims，用来证明中心判断。
+3. 如果 issueTypes 包含 headline_not_answered、thesis_too_generic 或 too_much_background_before_answer：必须让 ArgumentFrame.answer 或同等明确的中心判断出现在全文前 20%-25%，不要把结论埋到结尾；如果 answer 太泛，先重写成清晰可争辩判断。
+4. 如果 issueTypes 包含 counterargument_missing：加入真实反方段落或反方处理段，先承认反方成立的边界，再收束回主判断；不要制造稻草人。
+5. 如果 issueTypes 包含 decision_frame_weak：结尾必须给读者决策框架，说明该问什么、该避开什么、谁可以买、谁不该买。
+6. 无论处理哪类 ArgumentQuality 问题，都要保留 citations、source-backed facts、ContinuityLedger handoff，且不能编造场景。
         `.trim(),
         user: `
 项目主题：${input.project?.topic}

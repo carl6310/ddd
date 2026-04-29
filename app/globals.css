@@ -8111,3 +8111,59 @@ article h3 {
     min-height: 520px;
   }
 }
+
+/* Layout hardening: long generated text must stay reachable instead of being clipped. */
+.apple-setting-edit.inline-edit-view.textarea-view {
+  max-height: min(12em, 280px);
+  overflow-y: auto;
+  -webkit-line-clamp: unset;
+}
+
+.research-brief-stage .accordion-card .accordion-title-block p,
+.research-dimension-card .accordion-title-block p {
+  display: block;
+  max-height: none;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.compat-diagnostics-item small {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+@media (max-width: 980px) {
+  .research-brief-stage .accordion-card .accordion-title-block p,
+  .research-dimension-card .accordion-title-block p {
+    display: block;
+    max-height: none;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+  }
+
+  .sector-model-settings .apple-setting-edit.inline-edit-view.textarea-view,
+  .sector-zone-settings .apple-setting-edit.inline-edit-view.textarea-view {
+    max-height: min(16em, 360px);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .workflow-step-inline {
+    display: flex;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: var(--space-1);
+  }
+
+  .workflow-step-inline-chip {
+    flex: 1 1 min(150px, 100%);
+    min-width: 0;
+    justify-content: center;
+    white-space: normal;
+  }
+}
