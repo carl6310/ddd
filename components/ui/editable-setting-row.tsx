@@ -106,7 +106,7 @@ export function EditableSettingRow({
 
   return (
     <SettingRow label={label} className={className} onClick={isEditing ? undefined : () => setIsEditing(true)}>
-      <div ref={wrapperRef} onClick={(event) => event.stopPropagation()}>
+      <div ref={wrapperRef} onClick={isEditing ? (event) => event.stopPropagation() : undefined}>
         {isEditing ? (
           multiline ? (
             <div className="inline-edit-textarea-wrapper apple-setting-edit">

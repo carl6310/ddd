@@ -46,6 +46,8 @@ export function useJobPolling(projectId: string) {
       }
       setJobs(payload.items ?? []);
       setQueueSummary(payload.queueSummary ?? { activeCount: 0, runningCount: 0, queuedCount: 0 });
+    } catch {
+      // Polling should not surface transient dev-server restarts or network drops as unhandled UI errors.
     } finally {
       setIsLoading(false);
     }

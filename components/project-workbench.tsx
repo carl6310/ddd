@@ -17,23 +17,15 @@ import { AppShell } from "./layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
-
-type ActiveTab = "overview" | "research" | "structure" | "drafts" | "publish";
-type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
-type StaleArtifact = "research-brief" | "sector-model" | "outline" | "drafts" | "review" | "publish-prep";
-type WorkspaceSection =
-  | "overview-think-card"
-  | "overview-style-core"
-  | "overview-compatibility"
-  | "overview-vitality"
-  | "research-brief"
-  | "source-form"
-  | "source-library"
-  | "sector-model"
-  | "outline"
-  | "drafts"
-  | "publish-prep"
-  | null;
+import {
+  buildWorkbenchWorkflow,
+  type ActiveTab,
+  type StaleArtifact,
+  type WorkbenchNextAction,
+  type WorkbenchStepPath,
+  type WorkbenchWorkflowStep,
+  type WorkspaceSection,
+} from "./workbench/workflow-state";
 type MessageKind = "success" | "error" | "info";
 
 type FeedbackState = {
@@ -366,6 +358,15 @@ export function ProjectWorkbench({
 
   const detailedVisibleJob = jobDetail?.job ?? null;
   const visibleJob = detailedVisibleJob;
+  const workflow = selectedBundle
+    ? buildWorkbenchWorkflow({
+        selectedBundle,
+        staleArtifacts: selectedStaleArtifacts,
+        activeTab,
+        focusedSection,
+        jobs,
+      })
+    : null;
 
   const appHeader = (
     <>
@@ -459,6 +460,18 @@ export function ProjectWorkbench({
                 }}
                 onClear={clearArtifacts}
               />
+              {workflow ? (
+                <WorkbenchWorkflowHeader
+                  steps={workflow.steps}
+                  nextAction={workflow.nextAction}
+                  isPending={uiPending}
+                  onNavigate={(tab, section) => {
+                    setActiveTab(tab);
+                    setFocusedSection(section);
+                  }}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                />
+              ) : null}
               <div className="workflow-tabs" role="tablist" aria-label="工作台主阶段" onKeyDown={handleTabListKeyDown}>
                 <button
                   type="button"
@@ -623,6 +636,81 @@ export function ProjectWorkbench({
       return;
     }
     setFeedback({ text, kind: forcedKind ?? inferMessageKind(text) });
+  }
+}
+
+function WorkbenchWorkflowHeader({
+  steps,
+  nextAction,
+  isPending,
+  onNavigate,
+  onExecute,
+}: {
+  steps: WorkbenchWorkflowStep[];
+  nextAction: WorkbenchNextAction;
+  isPending: boolean;
+  onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
+  onExecute: (step: WorkbenchStepPath) => Promise<void>;
+}) {
+  return (
+    <section className={`global-workflow-card global-workflow-card-${nextAction.tone}`} aria-label="写作流程与下一步">
+      <div className="global-workflow-main">
+        <div className="global-workflow-copy">
+          <span className="global-workflow-eyebrow">下一步</span>
+          <h2>{nextAction.title}</h2>
+          <p>{nextAction.reason}</p>
+        </div>
+        <Button
+          type="button"
+          variant="primary"
+          className="global-workflow-cta"
+          disabled={isPending}
+          onClick={() => {
+            if (nextAction.executeStep) {
+              void onExecute(nextAction.executeStep);
+              return;
+            }
+            onNavigate(nextAction.targetTab, nextAction.targetSection);
+          }}
+        >
+          {nextAction.ctaLabel}
+        </Button>
+      </div>
+      <ol className="global-workflow-steps" aria-label="完整流程">
+        {steps.map((step, index) => (
+          <li className={`global-workflow-step is-${step.status}`} key={step.id}>
+            <button
+              type="button"
+              className="global-workflow-step-button"
+              onClick={() => onNavigate(step.targetTab, step.targetSection)}
+              aria-label={`${index + 1}. ${step.label}，${formatWorkflowStepStatus(step.status)}，${step.hint}`}
+            >
+              <span className="global-workflow-step-index">{index + 1}</span>
+              <span className="global-workflow-step-text">
+                <span>{step.label}</span>
+                <small>{step.hint}</small>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function formatWorkflowStepStatus(status: WorkbenchWorkflowStep["status"]) {
+  switch (status) {
+    case "complete":
+      return "已完成";
+    case "current":
+      return "当前步骤";
+    case "blocked":
+      return "被阻塞";
+    case "stale":
+      return "需要更新";
+    case "pending":
+    default:
+      return "待处理";
   }
 }
 
