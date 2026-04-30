@@ -225,7 +225,7 @@ function resolveInspectorDetail(selectedBundle: ProjectBundle, selection: Workbe
     return null;
   }
   return {
-    eyebrow: "论证 claim",
+    eyebrow: displayMode === "debug" ? "论证 claim" : "论点",
     title: displayMode === "debug" ? `${claim.role} / ${claim.id}` : claim.role,
     body: claim.claim,
     suggestedAction: claim.shouldNotBecomeSection ? "这条论点不要直接变成独立章节，片区材料只作为证据。" : undefined,
@@ -234,9 +234,28 @@ function resolveInspectorDetail(selectedBundle: ProjectBundle, selection: Workbe
     chips: [
       { label: `${claim.evidenceIds.length} 参考证据`, tone: claim.evidenceIds.length ? "accent" as const : "neutral" as const },
       { label: `${claim.mustUseEvidenceIds.length} 必要证据`, tone: claim.mustUseEvidenceIds.length ? "accent" as const : "neutral" as const },
-      { label: argumentFrame.primaryShape, tone: "neutral" as const },
+      { label: formatArgumentShape(argumentFrame.primaryShape), tone: "neutral" as const },
     ],
   };
+}
+
+const argumentShapeLabels: Record<string, string> = {
+  judgement_essay: "判断稿",
+  misread_correction: "误读纠偏",
+  signal_reinterpretation: "信号重释",
+  lifecycle_reframe: "生命周期改写",
+  asset_tiering: "资产分层",
+  mismatch_diagnosis: "错配诊断",
+  tradeoff_decision: "取舍决策",
+  risk_decomposition: "风险拆解",
+  comparison_benchmark: "横向比较",
+  planning_reality_check: "规划校验",
+  cycle_timing: "周期判断",
+  buyer_persona_split: "买家分型",
+};
+
+function formatArgumentShape(shape: string) {
+  return argumentShapeLabels[shape] ?? shape.replaceAll("_", " ");
 }
 
 function getRiskChipTone(status: ReviewSeverity) {

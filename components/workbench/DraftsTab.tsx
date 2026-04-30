@@ -62,6 +62,9 @@ export function DraftsTab({
   const [activeSection, setActiveSection] = useState<DraftsSection>("sector-model");
   const [draftPreviewMode, setDraftPreviewMode] = useState<"analysis" | "narrative">("narrative");
   const [selectedOutlineSectionId, setSelectedOutlineSectionId] = useState<string | null>(null);
+  const [selectedOutlineFrame, setSelectedOutlineFrame] = useState<"hook" | "closing" | null>(null);
+  const [hasUnsavedOutlineChanges, setHasUnsavedOutlineChanges] = useState(false);
+  const [outlineSavedAt, setOutlineSavedAt] = useState<Date | null>(selectedBundle.outlineDraft ? new Date() : null);
   const hasOutlineDraft = Boolean(selectedBundle.outlineDraft);
   const canPublish = canPreparePublish(selectedBundle.reviewReport, selectedBundle.project.vitalityCheck);
   const exportHref = `/api/projects/${selectedProjectId}/export/markdown`;
@@ -111,11 +114,16 @@ export function DraftsTab({
   }, [outlineSections, selectedOutlineSectionId]);
 
   useEffect(() => {
-    if (activeSection !== "outline" || !selectedOutlineSection) {
+    if (activeSection !== "outline" || !selectedOutlineSection || selectedOutlineFrame) {
       return;
     }
     onInspectorSelectionChange({ kind: "outline-section", sectionId: selectedOutlineSection.id });
-  }, [activeSection, onInspectorSelectionChange, selectedOutlineSection]);
+  }, [activeSection, onInspectorSelectionChange, selectedOutlineFrame, selectedOutlineSection]);
+
+  useEffect(() => {
+    setHasUnsavedOutlineChanges(false);
+    setOutlineSavedAt(hasOutlineDraft ? new Date() : null);
+  }, [hasOutlineDraft, selectedProjectId]);
 
   async function saveEditedDraft(value: string) {
     if (!selectedProjectId) return;
@@ -201,6 +209,8 @@ export function DraftsTab({
       }
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["drafts", "review", "publish-prep"]);
+      setHasUnsavedOutlineChanges(false);
+      setOutlineSavedAt(new Date());
       setDraftMessage("段落提纲已保存。正文、检查和发布整理可能需要重生成。");
     } catch (error) {
       setDraftMessage(error instanceof Error ? error.message : "保存提纲失败。");
@@ -211,12 +221,27 @@ export function DraftsTab({
 
   function updateOutlineSection(sectionIndex: number, patch: Partial<OutlineSection>) {
     if (!selectedBundle.outlineDraft || sectionIndex < 0) return;
-    updateOutlineDraft(setSelectedBundle, {
+    updateCurrentOutlineDraft({
       ...selectedBundle.outlineDraft,
       sections: selectedBundle.outlineDraft.sections.map((entry, entryIndex) =>
         entryIndex === sectionIndex ? { ...entry, ...patch } : entry,
       ),
     });
+  }
+
+  function updateCurrentOutlineDraft(nextOutlineDraft: NonNullable<ProjectBundle["outlineDraft"]>) {
+    setHasUnsavedOutlineChanges(true);
+    updateOutlineDraft(setSelectedBundle, nextOutlineDraft);
+  }
+
+  function selectOutlineSectionByIndex(sectionIndex: number) {
+    const section = outlineSections[sectionIndex];
+    if (!section) {
+      return;
+    }
+    setSelectedOutlineSectionId(section.id);
+    setSelectedOutlineFrame(null);
+    onInspectorSelectionChange({ kind: "outline-section", sectionId: section.id });
   }
 
   return (
@@ -427,18 +452,16 @@ export function DraftsTab({
         ) : null}
 
         {activeSection === "outline" ? (
-          <div className="canvas-layout outline-split-stage outline-stage structure-stage">
+          <div className="canvas-layout outline-split-stage outline-stage outline-redesign-stage structure-stage">
             {selectedBundle.outlineDraft ? (
               <>
-                <div className="canvas-main stack outline-canvas">
-                  <div className="structure-stage-head">
+                <div className="canvas-main stack outline-canvas outline-overview-canvas">
+                  <div className="outline-overview-head">
                     <div>
                       <p className="writing-section-label">段落提纲</p>
                       <h3>文章结构</h3>
                     </div>
-                    <Button type="button" variant="secondary" size="md" onClick={saveOutlineDraft} disabled={isPending}>
-                      保存段落提纲
-                    </Button>
+                    <Chip tone="accent">{selectedBundle.outlineDraft.sections.length} 段正文</Chip>
                   </div>
                   {draftMessage ? <p className="subtle structure-stage-message">{draftMessage}</p> : null}
 
@@ -450,28 +473,38 @@ export function DraftsTab({
                     />
                   ) : null}
 
-                  <div className="outline-frame-grid">
-                    <Card className="outline-frame-card">
-                      <div className="document-block-title">引子</div>
-                      <InlineTextAreaEdit value={selectedBundle.outlineDraft.hook} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                            ...selectedBundle.outlineDraft!,
-                            hook: val,
-                          })
-                        } rows={4} />
-                    </Card>
-                    <Card className="outline-frame-card">
-                      <div className="document-block-title">收尾</div>
-                      <InlineTextAreaEdit value={selectedBundle.outlineDraft.closing} onChange={(val: string) => updateOutlineDraft(setSelectedBundle, {
-                            ...selectedBundle.outlineDraft!,
-                            closing: val,
-                          })
-                        } rows={4} />
-                    </Card>
-                  </div>
+                  <section className="outline-frame-section">
+                    <div className="outline-section-headline">
+                      <div>
+                        <span>文章开合</span>
+                        <strong>引子和收尾只保留可扫读摘要，完整编辑仍可点进文本。</strong>
+                      </div>
+                    </div>
+                    <div className="outline-frame-grid">
+                      <OutlineFramePreviewCard
+                        label="引子"
+                        value={selectedBundle.outlineDraft.hook}
+                        placeholder="补一句能把读者带入判断的问题。"
+                        isSelected={selectedOutlineFrame === "hook"}
+                        onSelect={() => setSelectedOutlineFrame("hook")}
+                      />
+                      <OutlineFramePreviewCard
+                        label="收尾"
+                        value={selectedBundle.outlineDraft.closing}
+                        placeholder="补一句让读者知道怎么决策的收束。"
+                        isSelected={selectedOutlineFrame === "closing"}
+                        onSelect={() => setSelectedOutlineFrame("closing")}
+                      />
+                    </div>
+                  </section>
 
                   <div className="outline-section-list-panel">
-                    <div className="document-block-title">
-                      正文段落 <Chip tone="accent">{selectedBundle.outlineDraft.sections.length} 段</Chip>
+                    <div className="outline-section-headline">
+                      <div>
+                        <span>正文段落</span>
+                        <strong>选择一段后，在详情区编辑完整字段。</strong>
+                      </div>
+                      <Chip tone="accent">{selectedBundle.outlineDraft.sections.length} 段</Chip>
                     </div>
                     <div className="outline-section-card-list" role="list" aria-label="正文段落">
                       {selectedBundle.outlineDraft.sections.map((section, index) => (
@@ -483,6 +516,7 @@ export function DraftsTab({
                           supportingClaim={getOutlineSectionClaim(section, selectedBundle.outlineDraft?.argumentFrame ?? null, index)}
                           flags={getOutlineSectionFlags(section, selectedBundle.reviewReport)}
                           onSelect={() => {
+                            setSelectedOutlineFrame(null);
                             setSelectedOutlineSectionId(section.id);
                             onInspectorSelectionChange({ kind: "outline-section", sectionId: section.id });
                           }}
@@ -493,16 +527,40 @@ export function DraftsTab({
                 </div>
 
                 <aside className="canvas-inspector outline-section-inspector" aria-label="段落详情编辑">
-                  <OutlineSectionInspector
-                    section={selectedOutlineSection}
-                    sectionIndex={effectiveSelectedOutlineIndex}
-                    supportingClaim={selectedOutlineSection ? getOutlineSectionClaim(selectedOutlineSection, selectedBundle.outlineDraft.argumentFrame ?? null, effectiveSelectedOutlineIndex) : null}
-                    flags={selectedOutlineSection ? getOutlineSectionFlags(selectedOutlineSection, selectedBundle.reviewReport) : []}
-                    sourceCards={sourceCards}
-                    sourceCardMap={sourceCardMap}
-                    displayMode={displayMode}
-                    onChange={(patch) => updateOutlineSection(effectiveSelectedOutlineIndex, patch)}
-                  />
+                  {selectedOutlineFrame ? (
+                    <OutlineFrameInspector
+                      frame={selectedOutlineFrame}
+                      value={selectedOutlineFrame === "hook" ? selectedBundle.outlineDraft.hook : selectedBundle.outlineDraft.closing}
+                      isPending={isPending}
+                      hasUnsavedChanges={hasUnsavedOutlineChanges}
+                      lastSavedAt={outlineSavedAt}
+                      onSave={saveOutlineDraft}
+                      onBackToSections={() => setSelectedOutlineFrame(null)}
+                      onChange={(value) => updateCurrentOutlineDraft({
+                        ...selectedBundle.outlineDraft!,
+                        [selectedOutlineFrame]: value,
+                      })}
+                    />
+                  ) : (
+                    <OutlineSectionInspector
+                      section={selectedOutlineSection}
+                      sectionIndex={effectiveSelectedOutlineIndex}
+                      supportingClaim={selectedOutlineSection ? getOutlineSectionClaim(selectedOutlineSection, selectedBundle.outlineDraft.argumentFrame ?? null, effectiveSelectedOutlineIndex) : null}
+                      flags={selectedOutlineSection ? getOutlineSectionFlags(selectedOutlineSection, selectedBundle.reviewReport) : []}
+                      sourceCards={sourceCards}
+                      sourceCardMap={sourceCardMap}
+                      displayMode={displayMode}
+                      isPending={isPending}
+                      isFirst={effectiveSelectedOutlineIndex <= 0}
+                      isLast={effectiveSelectedOutlineIndex >= outlineSections.length - 1}
+                      hasUnsavedChanges={hasUnsavedOutlineChanges}
+                      lastSavedAt={outlineSavedAt}
+                      onSave={saveOutlineDraft}
+                      onPrevious={() => selectOutlineSectionByIndex(effectiveSelectedOutlineIndex - 1)}
+                      onNext={() => selectOutlineSectionByIndex(effectiveSelectedOutlineIndex + 1)}
+                      onChange={(patch) => updateOutlineSection(effectiveSelectedOutlineIndex, patch)}
+                    />
+                  )}
                 </aside>
               </>
             ) : (
@@ -932,9 +990,9 @@ function EvidenceSelector({
               key={card.id}
               className="evidence-pill"
               onClick={() => toggleSourceCard(card.id)}
-              title={`点击移除：${card.title}`}
+              title={`点击移除：${card.title || "未命名资料卡"}`}
             >
-              <strong>{card.title}</strong>
+              <strong>{card.title || "未命名资料卡"}</strong>
               {displayMode === "debug" ? <span>{card.id}</span> : null}
             </button>
           ))}
@@ -956,7 +1014,7 @@ function EvidenceSelector({
                 />
                 <div className="evidence-card-body">
                   <div className="evidence-card-head">
-                    <strong>{card.title}</strong>
+                    <strong>{card.title || "未命名资料卡"}</strong>
                     {displayMode === "debug" ? <span>{card.id}</span> : null}
                   </div>
                   <p>{card.summary || card.evidence || "这张资料卡还没有摘要。"}</p>
@@ -994,6 +1052,114 @@ type OutlineSectionFlagSummary = {
   label: string;
   tone: "danger" | "warning" | "accent";
 };
+
+function OutlineFramePreviewCard({
+  label,
+  value,
+  placeholder,
+  isSelected,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <Card className={`outline-frame-preview-card ${isSelected ? "is-selected" : ""}`}>
+      <button type="button" className="outline-frame-preview-button" onClick={onSelect} aria-pressed={isSelected}>
+        <div className="outline-frame-preview-head">
+          <span>{label}</span>
+        </div>
+        <p>{value || placeholder}</p>
+      </button>
+    </Card>
+  );
+}
+
+function OutlineFrameInspector({
+  frame,
+  value,
+  isPending,
+  hasUnsavedChanges,
+  lastSavedAt,
+  onSave,
+  onBackToSections,
+  onChange,
+}: {
+  frame: "hook" | "closing";
+  value: string;
+  isPending: boolean;
+  hasUnsavedChanges: boolean;
+  lastSavedAt: Date | null;
+  onSave: () => void;
+  onBackToSections: () => void;
+  onChange: (value: string) => void;
+}) {
+  const label = frame === "hook" ? "引子" : "收尾";
+  const hint = frame === "hook" ? "把读者带入核心误解或核心问题。" : "把判断收束到读者可以使用的决策感。";
+
+  return (
+    <div className="outline-inspector-stack">
+      <div className="outline-inspector-hero">
+        <div className="outline-inspector-title-block">
+          <p className="writing-section-label">文章开合</p>
+          <h3>{label}</h3>
+          <div className="outline-inspector-hero-meta">
+            <Chip tone="neutral">{hint}</Chip>
+          </div>
+        </div>
+        <SaveStatus
+          isPending={isPending}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
+          onSave={onSave}
+        />
+      </div>
+
+      <section className="outline-inspector-group">
+        <div className="outline-inspector-group-head">
+          <h4>完整文本</h4>
+          <p>主画布只展示摘要，这里编辑完整开合句。</p>
+        </div>
+        <GroupedSettings className="outline-inspector-settings" aria-label={`${label}完整文本`}>
+          <EditableSettingRow label={label} value={value} rows={6} onChange={onChange} />
+        </GroupedSettings>
+      </section>
+
+      <div className="outline-inspector-footer">
+        <Button type="button" variant="secondary" size="sm" onClick={onBackToSections}>
+          返回正文段落
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SaveStatus({
+  isPending,
+  hasUnsavedChanges,
+  lastSavedAt,
+  onSave,
+}: {
+  isPending: boolean;
+  hasUnsavedChanges: boolean;
+  lastSavedAt: Date | null;
+  onSave: () => void;
+}) {
+  return (
+    <div className="outline-save-status">
+      {hasUnsavedChanges ? (
+        <Button type="button" variant="secondary" size="sm" onClick={onSave} disabled={isPending}>
+          {isPending ? "保存中..." : "保存修改"}
+        </Button>
+      ) : (
+        <span>{lastSavedAt ? `已自动保存 · ${formatSavedTime(lastSavedAt)}` : "已自动保存"}</span>
+      )}
+    </div>
+  );
+}
 
 function OutlineSectionCard({
   section,
@@ -1045,6 +1211,14 @@ function OutlineSectionInspector({
   sourceCards,
   sourceCardMap,
   displayMode,
+  isPending,
+  isFirst,
+  isLast,
+  hasUnsavedChanges,
+  lastSavedAt,
+  onSave,
+  onPrevious,
+  onNext,
   onChange,
 }: {
   section: OutlineSection | null;
@@ -1054,6 +1228,14 @@ function OutlineSectionInspector({
   sourceCards: SourceCard[];
   sourceCardMap: Map<string, SourceCard>;
   displayMode: WorkbenchDisplayMode;
+  isPending: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  hasUnsavedChanges: boolean;
+  lastSavedAt: Date | null;
+  onSave: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
   onChange: (patch: Partial<OutlineSection>) => void;
 }) {
   if (!section) {
@@ -1066,12 +1248,21 @@ function OutlineSectionInspector({
 
   return (
     <div className="outline-inspector-stack">
-      <div className="structure-inspector-head">
-        <div>
+      <div className="outline-inspector-hero">
+        <div className="outline-inspector-title-block">
           <p className="writing-section-label">段落 {sectionIndex + 1}</p>
           <h3>{section.heading || "未命名段落"}</h3>
+          <div className="outline-inspector-hero-meta">
+            <Chip tone={flags.length ? "warning" : "accent"}>{flags.length ? `${flags.length} 个提醒` : "可编辑"}</Chip>
+            {supportingClaim ? <Chip tone="neutral">已映射论点</Chip> : null}
+          </div>
         </div>
-        <Chip tone={flags.length ? "warning" : "accent"}>{flags.length ? `${flags.length} 提醒` : "可编辑"}</Chip>
+        <SaveStatus
+          isPending={isPending}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
+          onSave={onSave}
+        />
       </div>
 
       {supportingClaim ? (
@@ -1089,44 +1280,62 @@ function OutlineSectionInspector({
         </div>
       ) : null}
 
-      <GroupedSettings className="outline-inspector-settings" aria-label="段落核心字段">
-        <EditableSettingRow label="段落标题" value={section.heading} multiline={false} onChange={(value) => onChange({ heading: value })} />
-        <EditableSettingRow label="段落目的" value={section.purpose} rows={3} onChange={(value) => onChange({ purpose: value })} />
-        <EditableSettingRow label="段落主判断" value={section.sectionThesis} rows={4} onChange={(value) => onChange({ sectionThesis: value })} />
-        <EditableSettingRow label="唯一动作" value={section.singlePurpose} rows={3} onChange={(value) => onChange({ singlePurpose: value })} />
-        <EditableSettingRow label="必须落地" value={section.mustLandDetail} rows={4} onChange={(value) => onChange({ mustLandDetail: value })} />
-        <EditableSettingRow label="场景 / 代价" value={section.sceneOrCost} rows={4} onChange={(value) => onChange({ sceneOrCost: value })} />
-        <EditableSettingRow label="主线句" value={section.mainlineSentence} rows={4} onChange={(value) => onChange({ mainlineSentence: value })} />
-      </GroupedSettings>
+      <section className="outline-inspector-group">
+        <div className="outline-inspector-group-head">
+          <h4>核心字段</h4>
+          <p>先看这一段要完成什么判断，再补落地细节。</p>
+        </div>
+        <GroupedSettings className="outline-inspector-settings" aria-label="段落核心字段">
+          <EditableSettingRow label="段落标题" value={section.heading} multiline={false} onChange={(value) => onChange({ heading: value })} />
+          <EditableSettingRow label="段落目的" value={section.purpose} rows={3} onChange={(value) => onChange({ purpose: value })} />
+          <EditableSettingRow label="段落主判断" value={section.sectionThesis} rows={4} onChange={(value) => onChange({ sectionThesis: value })} />
+          <EditableSettingRow label="唯一动作" value={section.singlePurpose} rows={3} onChange={(value) => onChange({ singlePurpose: value })} />
+          <EditableSettingRow label="必须落地" value={section.mustLandDetail} rows={4} onChange={(value) => onChange({ mustLandDetail: value })} />
+          <EditableSettingRow label="场景 / 代价" value={section.sceneOrCost} rows={4} onChange={(value) => onChange({ sceneOrCost: value })} />
+          <EditableSettingRow label="主线句" value={section.mainlineSentence} rows={4} onChange={(value) => onChange({ mainlineSentence: value })} />
+        </GroupedSettings>
+      </section>
 
-      <GroupedSettings className="outline-inspector-settings" aria-label="证据绑定">
-        <SettingRow label="强约束证据">
-          <EvidenceSelector
-            selectedIds={section.mustUseEvidenceIds}
-            sourceCards={sourceCards}
-            sourceCardMap={sourceCardMap}
-            helperText="这几张资料卡必须真的写进正文，不只是备选。"
-            displayMode={displayMode}
-            onChange={(nextIds) => onChange({ mustUseEvidenceIds: nextIds })}
-          />
-        </SettingRow>
-        <SettingRow label="参考证据">
-          <EvidenceSelector
-            selectedIds={section.evidenceIds}
-            sourceCards={sourceCards}
-            sourceCardMap={sourceCardMap}
-            helperText="这些资料卡会参与这段的论证，不一定每张都强制落笔。"
-            displayMode={displayMode}
-            onChange={(nextIds) => onChange({ evidenceIds: nextIds })}
-          />
-        </SettingRow>
-      </GroupedSettings>
+      <section className="outline-inspector-group">
+        <div className="outline-inspector-group-head">
+          <h4>证据绑定</h4>
+          <p>强约束证据必须写进正文，参考证据只做材料池。</p>
+        </div>
+        <GroupedSettings className="outline-inspector-settings" aria-label="证据绑定">
+          <SettingRow label="强约束证据">
+            <EvidenceSelector
+              selectedIds={section.mustUseEvidenceIds}
+              sourceCards={sourceCards}
+              sourceCardMap={sourceCardMap}
+              helperText="这几张资料卡必须真的写进正文，不只是备选。"
+              displayMode={displayMode}
+              onChange={(nextIds) => onChange({ mustUseEvidenceIds: nextIds })}
+            />
+          </SettingRow>
+          <SettingRow label="参考证据">
+            <EvidenceSelector
+              selectedIds={section.evidenceIds}
+              sourceCards={sourceCards}
+              sourceCardMap={sourceCardMap}
+              helperText="这些资料卡会参与这段的论证，不一定每张都强制落笔。"
+              displayMode={displayMode}
+              onChange={(nextIds) => onChange({ evidenceIds: nextIds })}
+            />
+          </SettingRow>
+        </GroupedSettings>
+      </section>
 
-      <GroupedSettings className="outline-inspector-settings" aria-label="反证与读者用途">
-        <EditableSettingRow label="反面理解" value={section.counterPoint} rows={3} onChange={(value) => onChange({ counterPoint: value })} />
-        <EditableSettingRow label="对立观点" value={section.opposingView} rows={3} onChange={(value) => onChange({ opposingView: value })} />
-        <EditableSettingRow label="读者用途" value={section.readerUsefulness} rows={3} onChange={(value) => onChange({ readerUsefulness: value })} />
-      </GroupedSettings>
+      <section className="outline-inspector-group">
+        <div className="outline-inspector-group-head">
+          <h4>反证与读者用途</h4>
+          <p>保留反面解释，避免段落只是单向陈述。</p>
+        </div>
+        <GroupedSettings className="outline-inspector-settings" aria-label="反证与读者用途">
+          <EditableSettingRow label="反面理解" value={section.counterPoint} rows={3} onChange={(value) => onChange({ counterPoint: value })} />
+          <EditableSettingRow label="对立观点" value={section.opposingView} rows={3} onChange={(value) => onChange({ opposingView: value })} />
+          <EditableSettingRow label="读者用途" value={section.readerUsefulness} rows={3} onChange={(value) => onChange({ readerUsefulness: value })} />
+        </GroupedSettings>
+      </section>
 
       <details className="outline-inspector-advanced">
         <summary>高级字段</summary>
@@ -1144,6 +1353,15 @@ function OutlineSectionInspector({
           <EditableSettingRow label="读完收获" value={section.expectedTakeaway} rows={3} onChange={(value) => onChange({ expectedTakeaway: value })} />
         </GroupedSettings>
       </details>
+
+      <div className="outline-inspector-footer">
+        <Button type="button" variant="secondary" size="sm" onClick={onPrevious} disabled={isFirst}>
+          上一段
+        </Button>
+        <Button type="button" variant="secondary" size="sm" onClick={onNext} disabled={isLast}>
+          下一段
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1216,6 +1434,33 @@ function briefText(value: string, maxLength = 34) {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
+const argumentShapeLabels: Record<string, string> = {
+  judgement_essay: "判断稿",
+  misread_correction: "误读纠偏",
+  signal_reinterpretation: "信号重释",
+  lifecycle_reframe: "生命周期改写",
+  asset_tiering: "资产分层",
+  mismatch_diagnosis: "错配诊断",
+  tradeoff_decision: "取舍决策",
+  risk_decomposition: "风险拆解",
+  comparison_benchmark: "横向比较",
+  planning_reality_check: "规划校验",
+  cycle_timing: "周期判断",
+  buyer_persona_split: "买家分型",
+};
+
+function formatArgumentShape(shape: string) {
+  return argumentShapeLabels[shape] ?? shape.replaceAll("_", " ");
+}
+
+function formatSavedTime(value: Date) {
+  return value.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function ArgumentFrameCard({
   argumentFrame,
   onSelectClaim,
@@ -1225,74 +1470,71 @@ function ArgumentFrameCard({
   onSelectClaim: (claimId: string) => void;
   displayMode: WorkbenchDisplayMode;
 }) {
+  const secondaryShapes = argumentFrame.secondaryShapes.map(formatArgumentShape);
+
   return (
-    <div className="document-block outline-block">
-      <div className="document-block-title">
-        论证骨架 <Chip tone="accent">{argumentFrame.primaryShape}</Chip>
+    <Card className="outline-argument-card outline-argument-strip">
+      <div className="outline-argument-card-head">
+        <div>
+          <span className="outline-strip-label">论证骨架</span>
+          <Chip tone="accent">{formatArgumentShape(argumentFrame.primaryShape)}</Chip>
+        </div>
+        {secondaryShapes.length ? <Chip tone="neutral">{secondaryShapes.join(" / ")}</Chip> : null}
       </div>
-      <ul className="compact-list compact-inline-list">
-        {argumentFrame.secondaryShapes.length ? (
-          <li>
-            <strong>辅助形状</strong>
-            <span>{argumentFrame.secondaryShapes.join(" / ")}</span>
-          </li>
-        ) : null}
-        <li>
-          <strong>核心张力</strong>
-          <span>{argumentFrame.centralTension}</span>
-        </li>
-        <li>
-          <strong>回答</strong>
-          <span>{argumentFrame.answer}</span>
-        </li>
+
+      <div className="outline-argument-summary-strip">
+        <section>
+          <span>核心张力</span>
+          <p>{argumentFrame.centralTension}</p>
+        </section>
+        <section>
+          <span>回答</span>
+          <p>{argumentFrame.answer}</p>
+        </section>
         {argumentFrame.notThis.length ? (
-          <li>
-            <strong>不要写成</strong>
-            <span>{argumentFrame.notThis.join(" / ")}</span>
-          </li>
+          <section className="outline-argument-not-this">
+            <span>不要写成</span>
+            <div>
+              {argumentFrame.notThis.map((item) => (
+                <Chip tone="neutral" key={item}>{item}</Chip>
+              ))}
+            </div>
+          </section>
         ) : null}
-      </ul>
+      </div>
+
       {argumentFrame.supportingClaims.length ? (
-        <div className="outline-list stack">
+        <div className="outline-claim-strip" aria-label="支撑论点">
           {argumentFrame.supportingClaims.map((claim) => (
-            <Card className="outline-item" key={claim.id}>
-              <div className="document-block-title">
-                {claim.role} {displayMode === "debug" ? <Chip>{claim.id}</Chip> : null}
-              </div>
-              <p>{claim.claim}</p>
-              <Button type="button" variant="ghost" size="sm" className="argument-claim-inspect" onClick={() => onSelectClaim(claim.id)}>
-                查看论点
-              </Button>
-              <ul className="compact-list compact-inline-list">
-                {displayMode === "debug" && claim.evidenceIds.length ? (
-                  <li>
-                    <strong>证据</strong>
-                    <span>{claim.evidenceIds.join(" / ")}</span>
-                  </li>
-                ) : null}
-                {displayMode === "debug" && claim.mustUseEvidenceIds.length ? (
-                  <li>
-                    <strong>强约束证据</strong>
-                    <span>{claim.mustUseEvidenceIds.join(" / ")}</span>
-                  </li>
-                ) : null}
-                {claim.zonesAsEvidence?.length ? (
-                  <li>
-                    <strong>作为证据的片区</strong>
-                    <span>{claim.zonesAsEvidence.join(" / ")}</span>
-                  </li>
-                ) : null}
-                {claim.shouldNotBecomeSection ? (
-                  <li>
-                    <strong>结构提醒</strong>
-                    <span>这条论点不要直接变成独立片区章节。</span>
-                  </li>
-                ) : null}
-              </ul>
-            </Card>
+            <button
+              type="button"
+              className="outline-claim-chip"
+              key={claim.id}
+              onClick={() => onSelectClaim(claim.id)}
+            >
+              <span>{claim.role}</span>
+              <strong>{briefText(claim.claim, 42)}</strong>
+              {displayMode === "debug" ? <small>{claim.id}</small> : null}
+              {claim.shouldNotBecomeSection ? <em>不要独立成章</em> : null}
+              {claim.zonesAsEvidence?.length ? <small>{claim.zonesAsEvidence.join(" / ")}</small> : null}
+            </button>
           ))}
         </div>
       ) : null}
-    </div>
+
+      {displayMode === "debug" && argumentFrame.supportingClaims.some((claim) => claim.evidenceIds.length || claim.mustUseEvidenceIds.length) ? (
+        <details className="outline-argument-debug">
+          <summary>调试信息</summary>
+          <div className="outline-argument-debug-list">
+            {argumentFrame.supportingClaims.map((claim) => (
+              <div key={claim.id}>
+                <strong>{claim.id}</strong>
+                <span>{[...claim.mustUseEvidenceIds, ...claim.evidenceIds].join(" / ") || "未绑定证据"}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </Card>
   );
 }
