@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProjectBundle, ReviewSeverity, VitalityCheckEntry } from "@/lib/types";
+import type { ContinuityBeat, OutlineSection, ProjectBundle, ReviewSeverity, SourceCard, VitalityCheckEntry } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Panel } from "@/components/ui/surface";
@@ -66,10 +66,37 @@ export function WorkbenchInspector({
   );
   const primaryRisk = riskItems[0] ?? null;
   const selectedDetail = resolveInspectorDetail(selectedBundle, selection, displayMode);
+  const selectedSourceCard =
+    selection?.kind === "source-card" ? selectedBundle.sourceCards.find((card) => card.id === selection.sourceCardId) ?? null : null;
+  const selectedOutlineSection =
+    selection?.kind === "outline-section" ? selectedBundle.outlineDraft?.sections.find((section) => section.id === selection.sectionId) ?? null : null;
 
   return (
     <Panel as="aside" className={`status-bar inspector-panel status-bar-${nextAction.tone}`} aria-label="工作台检查器">
-      {selectedDetail ? (
+      {selectedSourceCard ? (
+        <InspectorSourceCard
+          sourceCard={selectedSourceCard}
+          displayMode={displayMode}
+          onClearSelection={onClearSelection}
+          onNavigate={() => onNavigate("research", "source-library")}
+        />
+      ) : selectedOutlineSection && activeTab === "drafts" ? (
+        <InspectorDraftSection
+          section={selectedOutlineSection}
+          sectionIndex={selectedBundle.outlineDraft?.sections.findIndex((section) => section.id === selectedOutlineSection.id) ?? 0}
+          selectedBundle={selectedBundle}
+          onClearSelection={onClearSelection}
+          onNavigate={() => onNavigate("drafts", "drafts")}
+        />
+      ) : selectedOutlineSection ? (
+        <InspectorOutlineSection
+          section={selectedOutlineSection}
+          sectionIndex={selectedBundle.outlineDraft?.sections.findIndex((section) => section.id === selectedOutlineSection.id) ?? 0}
+          selectedBundle={selectedBundle}
+          onClearSelection={onClearSelection}
+          onNavigate={() => onNavigate("structure", "outline")}
+        />
+      ) : selectedDetail ? (
         <div className="inspector-selection-card">
           <div className="inspector-selection-head">
             <div>
@@ -156,6 +183,344 @@ export function WorkbenchInspector({
         <small className="status-bar-target">{nextAction.targetLabel}</small>
       </div>
     </Panel>
+  );
+}
+
+function InspectorDraftSection({
+  section,
+  sectionIndex,
+  selectedBundle,
+  onClearSelection,
+  onNavigate,
+}: {
+  section: OutlineSection;
+  sectionIndex: number;
+  selectedBundle: ProjectBundle;
+  onClearSelection: () => void;
+  onNavigate: () => void;
+}) {
+  const styleCore = selectedBundle.project.styleCore;
+  const vitality = selectedBundle.project.vitalityCheck;
+  const evidenceIds = uniqueInspectorValues([...section.mustUseEvidenceIds, ...section.evidenceIds]);
+  const sourceCardMap = new Map(selectedBundle.sourceCards.map((card) => [card.id, card]));
+  const sourceCards = evidenceIds.map((id) => sourceCardMap.get(id)).filter((card): card is SourceCard => Boolean(card));
+  const continuityBeat = selectedBundle.outlineDraft?.continuityLedger?.beats.find((beat) => beat.sectionId === section.id) ?? null;
+  const flags = getInspectorOutlineFlags(section, selectedBundle.reviewReport);
+  const healthScore = getInspectorOutlineHealthScore(section, evidenceIds.length, section.mustUseEvidenceIds.length, continuityBeat, flags);
+  const missingItems = getInspectorOutlineMissingItems(section, evidenceIds.length, section.mustUseEvidenceIds.length, continuityBeat, flags);
+  const suggestions = getInspectorOutlineSuggestions(section, evidenceIds.length, section.mustUseEvidenceIds.length, continuityBeat, flags);
+  const vitalityIssues = vitality.entries.filter((entry) => entry.status !== "pass").slice(0, 4);
+
+  return (
+    <div className="inspector-selection-card inspector-draft-card">
+      <div className="inspector-selection-head">
+        <div>
+          <span className="status-bar-label">正文写作检查</span>
+          <h3>{section.heading || `段落 ${sectionIndex + 1}`}</h3>
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={onClearSelection}>
+          清除
+        </Button>
+      </div>
+
+      <div className="inspector-draft-score">
+        <div>
+          <span>章节健康度</span>
+          <strong>{healthScore}</strong>
+          <small>{formatInspectorHealthLabel(healthScore)}</small>
+        </div>
+        <div>
+          <span>VitalityCheck</span>
+          <Chip tone={getRiskChipTone(vitality.overallStatus)}>{formatInspectorReviewStatus(vitality.overallStatus)}</Chip>
+        </div>
+      </div>
+
+      <section className="inspector-draft-section-card">
+        <span>主线判断</span>
+        <p>{section.mainlineSentence || section.sectionThesis || section.purpose || "这一段还没有明确主线句。"}</p>
+      </section>
+
+      <section className="inspector-draft-section-card">
+        <span>StyleCore 建议</span>
+        <dl className="inspector-draft-style-list">
+          <div>
+            <dt>表达策略</dt>
+            <dd>{styleCore.judgement || styleCore.personalView || "还没有明确作者站位。"}</dd>
+          </div>
+          <div>
+            <dt>节奏</dt>
+            <dd>{styleCore.rhythm || "还没有节奏策略。"}</dd>
+          </div>
+          <div>
+            <dt>断句</dt>
+            <dd>{styleCore.breakPattern || "还没有断句策略。"}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <InspectorOutlineActionList title="缺口" emptyLabel="暂无明显缺口" items={missingItems} />
+      <InspectorOutlineActionList title="优化建议" emptyLabel="保持当前结构" items={suggestions} />
+
+      <section className="inspector-draft-section-card">
+        <span>VitalityCheck 提醒</span>
+        {vitalityIssues.length ? (
+          <div className="inspector-draft-vitality-list">
+            {vitalityIssues.map((entry) => (
+              <div className={`inspector-outline-action-item redesign-tone-${getRiskChipTone(entry.status)}`} key={entry.key}>
+                <strong>{entry.title}</strong>
+                <p>{entry.detail}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p>{vitality.overallVerdict || "暂无未通过提醒。"}</p>
+        )}
+      </section>
+
+      <section className="inspector-draft-section-card">
+        <span>支撑资料</span>
+        {sourceCards.length ? (
+          <div className="inspector-outline-sources">
+            {sourceCards.slice(0, 3).map((card) => (
+              <div key={card.id}>
+                <strong>{card.title || "未命名资料卡"}</strong>
+                <p>{card.summary || card.evidence || "这张资料卡还没有摘要。"}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p>还没有匹配资料卡。</p>
+        )}
+      </section>
+
+      <div className="inspector-source-actions">
+        <Button type="button" variant="secondary" size="sm" onClick={onNavigate}>
+          定位到正文
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InspectorSourceCard({
+  sourceCard,
+  displayMode,
+  onClearSelection,
+  onNavigate,
+}: {
+  sourceCard: ProjectBundle["sourceCards"][number];
+  displayMode: WorkbenchDisplayMode;
+  onClearSelection: () => void;
+  onNavigate: () => void;
+}) {
+  const evidenceStrength = getSourceCardStrength(sourceCard);
+
+  return (
+    <div className="inspector-selection-card inspector-source-card">
+      <div className="inspector-selection-head">
+        <div>
+          <span className="status-bar-label">资料卡详情</span>
+          <h3>{sourceCard.title || (displayMode === "debug" ? sourceCard.id : "未命名资料卡")}</h3>
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={onClearSelection}>
+          清除
+        </Button>
+      </div>
+
+      <div className="inspector-source-meta">
+        <Chip>{sourceCard.zone || "未分区"}</Chip>
+        <Chip tone={sourceCard.credibility === "高" ? "success" : sourceCard.credibility === "低" ? "warning" : "neutral"}>
+          {sourceCard.credibility}可信
+        </Chip>
+        <Chip tone={sourceCard.supportLevel === "high" ? "accent" : "neutral"}>{formatSupportLevel(sourceCard.supportLevel)}</Chip>
+      </div>
+
+      <p>{sourceCard.summary || sourceCard.note || sourceCard.evidence || "这张资料卡还没有摘要。"}</p>
+
+      <div className="inspector-source-quote">
+        <span>高亮证据</span>
+        <strong>{sourceCard.evidence || "还没有提炼证据片段。"}</strong>
+      </div>
+
+      <div className="inspector-source-strength" aria-label={`证据强度 ${evidenceStrength}/5`}>
+        <span>证据强度</span>
+        <div>
+          {Array.from({ length: 5 }, (_, index) => (
+            <i className={index < evidenceStrength ? "is-active" : ""} key={index} />
+          ))}
+        </div>
+      </div>
+
+      <dl className="inspector-source-grid">
+        <div>
+          <dt>来源类型</dt>
+          <dd>{formatSourceType(sourceCard.sourceType)}</dd>
+        </div>
+        <div>
+          <dt>论断类型</dt>
+          <dd>{formatClaimType(sourceCard.claimType)}</dd>
+        </div>
+        <div>
+          <dt>时效性</dt>
+          <dd>{formatTimeSensitivity(sourceCard.timeSensitivity)}</dd>
+        </div>
+        <div>
+          <dt>关联章节</dt>
+          <dd>{sourceCard.intendedSection || "未绑定"}</dd>
+        </div>
+      </dl>
+
+      {sourceCard.reliabilityNote ? <small>{sourceCard.reliabilityNote}</small> : null}
+
+      {sourceCard.tags.length ? (
+        <div className="inspector-source-tags">
+          {sourceCard.tags.slice(0, 6).map((tag) => (
+            <Chip key={tag}>{tag}</Chip>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="inspector-source-actions">
+        <Button type="button" variant="secondary" size="sm" onClick={onNavigate}>
+          定位到这里
+        </Button>
+        {sourceCard.url ? (
+          <a className="secondary-button button-size-sm inspector-source-link" href={sourceCard.url} target="_blank" rel="noreferrer">
+            查看原文
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function InspectorOutlineSection({
+  section,
+  sectionIndex,
+  selectedBundle,
+  onClearSelection,
+  onNavigate,
+}: {
+  section: OutlineSection;
+  sectionIndex: number;
+  selectedBundle: ProjectBundle;
+  onClearSelection: () => void;
+  onNavigate: () => void;
+}) {
+  const evidenceIds = uniqueInspectorValues([...section.mustUseEvidenceIds, ...section.evidenceIds]);
+  const sourceCardMap = new Map(selectedBundle.sourceCards.map((card) => [card.id, card]));
+  const sourceCards = evidenceIds.map((id) => sourceCardMap.get(id)).filter((card): card is SourceCard => Boolean(card));
+  const unmatchedEvidenceCount = evidenceIds.length - sourceCards.length;
+  const continuityBeat = selectedBundle.outlineDraft?.continuityLedger?.beats.find((beat) => beat.sectionId === section.id) ?? null;
+  const flags = getInspectorOutlineFlags(section, selectedBundle.reviewReport);
+  const healthScore = getInspectorOutlineHealthScore(section, evidenceIds.length, section.mustUseEvidenceIds.length, continuityBeat, flags);
+  const missingItems = getInspectorOutlineMissingItems(section, evidenceIds.length, section.mustUseEvidenceIds.length, continuityBeat, flags);
+  const suggestions = getInspectorOutlineSuggestions(section, evidenceIds.length, section.mustUseEvidenceIds.length, continuityBeat, flags);
+
+  return (
+    <div className="inspector-selection-card inspector-outline-card">
+      <div className="inspector-selection-head">
+        <div>
+          <span className="status-bar-label">章节体检</span>
+          <h3>{section.heading || `段落 ${sectionIndex + 1}`}</h3>
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={onClearSelection}>
+          清除
+        </Button>
+      </div>
+
+      <div className="inspector-outline-score">
+        <div>
+          <span>HKR 对齐度</span>
+          <strong>{healthScore}</strong>
+          <small>{formatInspectorHealthLabel(healthScore)}</small>
+        </div>
+        <div className="inspector-outline-bars">
+          <span style={{ width: `${healthScore}%` }} />
+        </div>
+      </div>
+
+      <p>{section.sectionThesis || section.purpose || "这一段还没有明确主判断。"}</p>
+
+      <dl className="inspector-source-grid inspector-outline-grid">
+        <div>
+          <dt>支撑资料</dt>
+          <dd>{evidenceIds.length}</dd>
+        </div>
+        <div>
+          <dt>必要证据</dt>
+          <dd>{section.mustUseEvidenceIds.length}</dd>
+        </div>
+        <div>
+          <dt>连续性</dt>
+          <dd>{continuityBeat ? "已绑定" : "缺失"}</dd>
+        </div>
+        <div>
+          <dt>复查项</dt>
+          <dd>{flags.length}</dd>
+        </div>
+      </dl>
+
+      <InspectorOutlineActionList title="缺失论据" emptyLabel="暂无明显缺口" items={missingItems} />
+      <InspectorOutlineActionList title="优化建议" emptyLabel="保持当前结构" items={suggestions} />
+
+      {continuityBeat ? (
+        <div className="inspector-outline-continuity">
+          <span>连续性</span>
+          <p>{continuityBeat.inheritedQuestion}</p>
+          <strong>{continuityBeat.answerThisSection}</strong>
+        </div>
+      ) : null}
+
+      <div className="inspector-outline-sources">
+        <span>关联资料</span>
+        {sourceCards.length ? (
+          sourceCards.slice(0, 3).map((card) => (
+            <div key={card.id}>
+              <strong>{card.title || "未命名资料卡"}</strong>
+              <p>{card.summary || card.evidence || "这张资料卡还没有摘要。"}</p>
+            </div>
+          ))
+        ) : (
+          <p>还没有匹配资料卡。</p>
+        )}
+        {unmatchedEvidenceCount > 0 ? <small>{unmatchedEvidenceCount} 条证据未匹配到资料卡。</small> : null}
+      </div>
+
+      <div className="inspector-source-actions">
+        <Button type="button" variant="secondary" size="sm" onClick={onNavigate}>
+          定位到这里
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InspectorOutlineActionList({
+  title,
+  emptyLabel,
+  items,
+}: {
+  title: string;
+  emptyLabel: string;
+  items: Array<{ id: string; title: string; detail: string; tone: "neutral" | "accent" | "success" | "warning" | "danger" | "stale" }>;
+}) {
+  return (
+    <div className="inspector-outline-action-list">
+      <span>{title}</span>
+      {items.length ? (
+        <div>
+          {items.map((item, index) => (
+            <div className={`inspector-outline-action-item redesign-tone-${item.tone}`} key={`${item.id}-${index}`}>
+              <strong>{item.title}</strong>
+              <p>{item.detail}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p>{emptyLabel}</p>
+      )}
+    </div>
   );
 }
 
@@ -268,6 +633,16 @@ function getRiskChipTone(status: ReviewSeverity) {
   return "success";
 }
 
+function formatInspectorReviewStatus(status: ReviewSeverity) {
+  if (status === "pass") {
+    return "通过";
+  }
+  if (status === "fail") {
+    return "需重修";
+  }
+  return "提醒";
+}
+
 function getRiskItems(entries: VitalityCheckEntry[], isThinkCardComplete: boolean, isStyleCoreComplete: boolean) {
   const urgencyItems = entries
     .filter((entry) => entry.status !== "pass")
@@ -305,6 +680,145 @@ function getRiskItems(entries: VitalityCheckEntry[], isThinkCardComplete: boolea
   return [];
 }
 
+function uniqueInspectorValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function getInspectorOutlineFlags(section: OutlineSection, reviewReport: ProjectBundle["reviewReport"]) {
+  if (!reviewReport) {
+    return [];
+  }
+  const flags: Array<{ id: string; title: string; detail: string; tone: "warning" | "danger" }> = [];
+  const sectionScore = reviewReport.sectionScores.find((score) => score.heading === section.heading && score.status !== "pass");
+  if (sectionScore) {
+    flags.push({
+      id: "section-score",
+      title: sectionScore.status === "fail" ? "质检失败" : "质检提醒",
+      detail: sectionScore.issues.join("；") || "章节分数需要复查。",
+      tone: sectionScore.status === "fail" ? "danger" : "warning",
+    });
+  }
+  for (const flag of reviewReport.continuityFlags?.filter((item) => item.sectionIds.includes(section.id)) ?? []) {
+    flags.push({
+      id: `continuity-${flag.type}`,
+      title: "连续性问题",
+      detail: flag.reason || flag.suggestedAction,
+      tone: flag.severity === "fail" ? "danger" : "warning",
+    });
+  }
+  for (const flag of reviewReport.argumentQualityFlags?.filter((item) => item.sectionIds.includes(section.id)) ?? []) {
+    flags.push({
+      id: `argument-${flag.type}`,
+      title: "论证问题",
+      detail: flag.reason || flag.suggestedAction,
+      tone: flag.severity === "fail" ? "danger" : "warning",
+    });
+  }
+  for (const intent of reviewReport.structuralRewriteIntents?.filter((item) => item.affectedSectionIds.includes(section.id)) ?? []) {
+    flags.push({
+      id: `rewrite-${intent.issueTypes.join("-")}`,
+      title: "结构重写",
+      detail: intent.whyItFails,
+      tone: "danger",
+    });
+  }
+  for (const flag of reviewReport.paragraphFlags.filter((item) => item.sectionHeading === section.heading)) {
+    flags.push({
+      id: `paragraph-${flag.paragraphIndex}-${flag.issueTypes.join("-")}`,
+      title: "段落问题",
+      detail: flag.detail,
+      tone: "warning",
+    });
+  }
+  return flags.slice(0, 6);
+}
+
+function getInspectorOutlineMissingItems(
+  section: OutlineSection,
+  evidenceCount: number,
+  requiredEvidenceCount: number,
+  continuityBeat: ContinuityBeat | null,
+  flags: Array<{ id: string; title: string; detail: string; tone: "warning" | "danger" }>,
+) {
+  const items: Array<{ id: string; title: string; detail: string; tone: "accent" | "warning" | "danger" }> = [];
+  if (evidenceCount === 0) {
+    items.push({ id: "missing-evidence", title: "缺少支撑资料", detail: "没有资料卡支撑，正文很容易变成空判断。", tone: "danger" });
+  }
+  if (requiredEvidenceCount === 0) {
+    items.push({ id: "missing-required", title: "缺少必要证据", detail: "建议指定至少一条必须使用的证据。", tone: "warning" });
+  }
+  if (!continuityBeat) {
+    items.push({ id: "missing-continuity", title: "缺少连续性", detail: "没有记录上一段问题、本段回答和下一段必要性。", tone: "warning" });
+  }
+  if (!section.sceneOrCost.trim()) {
+    items.push({ id: "missing-scene", title: "缺少场景或代价", detail: "建议补一个读者能感知的场景、成本或冲突。", tone: "accent" });
+  }
+  if (flags.some((flag) => flag.tone === "danger")) {
+    items.push({ id: "hard-flag", title: "有硬性复查项", detail: "Review 已标记这一段需要优先处理。", tone: "danger" });
+  }
+  return items.slice(0, 5);
+}
+
+function getInspectorOutlineSuggestions(
+  section: OutlineSection,
+  evidenceCount: number,
+  requiredEvidenceCount: number,
+  continuityBeat: ContinuityBeat | null,
+  flags: Array<{ id: string; title: string; detail: string; tone: "warning" | "danger" }>,
+) {
+  const suggestions: Array<{ id: string; title: string; detail: string; tone: "accent" | "success" | "warning" | "danger" }> = [];
+  if (flags.length > 0) {
+    suggestions.push({
+      id: "review-first",
+      title: "先处理质检提示",
+      detail: flags[0]?.detail || "先消除结构或论证风险。",
+      tone: flags.some((flag) => flag.tone === "danger") ? "danger" : "warning",
+    });
+  }
+  if (evidenceCount === 0) {
+    suggestions.push({ id: "add-source", title: "补直接资料", detail: "从资料卡库选择能证明本段主判断的材料。", tone: "warning" });
+  } else if (requiredEvidenceCount === 0) {
+    suggestions.push({ id: "promote-source", title: "提升关键资料权重", detail: "把最关键的一条证据设为必要证据。", tone: "accent" });
+  }
+  if (!continuityBeat) {
+    suggestions.push({ id: "add-chain", title: "补章节链路", detail: "说明这一段为什么必须接在上一段后面。", tone: "accent" });
+  }
+  if (!section.readerUsefulness.trim()) {
+    suggestions.push({ id: "reader-use", title: "补读者用途", detail: "明确读者看完这一段能获得什么判断。", tone: "accent" });
+  }
+  if (suggestions.length === 0) {
+    suggestions.push({ id: "keep", title: "可进入正文", detail: "当前章节结构、证据和连续性相对完整。", tone: "success" });
+  }
+  return suggestions.slice(0, 5);
+}
+
+function getInspectorOutlineHealthScore(
+  section: OutlineSection,
+  evidenceCount: number,
+  requiredEvidenceCount: number,
+  continuityBeat: ContinuityBeat | null,
+  flags: Array<{ id: string; title: string; detail: string; tone: "warning" | "danger" }>,
+) {
+  let score = 100;
+  if (evidenceCount === 0) score -= 28;
+  if (requiredEvidenceCount === 0) score -= 18;
+  if (!continuityBeat) score -= 18;
+  if (!section.mainlineSentence.trim()) score -= 10;
+  if (!section.sceneOrCost.trim()) score -= 8;
+  if (!section.readerUsefulness.trim()) score -= 8;
+  for (const flag of flags) {
+    score -= flag.tone === "danger" ? 22 : 10;
+  }
+  return Math.max(0, Math.min(100, score));
+}
+
+function formatInspectorHealthLabel(score: number) {
+  if (score >= 86) return "优秀";
+  if (score >= 72) return "良好";
+  if (score >= 52) return "待补强";
+  return "有阻塞";
+}
+
 function formatSupportLevel(level: string) {
   const labels: Record<string, string> = {
     high: "强支撑",
@@ -312,4 +826,41 @@ function formatSupportLevel(level: string) {
     low: "弱支撑",
   };
   return labels[level] ?? level;
+}
+
+function formatSourceType(value: string) {
+  const labels: Record<string, string> = {
+    official: "官方来源",
+    media: "媒体报道",
+    commentary: "评论观点",
+    interview: "访谈",
+    observation: "实地观察",
+  };
+  return labels[value] ?? value;
+}
+
+function formatClaimType(value: string) {
+  const labels: Record<string, string> = {
+    fact: "事实",
+    observation: "观察",
+    judgement: "判断",
+    counterevidence: "反证",
+    quote: "引用",
+  };
+  return labels[value] ?? value;
+}
+
+function formatTimeSensitivity(value: string) {
+  const labels: Record<string, string> = {
+    evergreen: "长期有效",
+    timely: "阶段有效",
+    volatile: "易过期",
+  };
+  return labels[value] ?? value;
+}
+
+function getSourceCardStrength(sourceCard: ProjectBundle["sourceCards"][number]) {
+  const supportScore = sourceCard.supportLevel === "high" ? 3 : sourceCard.supportLevel === "medium" ? 2 : 1;
+  const credibilityScore = sourceCard.credibility === "高" ? 2 : sourceCard.credibility === "中" ? 1 : 0;
+  return Math.max(1, Math.min(5, supportScore + credibilityScore));
 }

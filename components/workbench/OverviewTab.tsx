@@ -569,11 +569,11 @@ export function OverviewTab({
                 <TextAreaField label="读者收益" value={selectedBundle.project.thinkCard.readerPayoff} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { readerPayoff: value })} />
                 <TextAreaField label="决策影响" value={selectedBundle.project.thinkCard.decisionImplication} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { decisionImplication: value })} />
               </AccordionCard>
-              <AccordionCard title="HKR 交付" description="把读者的快乐、知识和共鸣拆开写。">
-                <TextAreaField label="HKR - Happy" value={selectedBundle.project.thinkCard.hkr.happy} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { happy: value })} />
-                <TextAreaField label="HKR - Knowledge" value={selectedBundle.project.thinkCard.hkr.knowledge} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { knowledge: value })} />
-                <TextAreaField label="HKR - Resonance" value={selectedBundle.project.thinkCard.hkr.resonance} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { resonance: value })} />
-                <TextAreaField label="HKR 总结" value={selectedBundle.project.thinkCard.hkr.summary} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { summary: value })} />
+              <AccordionCard title="读者交付" description="把读者的情绪收益、知识收益和共鸣收益拆开写。">
+                <TextAreaField label="情绪收益" value={selectedBundle.project.thinkCard.hkr.happy} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { happy: value })} />
+                <TextAreaField label="知识收益" value={selectedBundle.project.thinkCard.hkr.knowledge} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { knowledge: value })} />
+                <TextAreaField label="共鸣收益" value={selectedBundle.project.thinkCard.hkr.resonance} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { resonance: value })} />
+                <TextAreaField label="读者交付总结" value={selectedBundle.project.thinkCard.hkr.summary} rows={3} onChange={(value) => updateThinkCardHKR(setSelectedBundle, { summary: value })} />
               </AccordionCard>
               <AccordionCard title="备选路线" description="保留可切换方向，避免命题一条路走死。">
                 <TextAreaField
@@ -1531,39 +1531,39 @@ function CompatibilityDiagnostics({
       </div>
       <div className="compat-readout">
         <section>
-          <h4>HKRR</h4>
+          <h4>旧读者交付</h4>
           <ul className="compact-list">
             <li>
-              <strong>Happy</strong>
+              <strong>情绪收益</strong>
               <span>{hkrr.happy || "待同步"}</span>
             </li>
             <li>
-              <strong>Knowledge</strong>
+              <strong>知识收益</strong>
               <span>{hkrr.knowledge || "待同步"}</span>
             </li>
             <li>
-              <strong>Resonance</strong>
+              <strong>共鸣收益</strong>
               <span>{hkrr.resonance || "待同步"}</span>
             </li>
             <li>
-              <strong>Rhythm</strong>
+              <strong>节奏推进</strong>
               <span>{hkrr.rhythm || "待同步"}</span>
             </li>
           </ul>
         </section>
         <section>
-          <h4>HAMD</h4>
+          <h4>旧开题卡</h4>
           <ul className="compact-list">
             <li>
-              <strong>Hook</strong>
+              <strong>开头抓手</strong>
               <span>{hamd.hook || "待同步"}</span>
             </li>
             <li>
-              <strong>Anchor</strong>
+              <strong>创作锚点</strong>
               <span>{hamd.anchor || "待同步"}</span>
             </li>
             <li>
-              <strong>Different</strong>
+              <strong>差异判断</strong>
               <span>{hamd.different || "待同步"}</span>
             </li>
           </ul>
@@ -1572,15 +1572,15 @@ function CompatibilityDiagnostics({
           <h4>旧动作卡</h4>
           <ul className="compact-list">
             <li>
-              <strong>Signature</strong>
+              <strong>标志句</strong>
               <span>{writingMoves.signatureLine || "待同步"}</span>
             </li>
             <li>
-              <strong>Fresh observation</strong>
+              <strong>新鲜观察</strong>
               <span>{writingMoves.freshObservation || "待同步"}</span>
             </li>
             <li>
-              <strong>Echo</strong>
+              <strong>回环句</strong>
               <span>{writingMoves.echoLine || "待同步"}</span>
             </li>
           </ul>

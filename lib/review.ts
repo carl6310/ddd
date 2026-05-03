@@ -53,7 +53,7 @@ export function runDeterministicReview(input: {
     key: "hamd-card",
     title: "HAMD 开题卡",
     status: hamd?.hook && hamd.anchor && hamd.different ? "pass" : "warn",
-    detail: hamd?.hook && hamd.anchor && hamd.different ? "Hook / Anchor / Different 已定义。" : "建议先补齐 Hook / Anchor / Different，再继续往下写。",
+    detail: hamd?.hook && hamd.anchor && hamd.different ? "开头抓手 / 创作锚点 / 差异判断已定义。" : "建议先补齐开头抓手、创作锚点和差异判断，再继续往下写。",
     evidenceIds: [],
   });
 
@@ -190,7 +190,7 @@ export function runDeterministicReview(input: {
     key: "anchor",
     title: "记忆锚点落地",
     status: anchorSignal ? "pass" : "warn",
-    detail: anchorSignal ? "正文里已经能看到记忆锚点。" : hamd?.anchor ? "Anchor 已定义，但正文里还没有把它立起来。" : "还没有定义 Anchor。",
+    detail: anchorSignal ? "正文里已经能看到记忆锚点。" : hamd?.anchor ? "创作锚点已定义，但正文里还没有把它立起来。" : "还没有定义创作锚点。",
     evidenceIds: [],
   });
 
@@ -199,7 +199,7 @@ export function runDeterministicReview(input: {
     key: "hook",
     title: "传播钩子落地",
     status: hamd?.hook ? (hookSignal ? "pass" : "warn") : "warn",
-    detail: hamd?.hook ? (hookSignal ? "开头已经像在兑现 Hook。" : "Hook 已定义，但开头还不够锋利。") : "还没有定义 Hook。",
+    detail: hamd?.hook ? (hookSignal ? "开头已经在兑现抓手。" : "开头抓手已定义，但开头还不够锋利。") : "还没有定义开头抓手。",
     evidenceIds: [],
   });
 
@@ -208,7 +208,7 @@ export function runDeterministicReview(input: {
     key: "different",
     title: "差异视角落地",
     status: hamd?.different ? (differentSignal ? "pass" : "warn") : "warn",
-    detail: hamd?.different ? (differentSignal ? "正文已经在强调与常规板块稿的不同。" : "Different 已定义，但正文里还没有明显立出来。") : "还没有定义 Different。",
+    detail: hamd?.different ? (differentSignal ? "正文已经在强调与常规板块稿的不同。" : "差异判断已定义，但正文里还没有明显立出来。") : "还没有定义差异判断。",
     evidenceIds: [],
   });
 
@@ -1434,9 +1434,9 @@ function buildRevisionSuggestions(checks: ReviewCheck[]): string[] {
         case "opening":
           return "把开头重写成更强的一句话判断，让读者立刻知道你在纠什么偏。";
         case "hamd-card":
-          return "先补全 Hook、Anchor、Different，再继续推进提纲和正文。";
+          return "先补全开头抓手、创作锚点和差异判断，再继续推进提纲和正文。";
         case "hkrr-card":
-          return "把这篇的 Happy / Knowledge / Resonance / Rhythm 写具体，后面才更容易出传播感。";
+          return "把这篇的情绪收益、知识收益、共鸣收益和节奏推进写具体，后面才更容易出传播感。";
         case "writing-moves-card":
           return "先把这篇的新观察、场景、升维、回环和代价写成动作卡，再继续修正文。";
         case "anchor":

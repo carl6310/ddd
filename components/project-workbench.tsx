@@ -1,12 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ArticleProject, ProjectBundle, ProjectStage, SampleArticle } from "@/lib/types";
 import { ProjectSidebar } from "./workbench/ProjectSidebar";
 import { OverviewTab } from "./workbench/OverviewTab";
 import { ResearchTab } from "./workbench/ResearchTab";
 import { DraftsTab } from "./workbench/DraftsTab";
 import { WorkbenchInspector, type WorkbenchInspectorSelection } from "./workbench/WorkbenchInspector";
+import type { ProjectSidebarActionRequest } from "./workbench/ProjectSidebar";
+import { DraftEditorWorkspace } from "./workbench/redesign/draft-editor-workspace";
+import { JudgementWorkspace } from "./workbench/redesign/judgement-workspace";
+import { ProjectDashboard } from "./workbench/redesign/project-dashboard";
+import { OutlineEditorWorkspace } from "./workbench/redesign/outline-editor-workspace";
+import { PublishCenterWorkspace } from "./workbench/redesign/publish-center-workspace";
+import { ResearchIntakeWorkspace } from "./workbench/redesign/research-intake-workspace";
+import { SectorModelWorkspace } from "./workbench/redesign/sector-model-workspace";
+import { SourceLibraryWorkspace } from "./workbench/redesign/source-library-workspace";
+import { WorkbenchCockpit } from "./workbench/redesign/workbench-cockpit";
+import { WorkbenchWorkspace } from "./workbench/redesign/workbench-workspace";
 import { JobLogPanel } from "./workbench/job-log-panel";
 import { TaskCenterModal } from "./workbench/task-center-modal";
 import { useJobPolling, type JobDetail, type ProjectJobSummary } from "@/hooks/use-job-polling";
@@ -17,13 +28,26 @@ import { AppShell } from "./layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getWorkbenchViewLabel, type WorkbenchView } from "@/lib/design/navigation";
+import { formatProjectStage } from "@/lib/project-stage-labels";
+import { CompatibilityWorkspace } from "./workbench/redesign/compatibility-workspace";
+import {
+  buildCompatibilityWorkspaceViewModel,
+  buildDraftEditorViewModel,
+  buildJudgementWorkspaceViewModel,
+  buildOutlineEditorViewModel,
+  buildPublishCenterViewModel,
+  buildProjectDashboardViewModel,
+  buildResearchIntakeViewModel,
+  buildSectorModelWorkspaceViewModel,
+  buildSourceLibraryViewModel,
+  buildWorkbenchDesignViewModel,
+} from "@/lib/design/view-models";
 import {
   buildWorkbenchWorkflow,
   type ActiveTab,
   type StaleArtifact,
-  type WorkbenchNextAction,
   type WorkbenchStepPath,
-  type WorkbenchWorkflowStep,
   type WorkspaceSection,
 } from "./workbench/workflow-state";
 import {
@@ -58,6 +82,7 @@ export function ProjectWorkbench({
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
   const [isRetryingJob, setIsRetryingJob] = useState(false);
   const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
+  const [sidebarActionRequest, setSidebarActionRequest] = useState<ProjectSidebarActionRequest | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialView.tab);
   const [focusedSection, setFocusedSection] = useState<WorkspaceSection>(initialView.section);
   const [inspectorSelection, setInspectorSelection] = useState<WorkbenchInspectorSelection>(null);
@@ -352,6 +377,44 @@ export function ProjectWorkbench({
     }
   }
 
+  async function saveEditedDraft(value: string) {
+    if (!selectedProjectId) {
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      showFeedback("", "info");
+      const response = await fetch(`/api/projects/${selectedProjectId}/drafts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ editedMarkdown: value }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "保存人工改写稿失败。");
+      }
+      setSelectedBundle((current) =>
+        current && current.articleDraft
+          ? {
+              ...current,
+              articleDraft: {
+                ...current.articleDraft,
+                editedMarkdown: payload.articleDraft?.editedMarkdown ?? value,
+              },
+            }
+          : current,
+      );
+      await refreshProjectsAndBundle(selectedProjectId);
+      markArtifactsStale(["review", "publish-prep"]);
+      showFeedback("人工改写稿已保存。VitalityCheck 和发布整理可能需要重生成。", "success");
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : "保存人工改写稿失败。", "error");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
   async function retryFailedJob(jobId: string) {
     setIsRetryingJob(true);
     try {
@@ -374,6 +437,19 @@ export function ProjectWorkbench({
 
   const detailedVisibleJob = jobDetail?.job ?? null;
   const visibleJob = detailedVisibleJob;
+  const activeView = getActiveWorkbenchView(activeTab, focusedSection);
+  const isProjectDashboard = activeTab === "overview" && focusedSection === null;
+  const isWorkbenchDashboard = activeTab === "overview" && focusedSection === "workbench-dashboard";
+  const isCompatibilityWorkspace = activeTab === "overview" && focusedSection === "overview-compatibility";
+  const isJudgementWorkspace =
+    activeTab === "overview" &&
+    (focusedSection === "overview-think-card" || focusedSection === "overview-style-core" || focusedSection === "overview-vitality");
+  const isResearchIntake = activeTab === "research" && (focusedSection === "research-brief" || focusedSection === "source-form");
+  const isSourceLibrary = activeTab === "research" && focusedSection === "source-library";
+  const isSectorModelWorkspace = activeTab === "structure" && focusedSection === "sector-model";
+  const isOutlineEditor = activeTab === "structure" && focusedSection === "outline";
+  const isDraftEditor = activeTab === "drafts" && focusedSection === "drafts";
+  const isPublishCenter = activeTab === "publish" && focusedSection === "publish-prep";
   const workflow = selectedBundle
     ? buildWorkbenchWorkflow({
         selectedBundle,
@@ -383,39 +459,131 @@ export function ProjectWorkbench({
         jobs,
       })
     : null;
+  const designModel = selectedBundle
+    ? buildWorkbenchDesignViewModel({
+        activeView,
+        projects,
+        selectedBundle,
+        jobs,
+        staleArtifacts: selectedStaleArtifacts,
+      })
+    : null;
+  const shouldShowWorkbenchCockpit = false;
+  const projectDashboardModel = selectedBundle
+    ? buildProjectDashboardViewModel({
+        projects,
+        selectedBundle,
+        queue: queueSummary,
+      })
+    : null;
+  const judgementModel = selectedBundle ? buildJudgementWorkspaceViewModel(selectedBundle) : null;
+  const researchIntakeModel = selectedBundle ? buildResearchIntakeViewModel(selectedBundle) : null;
+  const sourceLibraryModel = selectedBundle ? buildSourceLibraryViewModel(selectedBundle) : null;
+  const sectorModelWorkspaceModel = selectedBundle ? buildSectorModelWorkspaceViewModel(selectedBundle) : null;
+  const outlineEditorModel = selectedBundle ? buildOutlineEditorViewModel(selectedBundle) : null;
+  const draftEditorModel = selectedBundle ? buildDraftEditorViewModel(selectedBundle) : null;
+  const publishCenterModel = selectedBundle ? buildPublishCenterViewModel(selectedBundle) : null;
+  const compatibilityModel = selectedBundle ? buildCompatibilityWorkspaceViewModel(selectedBundle) : null;
+
+  function navigateWorkbench(tab: ActiveTab, section: WorkspaceSection) {
+    setActiveTab(tab);
+    setFocusedSection(section);
+  }
+
+  function selectProjectFromDashboard(projectId: string) {
+    lastAutoNavigatedProjectId.current = projectId;
+    setSelectedProjectId(projectId);
+    navigateWorkbench("overview", null);
+  }
+
+  function requestSidebarAction(kind: ProjectSidebarActionRequest["kind"]) {
+    setSidebarActionRequest({ kind, nonce: Date.now() });
+  }
+
+  function changeWorkbenchView(view: WorkbenchView) {
+    switch (view) {
+      case "projects":
+        navigateWorkbench("overview", null);
+        return;
+      case "workbench":
+        navigateWorkbench("overview", "workbench-dashboard");
+        return;
+      case "sources":
+        navigateWorkbench("research", "source-library");
+        return;
+      case "outline":
+        navigateWorkbench("structure", "outline");
+        return;
+      case "draft":
+        navigateWorkbench("drafts", "drafts");
+        return;
+      case "publish":
+        navigateWorkbench("publish", "publish-prep");
+        return;
+      case "settings":
+      default:
+        return;
+    }
+  }
+
+  const appHeaderMeta = getAppHeaderMeta({
+    activeView,
+    selectedBundle,
+  });
 
   const appHeader = (
     <>
-        <div className="topbar-left">
+      <div className="topbar-left">
+        <div>
           <h1 className="topbar-title">上海板块写作工作台</h1>
         </div>
-        <div className="topbar-right">
-          <div className="workbench-display-toggle" role="group" aria-label="界面模式">
-            <button
-              type="button"
-              className={displayMode === "writing" ? "active" : ""}
-              onClick={() => changeDisplayMode("writing")}
-              aria-pressed={displayMode === "writing"}
-            >
-              写作模式
-            </button>
-            <button
-              type="button"
-              className={displayMode === "debug" ? "active" : ""}
-              onClick={() => changeDisplayMode("debug")}
-              aria-pressed={displayMode === "debug"}
-            >
-              调试模式
-            </button>
-          </div>
-          <div className="mode-chip service-status-chip">
-            <span className="service-status-dot" aria-hidden="true" />
-            {displayMode === "debug" && process.env.NEXT_PUBLIC_MODEL_MODE ? `模型模式：${process.env.NEXT_PUBLIC_MODEL_MODE}` : "本地服务已连接"}
-          </div>
-          <button type="button" className="mode-chip task-center-trigger" onClick={() => setIsTaskCenterOpen(true)}>
-            后台任务 {queueSummary.runningCount} 运行 / {queueSummary.queuedCount} 排队
-          </button>
+      </div>
+      <div className="topbar-center">
+        <div>
+          <span className="topbar-kicker">{appHeaderMeta.kicker}</span>
+          <strong>{appHeaderMeta.title}</strong>
+          <small>{appHeaderMeta.detail}</small>
         </div>
+      </div>
+      <div className="topbar-right">
+        <button type="button" className="app-icon-button" aria-label="搜索" title="打开项目搜索" onClick={() => navigateWorkbench("overview", null)}>
+          ⌕
+        </button>
+        <button
+          type="button"
+          className="app-icon-button"
+          aria-label="外观"
+          title={displayMode === "writing" ? "切到调试模式" : "切到写作模式"}
+          onClick={() => changeDisplayMode(displayMode === "writing" ? "debug" : "writing")}
+        >
+          ☼
+        </button>
+        <button type="button" className="app-icon-button app-icon-button-notify" onClick={() => setIsTaskCenterOpen(true)} aria-label="后台任务">
+          ♢
+        </button>
+        <button
+          type="button"
+          className="app-avatar-button"
+          onClick={() => changeDisplayMode(displayMode === "writing" ? "debug" : "writing")}
+          aria-label="切换写作和调试模式"
+          title={displayMode === "writing" ? "切到调试模式" : "切到写作模式"}
+        >
+          C
+        </button>
+        <div className="app-header-actions" aria-label="当前页面操作">
+          <HeaderActions
+            activeView={activeView}
+            selectedProjectId={selectedProjectId}
+            selectedBundle={selectedBundle}
+            isPending={uiPending}
+            onCreateProject={() => requestSidebarAction("create")}
+            onCocreateTopic={() => requestSidebarAction("cocreate")}
+            onNavigate={navigateWorkbench}
+            onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+            onGeneratePublishPrep={generatePublishPrep}
+          />
+        </div>
+      </div>
     </>
   );
 
@@ -462,10 +630,15 @@ export function ProjectWorkbench({
           refreshProjectsAndBundle={refreshProjectsAndBundle}
           sampleDigest={sampleDigest}
           displayMode={displayMode}
+          activeView={activeView}
+          onViewChange={changeWorkbenchView}
+          actionRequest={sidebarActionRequest}
         />
   );
 
-  const appInspector = selectedBundle ? (
+  const shouldShowAppInspector =
+    selectedBundle && !isProjectDashboard && !isWorkbenchDashboard && !isSourceLibrary && !isOutlineEditor && !isDraftEditor && !isPublishCenter;
+  const appInspector = shouldShowAppInspector ? (
     <WorkbenchInspector
       selectedBundle={selectedBundle}
       activeTab={activeTab}
@@ -474,8 +647,7 @@ export function ProjectWorkbench({
       onClearSelection={() => setInspectorSelection(null)}
       isPending={uiPending}
       onNavigate={(tab, section) => {
-        setActiveTab(tab);
-        setFocusedSection(section);
+        navigateWorkbench(tab, section);
       }}
       onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
       displayMode={displayMode}
@@ -493,113 +665,141 @@ export function ProjectWorkbench({
               <StaleArtifactNotice
                 selectedBundle={selectedBundle}
                 staleArtifacts={selectedStaleArtifacts}
-                onNavigate={(tab, section) => {
-                  setActiveTab(tab);
-                  setFocusedSection(section);
-                }}
+                onNavigate={navigateWorkbench}
                 onClear={clearArtifacts}
               />
-              {workflow ? (
-                <WorkbenchWorkflowHeader
-                  steps={workflow.steps}
+              {shouldShowWorkbenchCockpit && workflow && designModel ? (
+                <WorkbenchCockpit
+                  model={designModel}
                   nextAction={workflow.nextAction}
                   isPending={uiPending}
-                  onNavigate={(tab, section) => {
-                    setActiveTab(tab);
-                    setFocusedSection(section);
-                  }}
+                  onNavigate={navigateWorkbench}
                   onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
                 />
               ) : null}
-              <div className="workflow-tabs" role="tablist" aria-label="工作台主阶段" onKeyDown={handleTabListKeyDown}>
-                <button
-                  type="button"
-                  role="tab"
-                  className={`tab-button ${activeTab === "overview" ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveTab("overview");
-                    setFocusedSection(null);
-                  }}
-                  data-tab="overview"
-                  aria-selected={activeTab === "overview"}
-                  aria-controls="workbench-panel-overview"
-                  id="workbench-tab-overview"
-                  tabIndex={activeTab === "overview" ? 0 : -1}
-                >
-                  <StageIcon name="overview" />
-                  <span>判断</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  className={`tab-button ${activeTab === "research" ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveTab("research");
-                    setFocusedSection(null);
-                  }}
-                  data-tab="research"
-                  aria-selected={activeTab === "research"}
-                  aria-controls="workbench-panel-research"
-                  id="workbench-tab-research"
-                  tabIndex={activeTab === "research" ? 0 : -1}
-                >
-                  <StageIcon name="research" />
-                  <span>资料</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  className={`tab-button ${activeTab === "structure" ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveTab("structure");
-                    setFocusedSection(null);
-                  }}
-                  data-tab="structure"
-                  aria-selected={activeTab === "structure"}
-                  aria-controls="workbench-panel-structure"
-                  id="workbench-tab-structure"
-                  tabIndex={activeTab === "structure" ? 0 : -1}
-                >
-                  <StageIcon name="structure" />
-                  <span>结构</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  className={`tab-button ${activeTab === "drafts" ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveTab("drafts");
-                    setFocusedSection(null);
-                  }}
-                  data-tab="drafts"
-                  aria-selected={activeTab === "drafts"}
-                  aria-controls="workbench-panel-drafts"
-                  id="workbench-tab-drafts"
-                  tabIndex={activeTab === "drafts" ? 0 : -1}
-                >
-                  <StageIcon name="drafts" />
-                  <span>写作</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  className={`tab-button ${activeTab === "publish" ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveTab("publish");
-                    setFocusedSection("publish-prep");
-                  }}
-                  data-tab="publish"
-                  aria-selected={activeTab === "publish"}
-                  aria-controls="workbench-panel-publish"
-                  id="workbench-tab-publish"
-                  tabIndex={activeTab === "publish" ? 0 : -1}
-                >
-                  <StageIcon name="publish" />
-                  <span>发布</span>
-                </button>
-              </div>
 
-              {activeTab === "overview" && (
+              {isProjectDashboard && workflow && projectDashboardModel ? (
+                <ProjectDashboard
+                  model={projectDashboardModel}
+                  nextAction={workflow.nextAction}
+                  isPending={uiPending}
+                  onCreateProject={() => requestSidebarAction("create")}
+                  onCocreateTopic={() => requestSidebarAction("cocreate")}
+                  onSelectProject={selectProjectFromDashboard}
+                  onNavigate={navigateWorkbench}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                />
+              ) : null}
+
+              {isWorkbenchDashboard && workflow && designModel ? (
+                <WorkbenchWorkspace
+                  model={designModel}
+                  nextAction={workflow.nextAction}
+                  isPending={uiPending}
+                  onNavigate={navigateWorkbench}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                />
+              ) : null}
+
+              {isJudgementWorkspace && judgementModel ? (
+                <JudgementWorkspace
+                  model={judgementModel}
+                  selectedBundle={selectedBundle}
+                  activeSection={focusedSection}
+                  setSelectedBundle={setSelectedBundle}
+                  isPending={uiPending}
+                  onNavigate={navigateWorkbench}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                  onSaveProjectFrame={saveProjectFrame}
+                />
+              ) : null}
+
+              {isCompatibilityWorkspace && compatibilityModel ? (
+                <CompatibilityWorkspace
+                  model={compatibilityModel}
+                  isPending={uiPending}
+                  onNavigate={navigateWorkbench}
+                />
+              ) : null}
+
+              {isResearchIntake && researchIntakeModel ? (
+                <ResearchIntakeWorkspace
+                  model={researchIntakeModel}
+                  selectedBundle={selectedBundle}
+                  selectedProjectId={selectedProjectId}
+                  activeSection={focusedSection}
+                  setSelectedBundle={setSelectedBundle}
+                  refreshProjectsAndBundle={refreshProjectsAndBundle}
+                  isPending={uiPending}
+                  setIsPending={setIsPending}
+                  setMessage={showFeedback}
+                  markArtifactsStale={markArtifactsStale}
+                  onNavigate={navigateWorkbench}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                />
+              ) : null}
+
+              {isSourceLibrary && sourceLibraryModel ? (
+                <SourceLibraryWorkspace
+                  model={sourceLibraryModel}
+                  selectedSourceCardId={inspectorSelection?.kind === "source-card" ? inspectorSelection.sourceCardId : null}
+                  isPending={uiPending}
+                  onNavigate={navigateWorkbench}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                  onInspectorSelectionChange={setInspectorSelection}
+                />
+              ) : null}
+
+              {isSectorModelWorkspace && sectorModelWorkspaceModel ? (
+                <SectorModelWorkspace
+                  model={sectorModelWorkspaceModel}
+                  selectedBundle={selectedBundle}
+                  selectedProjectId={selectedProjectId}
+                  setSelectedBundle={setSelectedBundle}
+                  refreshProjectsAndBundle={refreshProjectsAndBundle}
+                  isPending={uiPending}
+                  setIsPending={setIsPending}
+                  setMessage={showFeedback}
+                  markArtifactsStale={markArtifactsStale}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                  displayMode={displayMode}
+                />
+              ) : null}
+
+              {isOutlineEditor && outlineEditorModel ? (
+                <OutlineEditorWorkspace
+                  model={outlineEditorModel}
+                  selectedSectionId={inspectorSelection?.kind === "outline-section" ? inspectorSelection.sectionId : null}
+                  isPending={uiPending}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                  onInspectorSelectionChange={setInspectorSelection}
+                />
+              ) : null}
+
+              {isDraftEditor && draftEditorModel ? (
+                <DraftEditorWorkspace
+                  model={draftEditorModel}
+                  selectedSectionId={inspectorSelection?.kind === "outline-section" ? inspectorSelection.sectionId : null}
+                  isPending={uiPending}
+                  onNavigate={navigateWorkbench}
+                  onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
+                  onSaveEditedDraft={saveEditedDraft}
+                  onInspectorSelectionChange={setInspectorSelection}
+                />
+              ) : null}
+
+              {isPublishCenter && publishCenterModel ? (
+                <PublishCenterWorkspace
+                  model={publishCenterModel}
+                  isPending={uiPending}
+                  exportHref={`/api/projects/${selectedProjectId}/export/markdown`}
+                  onNavigate={navigateWorkbench}
+                  onRunReview={() => runProjectStep("review", getSuccessMessageForStep("review"))}
+                  onGeneratePublishPrep={generatePublishPrep}
+                />
+              ) : null}
+
+              {activeTab === "overview" && !isProjectDashboard && !isWorkbenchDashboard && !isJudgementWorkspace && !isCompatibilityWorkspace && (
                 <section role="tabpanel" id="workbench-panel-overview" aria-labelledby="workbench-tab-overview">
                 <OverviewTab 
                   selectedBundle={selectedBundle}
@@ -610,16 +810,13 @@ export function ProjectWorkbench({
                   saveProjectFrame={saveProjectFrame}
                   setFocusedSection={setFocusedSection}
                   focusSection={focusedSection}
-                  onNavigate={(tab, section) => {
-                    setActiveTab(tab);
-                    setFocusedSection(section);
-                  }}
+                  onNavigate={navigateWorkbench}
                   onInspectorSelectionChange={setInspectorSelection}
                 />
                 </section>
               )}
 
-              {activeTab === "research" && (
+              {activeTab === "research" && !isResearchIntake && !isSourceLibrary && (
                 <section role="tabpanel" id="workbench-panel-research" aria-labelledby="workbench-tab-research">
                 <ResearchTab 
                   selectedBundle={selectedBundle}
@@ -638,7 +835,7 @@ export function ProjectWorkbench({
                 </section>
               )}
 
-              {(activeTab === "structure" || activeTab === "drafts" || activeTab === "publish") && (
+              {((activeTab === "structure" && !isSectorModelWorkspace && !isOutlineEditor) || (activeTab === "drafts" && !isDraftEditor) || (activeTab === "publish" && !isPublishCenter)) && (
                 <section
                   role="tabpanel"
                   id={activeTab === "structure" ? "workbench-panel-structure" : activeTab === "publish" ? "workbench-panel-publish" : "workbench-panel-drafts"}
@@ -658,8 +855,7 @@ export function ProjectWorkbench({
                   surfaceTitle={activeTab === "structure" ? "结构" : activeTab === "publish" ? "发布" : "写作"}
                   surfaceMode={activeTab === "structure" ? "structure" : activeTab === "publish" ? "publish" : "writing"}
                   onOpenVitalityCheck={() => {
-                    setActiveTab("overview");
-                    setFocusedSection("overview-vitality");
+                    navigateWorkbench("overview", "overview-vitality");
                   }}
                   onInspectorSelectionChange={setInspectorSelection}
                   displayMode={displayMode}
@@ -687,147 +883,158 @@ export function ProjectWorkbench({
   }
 }
 
-function WorkbenchWorkflowHeader({
-  steps,
-  nextAction,
+function HeaderActions({
+  activeView,
+  selectedProjectId,
+  selectedBundle,
   isPending,
+  onCreateProject,
+  onCocreateTopic,
   onNavigate,
   onExecute,
+  onGeneratePublishPrep,
 }: {
-  steps: WorkbenchWorkflowStep[];
-  nextAction: WorkbenchNextAction;
+  activeView: WorkbenchView;
+  selectedProjectId: string;
+  selectedBundle: ProjectBundle | null;
   isPending: boolean;
+  onCreateProject: () => void;
+  onCocreateTopic: () => void;
   onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
   onExecute: (step: WorkbenchStepPath) => Promise<void>;
+  onGeneratePublishPrep: () => Promise<void>;
 }) {
-  return (
-    <section className={`global-workflow-card global-workflow-card-${nextAction.tone}`} aria-label="写作流程与下一步">
-      <div className="global-workflow-main">
-        <div className="global-workflow-copy">
-          <span className="global-workflow-eyebrow">下一步</span>
-          <h2>{nextAction.title}</h2>
-          <p>{nextAction.reason}</p>
-        </div>
-        <Button
-          type="button"
-          variant="primary"
-          className="global-workflow-cta"
-          disabled={isPending}
-          onClick={() => {
-            if (nextAction.executeStep) {
-              void onExecute(nextAction.executeStep);
-              return;
-            }
-            onNavigate(nextAction.targetTab, nextAction.targetSection);
-          }}
-        >
-          {nextAction.ctaLabel}
+  if (activeView === "projects") {
+    return (
+      <>
+        <Button type="button" variant="secondary" size="md" onClick={onCocreateTopic}>
+          选题共创
         </Button>
-      </div>
-      <ol className="global-workflow-steps" aria-label="完整流程">
-        {steps.map((step, index) => (
-          <li className={`global-workflow-step is-${step.status}`} key={step.id}>
-            <button
-              type="button"
-              className="global-workflow-step-button"
-              onClick={() => onNavigate(step.targetTab, step.targetSection)}
-              aria-label={`${index + 1}. ${step.label}，${formatWorkflowStepStatus(step.status)}，${step.hint}`}
-            >
-              <span className="global-workflow-step-index">{index + 1}</span>
-              <span className="global-workflow-step-text">
-                <span>{step.label}</span>
-                <small>{step.hint}</small>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
+        <Button type="button" variant="primary" size="md" onClick={onCreateProject}>
+          新建项目
+        </Button>
+      </>
+    );
+  }
 
-function formatWorkflowStepStatus(status: WorkbenchWorkflowStep["status"]) {
-  switch (status) {
-    case "complete":
-      return "已完成";
-    case "current":
-      return "当前步骤";
-    case "blocked":
-      return "被阻塞";
-    case "stale":
-      return "需要更新";
-    case "pending":
-    default:
-      return "待处理";
+  if (activeView === "sources") {
+    return (
+      <>
+        <Button type="button" variant="secondary" size="md" disabled={isPending} onClick={() => void onExecute("research-brief")}>
+          批量整理
+        </Button>
+        <Button type="button" variant="primary" size="md" onClick={() => onNavigate("research", "source-form")}>
+          新增资料卡
+        </Button>
+      </>
+    );
   }
-}
 
-function StageIcon({ name }: { name: ActiveTab }) {
-  if (name === "overview") {
+  if (activeView === "outline") {
     return (
-      <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 3.5 19 6v5.5c0 4.1-2.4 7.2-7 9-4.6-1.8-7-4.9-7-9V6l7-2.5Z" />
-        <path d="m9.5 12 1.7 1.7 3.8-4.1" />
-      </svg>
+      <>
+        <Button type="button" variant="secondary" size="md" disabled={isPending} onClick={() => void onExecute("outline")}>
+          自动生成
+        </Button>
+        <Button type="button" variant="secondary" size="md" disabled>
+          新增章节
+        </Button>
+        <Button type="button" variant="primary" size="md" disabled title="提纲页目前自动同步，暂未开放顶部手动保存。">
+          保存提纲
+        </Button>
+      </>
     );
   }
-  if (name === "research") {
+
+  if (activeView === "draft") {
     return (
-      <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M7 4.5h8l2 2V19a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 6 19V6A1.5 1.5 0 0 1 7.5 4.5Z" />
-        <path d="M15 4.5V7h2.5" />
-        <path d="M9 10h6M9 14h6M9 17h4" />
-      </svg>
+      <>
+        <Button type="button" variant="secondary" size="md" disabled>
+          保存
+        </Button>
+        <Button type="button" variant="secondary" size="md" onClick={() => onNavigate("overview", "overview-style-core")}>
+          专注模式
+        </Button>
+        <Button type="button" variant="secondary" size="md" disabled>
+          版本历史
+        </Button>
+        <Button type="button" variant="primary" size="md" disabled={isPending || !selectedBundle?.articleDraft} onClick={() => void onExecute("review")}>
+          继续写作
+        </Button>
+      </>
     );
   }
-  if (name === "structure") {
+
+  if (activeView === "publish") {
     return (
-      <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 4.5v5M7 14h10M7 14v5M17 14v5" />
-        <rect x="9" y="3" width="6" height="4" rx="1.2" />
-        <rect x="4" y="17" width="6" height="4" rx="1.2" />
-        <rect x="14" y="17" width="6" height="4" rx="1.2" />
-      </svg>
+      <>
+        {selectedProjectId ? (
+          <a className="secondary-button button-size-md app-header-link" href={`/api/projects/${selectedProjectId}/export/markdown`} target="_blank" rel="noreferrer">
+            导出 Markdown
+          </a>
+        ) : null}
+        <Button type="button" variant="secondary" size="md" disabled>
+          生成 DOCX
+        </Button>
+        <Button type="button" variant="secondary" size="md" disabled>
+          复制公众号版
+        </Button>
+        <Button type="button" variant="primary" size="md" disabled={isPending || !selectedBundle?.articleDraft} onClick={() => void onGeneratePublishPrep()}>
+          确认发布
+        </Button>
+      </>
     );
   }
-  if (name === "drafts") {
-    return (
-      <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M5 19.5 6.1 15 15.4 5.7a2 2 0 0 1 2.8 2.8L8.9 17.8 5 19.5Z" />
-        <path d="m14 7 3 3" />
-      </svg>
-    );
-  }
+
   return (
-    <svg className="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M5 12h12" />
-      <path d="m13 7 5 5-5 5" />
-      <path d="M6 6.5h4M6 17.5h4" />
-    </svg>
+    <>
+      <Button type="button" variant="secondary" size="md" onClick={() => onNavigate("publish", "publish-prep")}>
+        导出
+      </Button>
+      <Button type="button" variant="primary" size="md" onClick={() => onNavigate("drafts", "drafts")}>
+        继续写作
+      </Button>
+    </>
   );
 }
 
-function handleTabListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
-    return;
+function getAppHeaderMeta({
+  activeView,
+  selectedBundle,
+}: {
+  activeView: WorkbenchView;
+  selectedBundle: ProjectBundle | null;
+}) {
+  const titleByView: Record<WorkbenchView, string> = {
+    projects: "项目",
+    workbench: selectedBundle?.project.topic ?? "工作台",
+    sources: "资料卡库",
+    outline: "文章提纲",
+    draft: selectedBundle?.project.topic ?? "正文",
+    publish: "发布与导出",
+    settings: "设置",
+  };
+  const stageLabel = selectedBundle ? formatProjectStage(selectedBundle.project.stage) : "未选择项目";
+  const savedLabel = selectedBundle ? `最后保存：${formatHeaderTime(selectedBundle.project.updatedAt)}` : "请选择或新建项目";
+
+  return {
+    kicker: activeView === "projects" ? "当前项目" : getWorkbenchViewLabel(activeView),
+    title: titleByView[activeView],
+    detail: activeView === "projects" ? "管理你的研究与写作项目，洞察进度，把控全局。" : `${savedLabel} · ${stageLabel}`,
+  };
+}
+
+function formatHeaderTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "今天";
   }
-  const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-  const currentIndex = tabs.findIndex((tab) => tab === document.activeElement);
-  if (tabs.length === 0 || currentIndex === -1) {
-    return;
-  }
-  event.preventDefault();
-  const lastIndex = tabs.length - 1;
-  const nextIndex =
-    event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? lastIndex
-        : event.key === "ArrowRight"
-          ? currentIndex === lastIndex ? 0 : currentIndex + 1
-          : currentIndex === 0 ? lastIndex : currentIndex - 1;
-  tabs[nextIndex]?.focus();
-  tabs[nextIndex]?.click();
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function StaleArtifactNotice({
@@ -865,6 +1072,25 @@ function StaleArtifactNotice({
         <p>上游内容已经改过，建议重新生成：{visibleArtifacts.map(getArtifactLabel).join("、")}。</p>
     </Callout>
   );
+}
+
+function getActiveWorkbenchView(activeTab: ActiveTab, focusedSection: WorkspaceSection): WorkbenchView {
+  if (activeTab === "research") {
+    return "sources";
+  }
+  if (activeTab === "structure") {
+    return "outline";
+  }
+  if (activeTab === "drafts") {
+    return "draft";
+  }
+  if (activeTab === "publish") {
+    return "publish";
+  }
+  if (focusedSection === null) {
+    return "projects";
+  }
+  return "workbench";
 }
 
 function reconcileStaleArtifactsForCompletedJob(

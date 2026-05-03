@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   ARTICLE_PROTOTYPE_LABELS,
   TOPIC_READER_PERSONA_LABELS,
   TOPIC_ANGLE_TYPE_LABELS,
   type ArticleProject,
+  PROJECT_STAGES,
   type PreSourceCard,
   type SignalProviderMode,
   type TopicAngle,
@@ -21,6 +22,7 @@ import { Chip } from "@/components/ui/chip";
 import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { Modal } from "@/components/ui/modal";
 import { Card, Panel } from "@/components/ui/surface";
+import { WORKBENCH_NAV_ITEMS, type WorkbenchView } from "@/lib/design/navigation";
 import { formatProjectStage } from "@/lib/project-stage-labels";
 import { filterAnglesByType } from "@/lib/topic-cocreate-postprocess";
 import { extractUrls } from "@/lib/utils";
@@ -36,6 +38,14 @@ interface ProjectSidebarProps {
   refreshProjectsAndBundle: (id?: string) => Promise<void>;
   sampleDigest: string;
   displayMode: WorkbenchDisplayMode;
+  activeView: WorkbenchView;
+  onViewChange: (view: WorkbenchView) => void;
+  actionRequest?: ProjectSidebarActionRequest | null;
+}
+
+export interface ProjectSidebarActionRequest {
+  kind: "create" | "cocreate";
+  nonce: number;
 }
 
 type DiscoveryStep = "pre-source-extract" | "signal-brief" | "topic-discovery-cocreate";
@@ -57,6 +67,9 @@ export function ProjectSidebar({
   refreshProjectsAndBundle,
   sampleDigest,
   displayMode,
+  activeView,
+  onViewChange,
+  actionRequest,
 }: ProjectSidebarProps) {
   const [projectForm, setProjectForm] = useState({
     topic: "",
@@ -101,8 +114,6 @@ export function ProjectSidebar({
       }),
     [projectSearch, projects, showTestProjects],
   );
-  const recentProjects = visibleProjects.slice(0, 5);
-  const historicalProjects = visibleProjects.slice(5);
   const recommendedAngles = useMemo(() => coCreationResult?.recommendedAngles ?? coCreationResult?.angles ?? [], [coCreationResult]);
   const angleLonglist = useMemo(() => coCreationResult?.angleLonglist ?? [], [coCreationResult]);
   const extraAngles = useMemo(
@@ -124,6 +135,13 @@ export function ProjectSidebar({
     () => coCreationPreSourceCards.filter((card) => card.extractStatus === "ready").length,
     [coCreationPreSourceCards],
   );
+
+  useEffect(() => {
+    if (!actionRequest) {
+      return;
+    }
+    setOpenModal(actionRequest.kind);
+  }, [actionRequest]);
   const hasCoCreationOutput = allCoCreationAngles.length > 0;
 
   useEffect(() => {
@@ -475,110 +493,69 @@ export function ProjectSidebar({
     <>
       <Panel as="aside" className="sidebar">
         <Card as="section" className="stack sidebar-card">
-          {/* Compact action bar */}
-          <div className="sidebar-action-bar">
-            <button
-              type="button"
-              className="sidebar-add-btn"
-              onClick={() => setOpenModal("create")}
-              title="新建空白项目"
-            >
-              ＋ 新建
-            </button>
-            <button
-              type="button"
-              className="sidebar-add-btn sidebar-add-btn-alt"
-              onClick={() => setOpenModal("cocreate")}
-              title="选题共创"
-            >
-              ✦ 共创
-            </button>
+          <nav className="sidebar-nav" aria-label="工作台导航">
+            {WORKBENCH_NAV_ITEMS.map((item) => (
+              <button
+                type="button"
+                className={`sidebar-nav-item ${activeView === item.id ? "active" : ""}`}
+                key={item.id}
+                onClick={() => onViewChange(item.id)}
+                disabled={item.disabled}
+                aria-current={activeView === item.id ? "page" : undefined}
+              >
+                <span className="sidebar-nav-icon" aria-hidden="true">
+                  {getWorkbenchNavIcon(item.id)}
+                </span>
+                <span className="sidebar-nav-copy">
+                  <span>{item.label}</span>
+                  <small>{item.description}</small>
+                </span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="sidebar-project-progress" aria-label="当前项目进度">
+            <span>当前项目进度</span>
+            <div className="sidebar-progress-ring" style={{ "--progress": `${getProjectProgressPercent(selectedProject)}%` } as CSSProperties}>
+              <strong>{getProjectProgressPercent(selectedProject)}%</strong>
+            </div>
+            <strong className="sidebar-progress-steps">{getProjectStageIndex(selectedProject)}/{PROJECT_STAGES.length} 步骤</strong>
+            <button type="button" onClick={() => onViewChange("workbench")}>查看详情</button>
           </div>
 
-          {/* Project list */}
-          <div className="project-list-tools">
-            <input
-              className="project-list-search"
-              value={projectSearch}
-              onChange={(event) => setProjectSearch(event.target.value)}
-              placeholder="搜索项目、阶段、受众"
-              aria-label="搜索项目"
-            />
-            {hiddenTestProjectCount > 0 ? (
-              <label className="project-list-toggle">
-                <input
-                  type="checkbox"
-                  checked={showTestProjects}
-                  onChange={(event) => setShowTestProjects(event.target.checked)}
-                />
-                显示测试项目
-              </label>
-            ) : null}
-          </div>
-          <div className="project-list-section">
-            <div className="project-list-header">
-              <h3>最近项目</h3>
-              <small>
-                {visibleProjects.length} / {projects.length}
-              </small>
-            </div>
-            <div className="project-list">
-              {recentProjects.map((project) => (
-                <button
-                  type="button"
-                  key={project.id}
-                  className={`project-item ${project.id === selectedProjectId ? "selected" : ""}`}
-                  onClick={() => setSelectedProjectId(project.id)}
-                  title={project.topic}
-                >
-                  <strong className="project-item-title">{project.topic}</strong>
-                  <div className="project-item-meta">
-                    <small>{project.articleType}</small>
-                    <span className="project-stage-pill">{formatProjectStage(project.stage)}</span>
-                  </div>
-                </button>
-              ))}
-              {projects.length === 0 ? <p className="empty-inline">还没有项目，点上面按钮新建。</p> : null}
-              {projects.length > 0 && visibleProjects.length === 0 ? <p className="empty-inline">没有匹配项目，调整搜索或显示测试项目。</p> : null}
-            </div>
-          </div>
           <details className="mobile-project-switcher">
             <summary>
               <span>当前项目</span>
               <strong>{selectedProject?.topic ?? "还没有选择项目"}</strong>
               <small>{selectedProject ? `${selectedProject.articleType} · ${formatProjectStage(selectedProject.stage)}` : "先新建或选择一个项目"}</small>
             </summary>
+            <div className="project-list-tools">
+              <input
+                className="project-list-search"
+                value={projectSearch}
+                onChange={(event) => setProjectSearch(event.target.value)}
+                placeholder="搜索项目、阶段、受众"
+                aria-label="搜索项目"
+              />
+              {hiddenTestProjectCount > 0 ? (
+                <label className="project-list-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showTestProjects}
+                    onChange={(event) => setShowTestProjects(event.target.checked)}
+                  />
+                  显示测试项目
+                </label>
+              ) : null}
+            </div>
             <div className="mobile-project-switcher-list">
               {visibleProjects.map((project) => (
-                <button
-                  key={project.id}
-                  className={`project-item ${project.id === selectedProjectId ? "selected" : ""}`}
-                  onClick={() => setSelectedProjectId(project.id)}
-                  title={project.topic}
-                  type="button"
-                >
-                  <strong className="project-item-title">{project.topic}</strong>
-                  <div className="project-item-meta">
-                    <small>{project.articleType}</small>
-                    <span className="project-stage-pill">{formatProjectStage(project.stage)}</span>
-                  </div>
-                </button>
-              ))}
-              {projects.length === 0 ? <p className="empty-inline">还没有项目，点上面按钮新建。</p> : null}
-              {projects.length > 0 && visibleProjects.length === 0 ? <p className="empty-inline">没有匹配项目，调整搜索或显示测试项目。</p> : null}
-            </div>
-          </details>
-          {historicalProjects.length > 0 ? (
-            <details className="project-history">
-              <summary>查看更多历史项目 ({historicalProjects.length})</summary>
-              <ContainedScrollArea className="project-list project-list-scroll">
-                {historicalProjects.map((project) => (
                   <button
-                    type="button"
                     key={project.id}
                     className={`project-item ${project.id === selectedProjectId ? "selected" : ""}`}
                     onClick={() => setSelectedProjectId(project.id)}
                     title={project.topic}
+                    type="button"
                   >
                     <strong className="project-item-title">{project.topic}</strong>
                     <div className="project-item-meta">
@@ -586,18 +563,19 @@ export function ProjectSidebar({
                       <span className="project-stage-pill">{formatProjectStage(project.stage)}</span>
                     </div>
                   </button>
-                ))}
-              </ContainedScrollArea>
-            </details>
-          ) : null}
-          <div className="sidebar-user-strip" aria-label="当前本地用户">
-            <span className="sidebar-user-avatar" aria-hidden="true">GTJ</span>
-            <div>
-              <strong>GTJ</strong>
-              <span><i aria-hidden="true" /> 本地模式</span>
+              ))}
+              {projects.length === 0 ? <p className="empty-inline">还没有项目，请新建项目。</p> : null}
+              {projects.length > 0 && visibleProjects.length === 0 ? <p className="empty-inline">没有匹配项目，调整搜索或显示测试项目。</p> : null}
             </div>
-            <span className="sidebar-user-chevron" aria-hidden="true">⌄</span>
-          </div>
+          </details>
+
+          <button type="button" className="sidebar-settings-link" onClick={() => onViewChange("settings")} disabled>
+            <span className="sidebar-nav-icon" aria-hidden="true">⚙</span>
+            <div>
+              <strong>设置</strong>
+              <span>本地模式</span>
+            </div>
+          </button>
         </Card>
       </Panel>
 
@@ -928,6 +906,41 @@ export function ProjectSidebar({
   );
 }
 
+function getWorkbenchNavIcon(view: WorkbenchView) {
+  switch (view) {
+    case "projects":
+      return "▰";
+    case "workbench":
+      return "◆";
+    case "sources":
+      return "▣";
+    case "outline":
+      return "☷";
+    case "draft":
+      return "▤";
+    case "publish":
+      return "⌁";
+    case "settings":
+    default:
+      return "⚙";
+  }
+}
+
+function getProjectStageIndex(project: ArticleProject | null) {
+  if (!project) {
+    return 0;
+  }
+  const index = PROJECT_STAGES.indexOf(project.stage);
+  return index >= 0 ? index + 1 : 1;
+}
+
+function getProjectProgressPercent(project: ArticleProject | null) {
+  if (!project) {
+    return 0;
+  }
+  return Math.round((getProjectStageIndex(project) / PROJECT_STAGES.length) * 100);
+}
+
 function TopicAngleListItem({
   angle,
   rank,
@@ -1002,7 +1015,7 @@ function TopicAngleDetailPanel({
 
       <div className="cocreation-detail-grid">
         <DetailBlock label="开题建议" value={`${formatScorecardStatus(angle.topicScorecard.status)}：${angle.topicScorecard.recommendation}`} />
-        <DetailBlock label="HKR" value={`${angle.hkr.h}/${angle.hkr.k}/${angle.hkr.r}（总分 ${angle.hkr.total}）`} />
+        <DetailBlock label="读者交付" value={`${angle.hkr.h}/${angle.hkr.k}/${angle.hkr.r}（总分 ${angle.hkr.total}）`} />
         <DetailBlock label="目标读者" value={TOPIC_READER_PERSONA_LABELS[angle.targetReaderPersona]} />
         <DetailBlock label="读者视角" value={readerLensLabels || "未记录"} />
         <DetailBlock label="反常识" value={angle.counterIntuition} />
@@ -1041,7 +1054,7 @@ function buildAngleNotes(angle: TopicAngle, displayMode: WorkbenchDisplayMode) {
     `【读者视角】${readerLensLabels}`,
     `【核心判断】${angle.coreJudgement}`,
     `【反常识】${angle.counterIntuition}`,
-    `【HKR】${angle.hkr.h}/${angle.hkr.k}/${angle.hkr.r}（总分 ${angle.hkr.total}）`,
+    `【读者交付】${angle.hkr.h}/${angle.hkr.k}/${angle.hkr.r}（总分 ${angle.hkr.total}）`,
     `【开题建议】${formatScorecardStatus(angle.topicScorecard.status)}：${angle.topicScorecard.recommendation}`,
     `【读者价值】${angle.readerValue}`,
     `【为什么现在】${angle.whyNow}`,

@@ -7,6 +7,7 @@ export type ActiveTab = "overview" | "research" | "structure" | "drafts" | "publ
 export type WorkbenchStepPath = "research-brief" | "sector-model" | "outline" | "drafts" | "review";
 export type StaleArtifact = "research-brief" | "sector-model" | "outline" | "drafts" | "review" | "publish-prep";
 export type WorkspaceSection =
+  | "workbench-dashboard"
   | "overview-think-card"
   | "overview-style-core"
   | "overview-compatibility"
@@ -231,6 +232,8 @@ export function getWorkbenchNextAction(selectedBundle: ProjectBundle, activeView
 export function getActiveViewLabel(activeTab: ActiveTab, focusedSection: WorkspaceSection) {
   if (activeTab === "overview") {
     switch (focusedSection) {
+      case "workbench-dashboard":
+        return "工作台 / 写作驾驶舱";
       case "overview-style-core":
         return "判断 / 表达策略";
       case "overview-compatibility":

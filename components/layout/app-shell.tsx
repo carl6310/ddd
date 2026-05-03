@@ -25,7 +25,7 @@ export function AppShell({
         {header}
       </header>
       {overlays}
-      <section className="workspace-grid" data-ui="app-shell-grid">
+      <section className={`workspace-grid ${inspector ? "has-inspector" : "without-inspector"}`} data-ui="app-shell-grid">
         {sidebar}
         <Panel className="main-panel" data-ui="main-stage">
           {children}
