@@ -43,7 +43,7 @@ export function WorkbenchWorkspace({
             <li key={stage.stage} className={`stage-status-${stage.status}`}>
               <button type="button" onClick={() => onNavigate(stage.targetTab as ActiveTab, stage.targetSection as WorkspaceSection)}>
                 <span>{index + 1}</span>
-                <strong>{stage.shortLabel}</strong>
+                <strong>{stage.label}</strong>
               </button>
             </li>
           ))}

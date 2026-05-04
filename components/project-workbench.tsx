@@ -28,6 +28,7 @@ import { AppShell } from "./layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Modal } from "@/components/ui/modal";
 import { getWorkbenchViewLabel, type WorkbenchView } from "@/lib/design/navigation";
 import { formatProjectStage } from "@/lib/project-stage-labels";
 import { CompatibilityWorkspace } from "./workbench/redesign/compatibility-workspace";
@@ -62,6 +63,11 @@ type FeedbackState = {
   kind: MessageKind;
 };
 
+type DraftHeaderAction = {
+  id: number;
+  kind: "save" | "focus" | "history";
+};
+
 export function ProjectWorkbench({
   initialProjects,
   initialSamples,
@@ -82,6 +88,9 @@ export function ProjectWorkbench({
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
   const [isRetryingJob, setIsRetryingJob] = useState(false);
   const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
+  const [draftHeaderAction, setDraftHeaderAction] = useState<DraftHeaderAction | null>(null);
   const [sidebarActionRequest, setSidebarActionRequest] = useState<ProjectSidebarActionRequest | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialView.tab);
   const [focusedSection, setFocusedSection] = useState<WorkspaceSection>(initialView.section);
@@ -517,10 +526,12 @@ export function ProjectWorkbench({
       case "draft":
         navigateWorkbench("drafts", "drafts");
         return;
+      case "vitality":
+        navigateWorkbench("overview", "overview-vitality");
+        return;
       case "publish":
         navigateWorkbench("publish", "publish-prep");
         return;
-      case "settings":
       default:
         return;
     }
@@ -546,7 +557,13 @@ export function ProjectWorkbench({
         </div>
       </div>
       <div className="topbar-right">
-        <button type="button" className="app-icon-button" aria-label="搜索" title="打开项目搜索" onClick={() => navigateWorkbench("overview", null)}>
+        <button
+          type="button"
+          className="app-icon-button"
+          aria-label="搜索"
+          title="打开项目搜索"
+          onClick={() => showFeedback("全局搜索会以 Popover 形式开放；当前请在项目页和资料卡页使用搜索与筛选。", "info")}
+        >
           ⌕
         </button>
         <button
@@ -564,13 +581,41 @@ export function ProjectWorkbench({
         <button
           type="button"
           className="app-avatar-button"
-          onClick={() => changeDisplayMode(displayMode === "writing" ? "debug" : "writing")}
-          aria-label="切换写作和调试模式"
-          title={displayMode === "writing" ? "切到调试模式" : "切到写作模式"}
+          onClick={() => setIsAccountMenuOpen((current) => !current)}
+          aria-label="打开工作区菜单"
+          aria-expanded={isAccountMenuOpen}
+          title="打开工作区菜单"
         >
           C
         </button>
-        <div className="app-header-actions" aria-label="当前页面操作">
+        {isAccountMenuOpen ? (
+          <div className="app-account-menu" role="menu" aria-label="工作区菜单">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                changeDisplayMode(displayMode === "writing" ? "debug" : "writing");
+                setIsAccountMenuOpen(false);
+                showFeedback(displayMode === "writing" ? "已切到调试模式。" : "已切到写作模式。", "success");
+              }}
+            >
+              <strong>{displayMode === "writing" ? "切到调试模式" : "切到写作模式"}</strong>
+              <span>控制内部字段和调试信息是否显示</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsTaskCenterOpen(true);
+                setIsAccountMenuOpen(false);
+              }}
+            >
+              <strong>后台任务</strong>
+              <span>查看运行中、失败和可重试任务</span>
+            </button>
+          </div>
+        ) : null}
+        <div className={`app-header-actions app-header-actions-${activeView}`} aria-label="当前页面操作">
           <HeaderActions
             activeView={activeView}
             selectedProjectId={selectedProjectId}
@@ -580,7 +625,12 @@ export function ProjectWorkbench({
             onCocreateTopic={() => requestSidebarAction("cocreate")}
             onNavigate={navigateWorkbench}
             onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
-            onGeneratePublishPrep={generatePublishPrep}
+            onConfirmPublish={() => setIsPublishConfirmOpen(true)}
+            onDraftAction={(kind) => {
+              navigateWorkbench("drafts", "drafts");
+              setDraftHeaderAction({ id: Date.now(), kind });
+            }}
+            onInform={showFeedback}
           />
         </div>
       </div>
@@ -616,6 +666,35 @@ export function ProjectWorkbench({
           onClose={() => setFeedback(null)} 
         />
       ) : null}
+
+      <Modal
+        open={isPublishConfirmOpen}
+        onClose={() => setIsPublishConfirmOpen(false)}
+        title="确认进入发布前整理"
+        description="这一步不会外发内容，只会生成发布包、标题候选、摘要和发布检查结果。"
+        kind="alert"
+        size="sm"
+      >
+        <div className="app-confirm-panel">
+          <p>如果正文或 VitalityCheck 还没有完成，系统会保留风险提示；完成后可以再回到发布中心重新整理。</p>
+          <div className="app-confirm-actions">
+            <Button type="button" variant="secondary" onClick={() => setIsPublishConfirmOpen(false)}>
+              先不处理
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={uiPending || !selectedBundle?.articleDraft}
+              onClick={() => {
+                setIsPublishConfirmOpen(false);
+                void generatePublishPrep();
+              }}
+            >
+              确认整理
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 
@@ -623,6 +702,7 @@ export function ProjectWorkbench({
     <ProjectSidebar
           projects={projects}
           selectedProjectId={selectedProjectId}
+          selectedBundle={selectedBundle}
           setSelectedProjectId={setSelectedProjectId}
           isPending={uiPending}
           setIsPending={setIsPending}
@@ -637,7 +717,14 @@ export function ProjectWorkbench({
   );
 
   const shouldShowAppInspector =
-    selectedBundle && !isProjectDashboard && !isWorkbenchDashboard && !isSourceLibrary && !isOutlineEditor && !isDraftEditor && !isPublishCenter;
+    selectedBundle &&
+    activeView !== "vitality" &&
+    !isProjectDashboard &&
+    !isWorkbenchDashboard &&
+    !isSourceLibrary &&
+    !isOutlineEditor &&
+    !isDraftEditor &&
+    !isPublishCenter;
   const appInspector = shouldShowAppInspector ? (
     <WorkbenchInspector
       selectedBundle={selectedBundle}
@@ -784,6 +871,8 @@ export function ProjectWorkbench({
                   onNavigate={navigateWorkbench}
                   onExecute={(step) => runProjectStep(step, getSuccessMessageForStep(step))}
                   onSaveEditedDraft={saveEditedDraft}
+                  headerAction={draftHeaderAction}
+                  onInform={showFeedback}
                   onInspectorSelectionChange={setInspectorSelection}
                 />
               ) : null}
@@ -892,7 +981,9 @@ function HeaderActions({
   onCocreateTopic,
   onNavigate,
   onExecute,
-  onGeneratePublishPrep,
+  onConfirmPublish,
+  onDraftAction,
+  onInform,
 }: {
   activeView: WorkbenchView;
   selectedProjectId: string;
@@ -902,7 +993,9 @@ function HeaderActions({
   onCocreateTopic: () => void;
   onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
   onExecute: (step: WorkbenchStepPath) => Promise<void>;
-  onGeneratePublishPrep: () => Promise<void>;
+  onConfirmPublish: () => void;
+  onDraftAction: (kind: DraftHeaderAction["kind"]) => void;
+  onInform: (text: string, forcedKind?: MessageKind) => void;
 }) {
   if (activeView === "projects") {
     return (
@@ -936,10 +1029,10 @@ function HeaderActions({
         <Button type="button" variant="secondary" size="md" disabled={isPending} onClick={() => void onExecute("outline")}>
           自动生成
         </Button>
-        <Button type="button" variant="secondary" size="md" disabled>
+        <Button type="button" variant="secondary" size="md" className="planned-action" data-planned="true" onClick={() => onInform("新增章节会以局部编辑状态开放；当前请先用自动生成或在提纲详情中调整。", "info")}>
           新增章节
         </Button>
-        <Button type="button" variant="primary" size="md" disabled title="提纲页目前自动同步，暂未开放顶部手动保存。">
+        <Button type="button" variant="primary" size="md" className="planned-action" data-planned="true" title="提纲页目前自动同步，暂未开放顶部手动保存。" onClick={() => onInform("提纲页当前是自动同步视图，顶部手动保存会在局部编辑能力完成后开放。", "info")}>
           保存提纲
         </Button>
       </>
@@ -949,17 +1042,33 @@ function HeaderActions({
   if (activeView === "draft") {
     return (
       <>
-        <Button type="button" variant="secondary" size="md" disabled>
+        <Button type="button" variant="secondary" size="md" disabled={isPending || !selectedBundle?.articleDraft} onClick={() => onDraftAction("save")}>
           保存
         </Button>
-        <Button type="button" variant="secondary" size="md" onClick={() => onNavigate("overview", "overview-style-core")}>
+        <Button type="button" variant="secondary" size="md" disabled={!selectedBundle?.articleDraft} onClick={() => onDraftAction("focus")}>
           专注模式
         </Button>
-        <Button type="button" variant="secondary" size="md" disabled>
+        <Button type="button" variant="secondary" size="md" disabled={!selectedBundle?.articleDraft} onClick={() => onDraftAction("history")}>
           版本历史
         </Button>
         <Button type="button" variant="primary" size="md" disabled={isPending || !selectedBundle?.articleDraft} onClick={() => void onExecute("review")}>
           继续写作
+        </Button>
+      </>
+    );
+  }
+
+  if (activeView === "vitality") {
+    return (
+      <>
+        <Button type="button" variant="secondary" size="md" disabled={isPending || !selectedBundle?.articleDraft} onClick={() => void onExecute("review")}>
+          重新诊断
+        </Button>
+        <Button type="button" variant="secondary" size="md" className="planned-action" data-planned="true" title="批量应用建议需要候选文本确认，后续以 Sheet 方式开放。" onClick={() => onInform("应用建议不会直接覆盖正文；下一步会做成候选文本 Sheet，确认后才替换。", "info")}>
+          应用建议
+        </Button>
+        <Button type="button" variant="primary" size="md" disabled={!selectedBundle?.reviewReport} onClick={() => onNavigate("publish", "publish-prep")}>
+          去发布中心
         </Button>
       </>
     );
@@ -973,13 +1082,13 @@ function HeaderActions({
             导出 Markdown
           </a>
         ) : null}
-        <Button type="button" variant="secondary" size="md" disabled>
+        <Button type="button" variant="secondary" size="md" className="planned-action" data-planned="true" onClick={() => onInform("DOCX 导出是规划中能力；当前可先用 Markdown 导出。", "info")}>
           生成 DOCX
         </Button>
-        <Button type="button" variant="secondary" size="md" disabled>
+        <Button type="button" variant="secondary" size="md" className="planned-action" data-planned="true" onClick={() => onInform("公众号版复制会接格式清洗和排版规则；当前可先导出 Markdown。", "info")}>
           复制公众号版
         </Button>
-        <Button type="button" variant="primary" size="md" disabled={isPending || !selectedBundle?.articleDraft} onClick={() => void onGeneratePublishPrep()}>
+        <Button type="button" variant="primary" size="md" disabled={isPending || !selectedBundle?.articleDraft} onClick={onConfirmPublish}>
           确认发布
         </Button>
       </>
@@ -1011,8 +1120,8 @@ function getAppHeaderMeta({
     sources: "资料卡库",
     outline: "文章提纲",
     draft: selectedBundle?.project.topic ?? "正文",
+    vitality: "VitalityCheck",
     publish: "发布与导出",
-    settings: "设置",
   };
   const stageLabel = selectedBundle ? formatProjectStage(selectedBundle.project.stage) : "未选择项目";
   const savedLabel = selectedBundle ? `最后保存：${formatHeaderTime(selectedBundle.project.updatedAt)}` : "请选择或新建项目";
@@ -1075,6 +1184,9 @@ function StaleArtifactNotice({
 }
 
 function getActiveWorkbenchView(activeTab: ActiveTab, focusedSection: WorkspaceSection): WorkbenchView {
+  if (activeTab === "overview" && focusedSection === "overview-vitality") {
+    return "vitality";
+  }
   if (activeTab === "research") {
     return "sources";
   }

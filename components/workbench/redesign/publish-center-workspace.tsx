@@ -425,22 +425,43 @@ function buildPublishArticleStats(value: string) {
 
 function buildPublishReadiness(model: PublishCenterViewModel, checklistPassedCount: number): PublishReadiness {
   const checklistTotal = Math.max(model.checklist.length, 1);
-  const checklistScore = (checklistPassedCount / checklistTotal) * 54;
-  const packageScore = model.hasPublishPackage ? 24 : model.canGeneratePublishPrep ? 16 : 8;
-  const reviewScore = model.hasReview ? 14 : 6;
-  const issuePenalty = model.qualityItems.reduce((sum, item) => {
+  const checklistScore = (checklistPassedCount / checklistTotal) * 46;
+  const packageScore = model.hasPublishPackage ? 24 : model.canGeneratePublishPrep ? 18 : 8;
+  const reviewScore = model.hasReview ? 18 : 8;
+  const rawIssuePenalty = model.qualityItems.reduce((sum, item) => {
     if (item.tone === "danger") return sum + 12;
     if (item.tone === "warning") return sum + 7;
     if (item.tone === "stale") return sum + 5;
     if (item.tone === "accent") return sum + 3;
     return sum;
   }, 0);
-  const score = Math.max(0, Math.min(100, Math.round(checklistScore + packageScore + reviewScore - issuePenalty)));
+  const issuePenalty = Math.min(rawIssuePenalty, model.hasReview ? 24 : 18);
+  const operationalScore = checklistScore + packageScore + reviewScore - issuePenalty;
+  const statusBaseline = model.hasReview ? getPublishStatusBaseline(model.statusTone) : model.hasDraft ? 54 : 22;
+  const baselinePenalty = Math.min(rawIssuePenalty, model.statusTone === "danger" ? 12 : 8);
+  const score = Math.max(0, Math.min(100, Math.round(Math.max(operationalScore, statusBaseline - baselinePenalty))));
 
   if (score >= 82) return { score, label: "优秀", tone: "success" };
-  if (score >= 62) return { score, label: "可整理", tone: "accent" };
+  if (score >= 62) return { score, label: "可发布整理", tone: "accent" };
   if (score >= 40) return { score, label: "待完善", tone: "warning" };
   return { score, label: "有阻塞", tone: "danger" };
+}
+
+function getPublishStatusBaseline(tone: DesignCardTone) {
+  switch (tone) {
+    case "success":
+      return 86;
+    case "accent":
+      return 78;
+    case "warning":
+    case "stale":
+      return 72;
+    case "danger":
+      return 52;
+    case "neutral":
+    default:
+      return 64;
+  }
 }
 
 function buildPublishPendingItems(

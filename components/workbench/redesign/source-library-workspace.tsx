@@ -172,7 +172,7 @@ export function SourceLibraryWorkspace({
               ))}
             </div>
           </section>
-          <SourceDetailPanel card={selectedVisibleCard} />
+          <SourceDetailPanel card={selectedVisibleCard} key={selectedVisibleCard?.id ?? "empty-source-detail"} />
         </div>
       ) : (
         <EmptyState
@@ -192,6 +192,9 @@ export function SourceLibraryWorkspace({
 }
 
 function SourceDetailPanel({ card }: { card: SourceLibraryCardViewModel | null }) {
+  const [outlineChooserOpen, setOutlineChooserOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+
   if (!card) {
     return null;
   }
@@ -240,7 +243,56 @@ function SourceDetailPanel({ card }: { card: SourceLibraryCardViewModel | null }
         <span>关联章节</span>
         <strong>{card.intendedSection || "未指定"}</strong>
       </section>
+
+      <div className="redesign-source-detail-actions" aria-label="资料卡操作">
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOutlineChooserOpen((current) => !current)}>
+          加入提纲
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => setNotice("单卡提取观点会接入后台任务；当前可用顶部“生成研究清单”做批量整理。")}
+        >
+          提取观点
+        </Button>
+        {card.url ? (
+          <a className="secondary-button button-size-sm redesign-source-detail-link" href={card.url} target="_blank" rel="noreferrer">
+            查看原文
+          </a>
+        ) : null}
+      </div>
+
+      {outlineChooserOpen ? (
+        <div className="redesign-source-popover" role="dialog" aria-label="选择加入提纲的位置">
+          <strong>选择章节</strong>
+          {buildOutlineTargets(card).map((target) => (
+            <button
+              type="button"
+              key={target}
+              onClick={() => {
+                setOutlineChooserOpen(false);
+                setNotice(`已标记为“${target}”的候选资料；正式写入会在提纲资料选择 Sheet 中完成。`);
+              }}
+            >
+              {target}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {notice ? <p className="redesign-source-detail-notice">{notice}</p> : null}
     </aside>
+  );
+}
+
+function buildOutlineTargets(card: SourceLibraryCardViewModel) {
+  return Array.from(
+    new Set([
+      card.intendedSection || "当前选中章节",
+      card.zone ? `${card.zone} 相关段落` : "区位与判断段落",
+      "待补证据池",
+    ]),
   );
 }
 

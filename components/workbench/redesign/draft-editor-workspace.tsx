@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Modal } from "@/components/ui/modal";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
 import type { DraftEditorSectionViewModel, DraftEditorViewModel } from "@/lib/design/view-models";
 import type { ActiveTab, WorkbenchStepPath, WorkspaceSection } from "../workflow-state";
 import type { WorkbenchInspectorSelection } from "../WorkbenchInspector";
 
 type DraftVersion = "edited" | "narrative" | "analysis";
+type DraftHeaderAction = {
+  id: number;
+  kind: "save" | "focus" | "history";
+};
 type DraftReaderBlock =
   | { id: string; kind: "heading"; level: 1 | 2 | 3; text: string }
   | { id: string; kind: "paragraph"; text: string }
@@ -22,6 +27,8 @@ export function DraftEditorWorkspace({
   onNavigate,
   onExecute,
   onSaveEditedDraft,
+  headerAction,
+  onInform,
   onInspectorSelectionChange,
 }: {
   model: DraftEditorViewModel;
@@ -30,12 +37,16 @@ export function DraftEditorWorkspace({
   onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
   onExecute: (step: WorkbenchStepPath) => Promise<void>;
   onSaveEditedDraft: (value: string) => Promise<void>;
+  headerAction: DraftHeaderAction | null;
+  onInform: (text: string, forcedKind?: "success" | "error" | "info") => void;
   onInspectorSelectionChange: (selection: WorkbenchInspectorSelection) => void;
 }) {
   const initialEditorValue = model.editedMarkdown || model.narrativeMarkdown;
   const [draftVersion, setDraftVersion] = useState<DraftVersion>("narrative");
   const [editorValue, setEditorValue] = useState(initialEditorValue);
   const [focusMode, setFocusMode] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const handledHeaderActionId = useRef<number | null>(null);
   const isDirty = editorValue !== initialEditorValue;
   const selectedSection = useMemo(
     () => model.outlineSections.find((section) => section.id === selectedSectionId) ?? model.outlineSections[0] ?? null,
@@ -62,9 +73,35 @@ export function DraftEditorWorkspace({
     onInspectorSelectionChange({ kind: "outline-section", sectionId });
   }
 
-  async function saveDraft() {
+  const saveDraft = useCallback(async () => {
     await onSaveEditedDraft(editorValue);
-  }
+  }, [editorValue, onSaveEditedDraft]);
+
+  useEffect(() => {
+    if (!headerAction || !model.hasDraft || handledHeaderActionId.current === headerAction.id) {
+      return;
+    }
+    handledHeaderActionId.current = headerAction.id;
+    if (headerAction.kind === "history") {
+      setHistoryOpen(true);
+      return;
+    }
+    if (headerAction.kind === "focus") {
+      setFocusMode((current) => !current);
+      onInform(focusMode ? "已退出专注模式。" : "已进入专注模式。", "success");
+      return;
+    }
+    if (draftVersion !== "edited") {
+      setDraftVersion("edited");
+      onInform("已切到改写版。顶部保存只保存人工改写稿，请编辑后再保存。", "info");
+      return;
+    }
+    if (!isDirty) {
+      onInform("当前改写稿没有未保存修改。", "info");
+      return;
+    }
+    void saveDraft();
+  }, [draftVersion, focusMode, headerAction, isDirty, model.hasDraft, onInform, saveDraft]);
 
   return (
     <section className={`redesign-draft-editor ${focusMode ? "is-focus-mode" : ""}`} aria-label="写作编辑器">
@@ -199,6 +236,47 @@ export function DraftEditorWorkspace({
           <DraftContextPanel model={model} selectedSection={selectedSection} onNavigate={onNavigate} />
         </div>
       )}
+      <Modal
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        title="版本历史"
+        description="当前先展示本地项目里已有的正文版本和修改记录；后续可继续接入差异对比。"
+        size="md"
+        kind="sheet"
+      >
+        <div className="redesign-draft-history-sheet">
+          <div className="redesign-draft-history-grid">
+            {versionOptions.map((option) => (
+              <button
+                type="button"
+                className={draftVersion === option.id ? "is-active" : ""}
+                key={option.id}
+                onClick={() => {
+                  setDraftVersion(option.id);
+                  setHistoryOpen(false);
+                }}
+              >
+                <span>{option.label}</span>
+                <strong>{option.characterCount.toLocaleString("zh-CN")} 字</strong>
+                <small>{option.detail}</small>
+              </button>
+            ))}
+          </div>
+          {model.feedbackEvents.length ? (
+            <section className="redesign-draft-history-events" aria-label="修改记录">
+              <strong>修改记录</strong>
+              {model.feedbackEvents.slice(0, 6).map((event) => (
+                <div key={event.id}>
+                  <span>{event.label}</span>
+                  <small>{event.sectionHeading}</small>
+                </div>
+              ))}
+            </section>
+          ) : (
+            <p className="redesign-draft-history-empty">当前还没有独立修改记录。</p>
+          )}
+        </div>
+      </Modal>
     </section>
   );
 }

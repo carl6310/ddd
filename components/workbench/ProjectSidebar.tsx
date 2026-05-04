@@ -6,7 +6,7 @@ import {
   TOPIC_READER_PERSONA_LABELS,
   TOPIC_ANGLE_TYPE_LABELS,
   type ArticleProject,
-  PROJECT_STAGES,
+  type ProjectBundle,
   type PreSourceCard,
   type SignalProviderMode,
   type TopicAngle,
@@ -31,6 +31,7 @@ import type { WorkbenchDisplayMode } from "./display-mode";
 interface ProjectSidebarProps {
   projects: ArticleProject[];
   selectedProjectId: string;
+  selectedBundle: ProjectBundle | null;
   setSelectedProjectId: (id: string) => void;
   isPending: boolean;
   setIsPending: (pending: boolean) => void;
@@ -60,6 +61,7 @@ const deepSignalModeOptions: Array<{ value: SignalProviderMode; label: string; t
 export function ProjectSidebar({
   projects,
   selectedProjectId,
+  selectedBundle,
   setSelectedProjectId,
   isPending,
   setIsPending,
@@ -516,10 +518,10 @@ export function ProjectSidebar({
 
           <div className="sidebar-project-progress" aria-label="当前项目进度">
             <span>当前项目进度</span>
-            <div className="sidebar-progress-ring" style={{ "--progress": `${getProjectProgressPercent(selectedProject)}%` } as CSSProperties}>
-              <strong>{getProjectProgressPercent(selectedProject)}%</strong>
+            <div className="sidebar-progress-ring" style={{ "--progress": `${getProjectProgressPercent(selectedBundle)}%` } as CSSProperties}>
+              <strong>{getProjectProgressPercent(selectedBundle)}%</strong>
             </div>
-            <strong className="sidebar-progress-steps">{getProjectStageIndex(selectedProject)}/{PROJECT_STAGES.length} 步骤</strong>
+            <strong className="sidebar-progress-steps">{getProjectProgressSteps(selectedBundle)}/{getProjectProgressTotal()} 步骤</strong>
             <button type="button" onClick={() => onViewChange("workbench")}>查看详情</button>
           </div>
 
@@ -568,14 +570,6 @@ export function ProjectSidebar({
               {projects.length > 0 && visibleProjects.length === 0 ? <p className="empty-inline">没有匹配项目，调整搜索或显示测试项目。</p> : null}
             </div>
           </details>
-
-          <button type="button" className="sidebar-settings-link" onClick={() => onViewChange("settings")} disabled>
-            <span className="sidebar-nav-icon" aria-hidden="true">⚙</span>
-            <div>
-              <strong>设置</strong>
-              <span>本地模式</span>
-            </div>
-          </button>
         </Card>
       </Panel>
 
@@ -918,27 +912,46 @@ function getWorkbenchNavIcon(view: WorkbenchView) {
       return "☷";
     case "draft":
       return "▤";
-    case "publish":
+    case "vitality":
       return "⌁";
-    case "settings":
+    case "publish":
+      return "↗";
     default:
-      return "⚙";
+      return "◆";
   }
 }
 
-function getProjectStageIndex(project: ArticleProject | null) {
-  if (!project) {
-    return 0;
+function getProjectProgressItems(bundle: ProjectBundle | null) {
+  if (!bundle) {
+    return [];
   }
-  const index = PROJECT_STAGES.indexOf(project.stage);
-  return index >= 0 ? index + 1 : 1;
+  return [
+    Boolean(bundle.project.topic && bundle.project.coreQuestion),
+    Boolean(bundle.project.thinkCard.coreJudgement && bundle.project.thinkCard.verdictReason),
+    Boolean(bundle.project.styleCore.rhythm && bundle.project.styleCore.judgement),
+    Boolean(bundle.researchBrief),
+    bundle.sourceCards.length > 0,
+    Boolean(bundle.sectorModel),
+    Boolean(bundle.outlineDraft?.sections.length),
+    Boolean(bundle.articleDraft),
+    Boolean(bundle.reviewReport),
+    Boolean(bundle.publishPackage),
+  ];
 }
 
-function getProjectProgressPercent(project: ArticleProject | null) {
-  if (!project) {
+function getProjectProgressSteps(bundle: ProjectBundle | null) {
+  return getProjectProgressItems(bundle).filter(Boolean).length;
+}
+
+function getProjectProgressTotal() {
+  return 10;
+}
+
+function getProjectProgressPercent(bundle: ProjectBundle | null) {
+  if (!bundle) {
     return 0;
   }
-  return Math.round((getProjectStageIndex(project) / PROJECT_STAGES.length) * 100);
+  return Math.round((getProjectProgressSteps(bundle) / getProjectProgressTotal()) * 100);
 }
 
 function TopicAngleListItem({

@@ -2020,8 +2020,6 @@ function getPageTitle(activeView: WorkbenchView) {
       return "写作编辑器";
     case "publish":
       return "发布中心";
-    case "settings":
-      return "设置";
     case "workbench":
     default:
       return "写作驾驶舱";

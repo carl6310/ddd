@@ -30,16 +30,16 @@ export const WORKBENCH_NAV_ITEMS = [
     disabled: false,
   },
   {
+    id: "vitality",
+    label: "诊断",
+    description: "内容体检",
+    disabled: false,
+  },
+  {
     id: "publish",
     label: "发布",
     description: "导出中心",
     disabled: false,
-  },
-  {
-    id: "settings",
-    label: "设置",
-    description: "规划中",
-    disabled: true,
   },
 ] as const;
 
