@@ -54,12 +54,12 @@ export function OutlineEditorWorkspace({
   }
 
   return (
-    <section className="redesign-outline-editor" aria-label="结构编辑器">
+    <section className="redesign-outline-editor" aria-label="论证提纲">
       <div className="redesign-outline-hero">
         <div className="redesign-outline-hero-copy">
-          <span>文章提纲</span>
-          <h2>结构编辑器</h2>
-          <p>把提纲压缩成可扫读的结构树，只展开当前段落的任务、证据和连续性，不再把所有章节长展开。</p>
+          <span>论证提纲</span>
+          <h2>{model.projectTitle}</h2>
+          <p>先确认文章要回答什么，再检查段落顺序、证据覆盖和每一段的推进任务。</p>
         </div>
         <div className="redesign-outline-actions">
           <Button
@@ -84,9 +84,16 @@ export function OutlineEditorWorkspace({
       <div className="redesign-outline-metrics" aria-label="结构概览">
         <OutlineMetric label="段落" value={model.totalSections} detail={`${model.linkedSectionCount} 段有证据`} />
         <OutlineMetric label="弱支撑" value={model.weakSectionCount} detail={`${model.sourceCount} 张资料卡`} />
-        <OutlineMetric label="质检提示" value={model.flaggedSectionCount} detail="来自 VitalityCheck" />
+        <OutlineMetric label="质检提示" value={model.flaggedSectionCount} detail="来自质量检查" />
         <OutlineMetric label="连续性" value={model.continuityCoverageLabel} detail="段落链路覆盖" />
       </div>
+
+      {model.hasOutline && model.sections.length > 0 ? (
+        <>
+          <OutlineBrief model={model} selectedSection={selectedSection} />
+          <OutlineFlowMap sections={model.sections} selectedSectionId={selectedSection?.id ?? null} onSelectSection={selectSection} />
+        </>
+      ) : null}
 
       {!model.hasOutline || model.sections.length === 0 ? (
         <EmptyState
@@ -152,6 +159,82 @@ export function OutlineEditorWorkspace({
           {selectedSection ? <OutlineSectionRail section={selectedSection} model={model} /> : null}
         </div>
       )}
+    </section>
+  );
+}
+
+function OutlineBrief({ model, selectedSection }: { model: OutlineEditorViewModel; selectedSection: OutlineSectionViewModel | null }) {
+  const firstSection = model.sections[0] ?? null;
+  const lastSection = model.sections[model.sections.length - 1] ?? null;
+  const argumentAnswer = model.argumentFrame?.answer || firstSection?.thesis || model.hook || "还没有形成主判断。";
+  const flowSummary =
+    firstSection && lastSection
+      ? `从「${firstSection.heading}」推进到「${lastSection.heading}」，当前选中「${selectedSection?.heading ?? firstSection.heading}」。`
+      : "还没有可展示的段落链路。";
+  const evidenceSummary = `${model.linkedSectionCount}/${model.totalSections} 段有证据，${model.weakSectionCount} 段需要补强，连续性覆盖 ${model.continuityCoverageLabel}。`;
+
+  return (
+    <section className="redesign-outline-brief" aria-label="论证提纲摘要">
+      <OutlineBriefCard label="核心回答" title={model.argumentFrame?.primaryShapeLabel ?? "主判断"} body={argumentAnswer} emphasized />
+      <OutlineBriefCard label="段落链路" title={`${model.totalSections} 段任务`} body={flowSummary} />
+      <OutlineBriefCard label="证据覆盖" title={model.canGenerateDraft ? "可进入正文" : "正文前需补齐"} body={evidenceSummary} />
+    </section>
+  );
+}
+
+function OutlineBriefCard({
+  label,
+  title,
+  body,
+  emphasized = false,
+}: {
+  label: string;
+  title: string;
+  body: string;
+  emphasized?: boolean;
+}) {
+  return (
+    <article className={`redesign-outline-brief-card ${emphasized ? "is-emphasized" : ""}`}>
+      <span>{label}</span>
+      <strong>{title}</strong>
+      <p>{body}</p>
+    </article>
+  );
+}
+
+function OutlineFlowMap({
+  sections,
+  selectedSectionId,
+  onSelectSection,
+}: {
+  sections: OutlineSectionViewModel[];
+  selectedSectionId: string | null;
+  onSelectSection: (sectionId: string) => void;
+}) {
+  return (
+    <section className="redesign-outline-flow" aria-label="论证顺序">
+      <div className="redesign-outline-flow-head">
+        <div>
+          <span>论证顺序</span>
+          <h3>段落推进链</h3>
+        </div>
+        <Chip tone="neutral">{sections.length} 段</Chip>
+      </div>
+      <div className="redesign-outline-flow-list" role="list">
+        {sections.map((section) => (
+          <button
+            type="button"
+            className={`redesign-outline-flow-step redesign-tone-${section.tone} ${section.id === selectedSectionId ? "is-selected" : ""}`}
+            key={section.id}
+            aria-pressed={section.id === selectedSectionId}
+            onClick={() => onSelectSection(section.id)}
+          >
+            <span>{String(section.index + 1).padStart(2, "0")}</span>
+            <strong>{section.heading}</strong>
+            <em>{section.evidenceCount} 证据</em>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

@@ -59,7 +59,7 @@ export function SectorModelWorkspace({
       }
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["outline", "drafts", "review", "publish-prep"]);
-      setMessage("板块建模已保存。提纲、正文、检查和发布整理可能需要重生成。");
+      setMessage("板块建模已保存。提纲、正文、体检和发布包可能需要重生成。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存板块建模失败。");
     } finally {
@@ -92,6 +92,14 @@ export function SectorModelWorkspace({
         <SectorMetric label="切割线" value={model.cutLines.length} detail={`${model.futureWatchpoints.length} 未来变量`} />
       </div>
 
+      {sectorModel ? (
+        <section className="redesign-sector-brief" aria-label="板块判断摘要">
+          <SectorBriefCard label="核心判断" title="总判断" body={sectorModel.summaryJudgement || "还没有形成总判断。"} emphasized />
+          <SectorBriefCard label="空间结构" title="空间骨架" body={sectorModel.spatialBackbone || "还没有形成空间骨架。"} />
+          <SectorBriefCard label="分歧位置" title="关键切割线" body={formatBriefList(sectorModel.cutLines, "还没有形成切割线。")} />
+        </section>
+      ) : null}
+
       {!sectorModel ? (
         <EmptyState
           title="还没有板块建模"
@@ -115,9 +123,21 @@ export function SectorModelWorkspace({
               <Chip tone="accent">{model.zoneCount} 个片区</Chip>
             </div>
             <div className="redesign-sector-form-grid">
-              <TextAreaField label="总判断" value={sectorModel.summaryJudgement} rows={3} onChange={(value) => updateSectorModel(setSelectedBundle, { ...sectorModel, summaryJudgement: value })} />
+              <TextAreaField
+                label="总判断"
+                value={sectorModel.summaryJudgement}
+                rows={4}
+                variant="primary"
+                onChange={(value) => updateSectorModel(setSelectedBundle, { ...sectorModel, summaryJudgement: value })}
+              />
               <TextAreaField label="误解点" value={sectorModel.misconception} rows={3} onChange={(value) => updateSectorModel(setSelectedBundle, { ...sectorModel, misconception: value })} />
-              <TextAreaField label="空间骨架" value={sectorModel.spatialBackbone} rows={4} onChange={(value) => updateSectorModel(setSelectedBundle, { ...sectorModel, spatialBackbone: value })} />
+              <TextAreaField
+                label="空间骨架"
+                value={sectorModel.spatialBackbone}
+                rows={5}
+                variant="primary"
+                onChange={(value) => updateSectorModel(setSelectedBundle, { ...sectorModel, spatialBackbone: value })}
+              />
               <TextAreaField label="供地判断" value={sectorModel.supplyObservation} rows={4} onChange={(value) => updateSectorModel(setSelectedBundle, { ...sectorModel, supplyObservation: value })} />
               <ListField label="切割线" value={sectorModel.cutLines} rows={5} onChange={(value) => updateSectorModel(setSelectedBundle, { ...sectorModel, cutLines: value })} />
               <ListField label="未来变量" value={sectorModel.futureWatchpoints} rows={5} onChange={(value) => updateSectorModel(setSelectedBundle, { ...sectorModel, futureWatchpoints: value })} />
@@ -172,6 +192,26 @@ function SectorMetric({ label, value, detail }: { label: string; value: string |
       <strong>{value}</strong>
       <small>{detail}</small>
     </div>
+  );
+}
+
+function SectorBriefCard({
+  label,
+  title,
+  body,
+  emphasized = false,
+}: {
+  label: string;
+  title: string;
+  body: string;
+  emphasized?: boolean;
+}) {
+  return (
+    <article className={`redesign-sector-brief-card ${emphasized ? "is-emphasized" : ""}`}>
+      <span>{label}</span>
+      <strong>{title}</strong>
+      <p>{body}</p>
+    </article>
   );
 }
 
@@ -291,15 +331,17 @@ function TextAreaField({
   label,
   value,
   rows,
+  variant = "default",
   onChange,
 }: {
   label: string;
   value: string;
   rows: number;
+  variant?: "default" | "primary";
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="redesign-sector-field">
+    <label className={`redesign-sector-field ${variant === "primary" ? "is-primary" : ""}`}>
       <span>{label}</span>
       <AutoGrowTextarea value={value} rows={rows} onChange={(event) => onChange(event.target.value)} />
     </label>
@@ -345,6 +387,11 @@ function splitLines(value: string) {
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function formatBriefList(items: string[], fallback: string) {
+  const visibleItems = items.filter(Boolean).slice(0, 3);
+  return visibleItems.length ? visibleItems.join(" / ") : fallback;
 }
 
 function formatSupportLevel(value: SectorModelEvidenceViewModel["supportLevel"]) {

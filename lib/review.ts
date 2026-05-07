@@ -1695,8 +1695,8 @@ export function buildVitalityCheck(input: {
     ...vitality,
     overallStatus: l1Failed ? "fail" : vitality.overallStatus,
     overallVerdict: l1Failed
-      ? "L1 写作安全检查未通过，暂时不能进入发布前整理。"
-      : "L2 结构推进检查未通过，建议先修结构再进入发布前整理。",
+      ? "L1 写作安全检查未通过，暂时不能生成发布包。"
+      : "L2 结构推进检查未通过，建议先修结构再生成发布包。",
     hardBlocked: l1Failed || vitality.hardBlocked,
     semiBlocked: l1Failed || l2Failed || vitality.semiBlocked,
   };

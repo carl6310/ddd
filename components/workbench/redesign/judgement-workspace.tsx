@@ -13,6 +13,7 @@ import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import type { JudgementWorkspaceIssueViewModel, JudgementWorkspaceViewModel } from "@/lib/design/view-models";
+import type { WorkbenchDisplayMode } from "../display-mode";
 import type { ActiveTab, WorkbenchStepPath, WorkspaceSection } from "../workflow-state";
 
 type JudgementPanel = "think-card" | "style-core" | "vitality";
@@ -37,6 +38,7 @@ export function JudgementWorkspace({
   onNavigate,
   onExecute,
   onSaveProjectFrame,
+  displayMode,
 }: {
   model: JudgementWorkspaceViewModel;
   selectedBundle: ProjectBundle;
@@ -46,8 +48,10 @@ export function JudgementWorkspace({
   onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
   onExecute: (step: WorkbenchStepPath) => Promise<void>;
   onSaveProjectFrame: () => Promise<void>;
+  displayMode: WorkbenchDisplayMode;
 }) {
-  const activePanel = getActivePanel(activeSection);
+  const showDebugPanels = displayMode === "debug";
+  const activePanel = getActivePanel(showDebugPanels ? activeSection : activeSection === "overview-vitality" ? "overview-think-card" : activeSection);
   const project = selectedBundle.project;
 
   return (
@@ -59,9 +63,11 @@ export function JudgementWorkspace({
           <p>{getHeroDetail(activePanel, model)}</p>
         </div>
         <div className="redesign-judgement-actions">
-          <Button type="button" variant="secondary" disabled={isPending} onClick={() => onNavigate("overview", "overview-compatibility")}>
-            系统映射
-          </Button>
+          {showDebugPanels ? (
+            <Button type="button" variant="secondary" disabled={isPending} onClick={() => onNavigate("overview", "overview-compatibility")}>
+              系统映射
+            </Button>
+          ) : null}
           <Button type="button" variant="primary" disabled={isPending} onClick={() => void onSaveProjectFrame()}>
             保存判断
           </Button>
@@ -69,10 +75,14 @@ export function JudgementWorkspace({
       </div>
 
       <div className="redesign-judgement-metrics" aria-label="判断概览">
-        <JudgementMetric label="选题判断" value={model.thinkCardCompletion.label} tone={model.thinkCardCompletion.tone} detail={project.thinkCard.topicVerdict} />
+        <JudgementMetric label="选题判断" value={model.thinkCardCompletion.label} tone={model.thinkCardCompletion.tone} detail={topicVerdictLabels[project.thinkCard.topicVerdict]} />
         <JudgementMetric label="表达策略" value={model.styleCoreCompletion.label} tone={model.styleCoreCompletion.tone} detail={`${project.styleCore.allowedMoves.length} 个允许动作`} />
-        <JudgementMetric label="VitalityCheck" value={model.vitality.statusLabel} tone={model.vitality.tone} detail={`${model.vitality.issueCount} 个提醒`} />
-        <JudgementMetric label="发布门槛" value={model.vitality.canPreparePublish ? "可整理" : "待修"} tone={model.vitality.canPreparePublish ? "success" : "warning"} detail={model.vitality.hardBlocked ? "硬阻塞" : "未硬阻塞"} />
+        {showDebugPanels ? (
+          <>
+            <JudgementMetric label="质量检查" value={model.vitality.statusLabel} tone={model.vitality.tone} detail={`${model.vitality.issueCount} 个提醒`} />
+            <JudgementMetric label="发布门槛" value={model.vitality.canPreparePublish ? "可整理" : "待修"} tone={model.vitality.canPreparePublish ? "success" : "warning"} detail={model.vitality.hardBlocked ? "硬阻塞" : "未硬阻塞"} />
+          </>
+        ) : null}
       </div>
 
       <div className="redesign-judgement-tabs" role="tablist" aria-label="判断核心入口">
@@ -82,9 +92,11 @@ export function JudgementWorkspace({
         <button type="button" role="tab" className={activePanel === "style-core" ? "active" : ""} aria-selected={activePanel === "style-core"} onClick={() => onNavigate("overview", "overview-style-core")}>
           表达策略
         </button>
-        <button type="button" role="tab" className={activePanel === "vitality" ? "active" : ""} aria-selected={activePanel === "vitality"} onClick={() => onNavigate("overview", "overview-vitality")}>
-          VitalityCheck
-        </button>
+        {showDebugPanels ? (
+          <button type="button" role="tab" className={activePanel === "vitality" ? "active" : ""} aria-selected={activePanel === "vitality"} onClick={() => onNavigate("overview", "overview-vitality")}>
+            质量检查
+          </button>
+        ) : null}
       </div>
 
       {activePanel === "think-card" ? (
@@ -119,17 +131,19 @@ function ThinkCardPanel({
       <main className="redesign-judgement-main" aria-label="选题判断编辑">
         <div className="redesign-judgement-panel-head">
           <div>
-            <span>ThinkCard</span>
+            <span>选题判断</span>
             <h3>选题判断</h3>
           </div>
           <Chip tone={model.thinkCardCompletion.tone}>{model.thinkCardCompletion.label}</Chip>
         </div>
 
+        <JudgementBrief selectedBundle={selectedBundle} />
+
         <div className="redesign-judgement-form-grid">
-          <TextAreaField label="一句话主判断" value={project.thesis} rows={3} onChange={(value) => updateProjectField(setSelectedBundle, { thesis: value })} />
-          <TextAreaField label="核心问题" value={project.coreQuestion} rows={3} onChange={(value) => updateProjectField(setSelectedBundle, { coreQuestion: value })} />
-          <TextAreaField label="素材吃透摘要" value={thinkCard.materialDigest} rows={4} onChange={(value) => updateThinkCardField(setSelectedBundle, { materialDigest: value })} />
-          <TextAreaField label="核心判断" value={thinkCard.coreJudgement} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { coreJudgement: value })} />
+          <TextAreaField variant="primary" label="一句话主判断" value={project.thesis} rows={3} onChange={(value) => updateProjectField(setSelectedBundle, { thesis: value })} />
+          <TextAreaField variant="primary" label="核心问题" value={project.coreQuestion} rows={3} onChange={(value) => updateProjectField(setSelectedBundle, { coreQuestion: value })} />
+          <TextAreaField variant="primary" label="素材吃透摘要" value={thinkCard.materialDigest} rows={4} onChange={(value) => updateThinkCardField(setSelectedBundle, { materialDigest: value })} />
+          <TextAreaField variant="primary" label="核心判断" value={thinkCard.coreJudgement} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { coreJudgement: value })} />
           <SelectField label="选题值判断" value={thinkCard.topicVerdict} options={topicVerdictOptions} onChange={(value) => updateThinkCardField(setSelectedBundle, { topicVerdict: value as TopicVerdict })} />
           <SelectField label="文章原型" value={thinkCard.articlePrototype} options={articlePrototypeOptions} onChange={(value) => updateThinkCardField(setSelectedBundle, { articlePrototype: value as ArticlePrototype })} />
           <SelectField label="目标读者画像" value={thinkCard.targetReaderPersona} options={readerPersonaOptions} onChange={(value) => updateThinkCardField(setSelectedBundle, { targetReaderPersona: value as TopicReaderPersona })} />
@@ -170,6 +184,36 @@ function ThinkCardPanel({
   );
 }
 
+function JudgementBrief({ selectedBundle }: { selectedBundle: ProjectBundle }) {
+  const project = selectedBundle.project;
+  const thinkCard = project.thinkCard;
+  const briefItems = [
+    {
+      label: "主判断",
+      value: thinkCard.coreJudgement || project.thesis || "还没有形成主判断。",
+    },
+    {
+      label: "读者收益",
+      value: thinkCard.readerPayoff || "还没有写清楚读者收益。",
+    },
+    {
+      label: "反直觉",
+      value: thinkCard.counterIntuition || "还没有形成反直觉抓手。",
+    },
+  ];
+
+  return (
+    <section className="redesign-judgement-brief" aria-label="判断摘要">
+      {briefItems.map((item) => (
+        <article className="redesign-judgement-brief-card" key={item.label}>
+          <span>{item.label}</span>
+          <p>{item.value}</p>
+        </article>
+      ))}
+    </section>
+  );
+}
+
 function StyleCorePanel({
   selectedBundle,
   setSelectedBundle,
@@ -186,7 +230,7 @@ function StyleCorePanel({
       <main className="redesign-judgement-main" aria-label="表达策略编辑">
         <div className="redesign-judgement-panel-head">
           <div>
-            <span>StyleCore</span>
+            <span>表达策略</span>
             <h3>表达策略</h3>
           </div>
           <Chip tone={model.styleCoreCompletion.tone}>{model.styleCoreCompletion.label}</Chip>
@@ -272,10 +316,10 @@ function VitalityPanel({
 
   return (
     <div className="redesign-judgement-grid">
-      <main className="redesign-judgement-main" aria-label="VitalityCheck">
+      <main className="redesign-judgement-main" aria-label="质量检查">
         <div className="redesign-judgement-panel-head">
           <div>
-            <span>VitalityCheck</span>
+            <span>质量检查</span>
             <h3>发布前判断</h3>
           </div>
           <Chip tone={model.vitality.tone}>{model.vitality.statusLabel}</Chip>
@@ -376,14 +420,16 @@ function TextAreaField({
   value,
   rows,
   onChange,
+  variant,
 }: {
   label: string;
   value: string;
   rows: number;
   onChange: (value: string) => void;
+  variant?: "primary";
 }) {
   return (
-    <label className="redesign-judgement-field">
+    <label className={`redesign-judgement-field ${variant === "primary" ? "is-primary" : ""}`}>
       <span>{label}</span>
       <AutoGrowTextarea value={value} rows={rows} onChange={(event) => onChange(event.target.value)} />
     </label>

@@ -80,13 +80,27 @@ export function buildWritingQualitySummaryLines(bundle: ProjectBundle): string[]
     `- 总体质量分：${summary.overallScore ?? "n/a"}`,
     `- 引用覆盖率：${toPercent(summary.citationCoverage)}`,
     `- 分段证据覆盖率：${toPercent(summary.sectionEvidenceCoverage)}`,
-    `- Hook / Anchor / Echo：${toPercent(summary.hookAnchorEchoPass)}`,
-    `- Rewrite hotspot：${summary.rewriteHotspotCount ?? "n/a"}`,
-    `- Human edit delta：${toPercent(summary.humanEditDelta)}`,
-    `- Vitality pass rate：${toPercent(summary.vitalityPassRate)}`,
+    `- 开头抓手 / 论点锚点 / 结尾回环：${toPercent(summary.hookAnchorEchoPass)}`,
+    `- 弱段定位数：${summary.rewriteHotspotCount ?? "n/a"}`,
+    `- 人工编辑变化：${toPercent(summary.humanEditDelta)}`,
+    `- 质量检查通过率：${toPercent(summary.vitalityPassRate)}`,
     `- 编辑反馈事件数：${summary.editorialEventCount}`,
-    `- Quality gate：${summary.qualityGate.overallStatus} (${summary.qualityGate.mode})`,
-    ...summary.qualityPyramid.map((layer) => `- ${layer.level} ${layer.title}：${layer.status}`),
-    ...summary.notes.map((note) => `- ${note}`),
+    `- 质量门槛：${formatUserFacingWorkflowText(summary.qualityGate.overallStatus)} (${formatUserFacingWorkflowText(summary.qualityGate.mode)})`,
+    ...summary.qualityPyramid.map((layer) => `- ${layer.level} ${formatUserFacingWorkflowText(layer.title)}：${formatUserFacingWorkflowText(layer.status)}`),
+    ...summary.notes.map((note) => `- ${formatUserFacingWorkflowText(note)}`),
   ];
+}
+
+function formatUserFacingWorkflowText(value: string): string {
+  return value
+    .replaceAll("WritingLint", "写作硬伤")
+    .replaceAll("StructureFlow", "结构推进")
+    .replaceAll("ContentDepth", "内容深度")
+    .replaceAll("HumanFeel", "人感")
+    .replaceAll("Quality gate", "质量门槛")
+    .replaceAll("warn-only", "仅提醒")
+    .replaceAll("hard-block", "强阻塞")
+    .replaceAll("pass", "通过")
+    .replaceAll("warn", "提醒")
+    .replaceAll("fail", "未通过");
 }

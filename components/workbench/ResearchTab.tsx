@@ -251,7 +251,7 @@ export function ResearchTab({
       setSourceCardForm(emptySourceCardForm);
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["sector-model", "outline", "drafts", "review", "publish-prep"]);
-      setMessage("资料卡已保存。下游建模、提纲、正文和发布整理可能需要重生成。");
+      setMessage("资料卡已保存。下游建模、提纲、正文、体检和发布包可能需要重生成。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存资料卡失败。");
     } finally {
@@ -276,7 +276,7 @@ export function ResearchTab({
       }
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["sector-model", "outline", "drafts", "review", "publish-prep"]);
-      setMessage("研究清单已保存。下游建模、提纲、正文和发布整理可能需要重生成。");
+      setMessage("研究清单已保存。下游建模、提纲、正文、体检和发布包可能需要重生成。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存研究清单失败。");
     } finally {
@@ -319,7 +319,7 @@ export function ResearchTab({
       }
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["sector-model", "outline", "drafts", "review", "publish-prep"]);
-      setMessage("资料卡已删除。下游建模、提纲、正文和发布整理可能需要重生成。");
+      setMessage("资料卡已删除。下游建模、提纲、正文、体检和发布包可能需要重生成。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "删除资料卡失败。");
     } finally {

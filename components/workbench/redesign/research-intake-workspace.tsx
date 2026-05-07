@@ -169,7 +169,7 @@ export function ResearchIntakeWorkspace({
       }
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["sector-model", "outline", "drafts", "review", "publish-prep"]);
-      setMessage("研究清单已保存。下游建模、提纲、正文和发布整理可能需要重生成。");
+      setMessage("研究清单已保存。下游建模、提纲、正文、体检和发布包可能需要重生成。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存研究清单失败。");
     } finally {
@@ -244,7 +244,7 @@ export function ResearchIntakeWorkspace({
       setSourceCardForm(emptySourceCardForm);
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["sector-model", "outline", "drafts", "review", "publish-prep"]);
-      setMessage("资料卡已保存。下游建模、提纲、正文和发布整理可能需要重生成。");
+      setMessage("资料卡已保存。下游建模、提纲、正文、体检和发布包可能需要重生成。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存资料卡失败。");
     } finally {
@@ -253,10 +253,10 @@ export function ResearchIntakeWorkspace({
   }
 
   return (
-    <section className="redesign-research-intake" aria-label="研究入口">
+    <section className="redesign-research-intake" aria-label="资料沉淀">
       <div className="redesign-research-hero">
         <div className="redesign-research-hero-copy">
-          <span>研究入口</span>
+          <span>资料沉淀</span>
           <h2>{model.projectTitle}</h2>
           <p>{mode === "research-brief" ? "先把研究问题和证据方向定清楚，再进入资料录入。" : "把链接、原文、摘要和证据片段整理成真实资料卡。"}</p>
         </div>
@@ -280,13 +280,19 @@ export function ResearchIntakeWorkspace({
         <ResearchMetric label="引用覆盖" value={model.citationCoverageLabel} detail={`分段 ${model.sectionCoverageLabel}`} />
       </div>
 
-      <div className="redesign-research-tabs" role="tablist" aria-label="研究入口">
-        <button type="button" role="tab" className={mode === "research-brief" ? "active" : ""} aria-selected={mode === "research-brief"} onClick={() => onNavigate("research", "research-brief")}>
-          研究清单
-        </button>
-        <button type="button" role="tab" className={mode === "source-form" ? "active" : ""} aria-selected={mode === "source-form"} onClick={() => onNavigate("research", "source-form")}>
-          资料录入
-        </button>
+      <div className="redesign-research-command" aria-label="当前资料任务">
+        <div>
+          <span>当前任务</span>
+          <strong>{mode === "research-brief" ? "先把研究问题列清楚" : "把资料变成可引用证据"}</strong>
+          <p>
+            {mode === "research-brief"
+              ? "研究清单负责约束后续资料方向：先确认要验证什么，再决定补哪些资料卡。"
+              : "资料录入负责把链接、原文、摘要和证据片段沉淀下来，后续建模和正文只引用这些资料卡。"}
+          </p>
+        </div>
+        <Chip tone={mode === "research-brief" ? (model.hasResearchBrief ? "success" : "warning") : model.sourceCount > 0 ? "success" : "warning"}>
+          {mode === "research-brief" ? (model.hasResearchBrief ? "清单已生成" : "等待研究清单") : model.sourceCount > 0 ? `${model.sourceCount} 张资料卡` : "等待资料卡"}
+        </Chip>
       </div>
 
       {mode === "research-brief" ? (

@@ -139,8 +139,10 @@ export function TaskCenterModal({
         {error ? <p className="task-center-error">{error}</p> : null}
         {failedCount > 0 || runningCount > 0 ? (
           <div className="task-center-guidance">
-            {failedCount > 0 ? <p>{failedCount} 个任务失败。失败任务可以直接重试；如果仍失败，先看任务卡片里的处理建议。</p> : null}
-            {runningCount > 0 ? <p>{runningCount} 个任务运行中。长时间没有进度变化时，优先确认后台 worker 是否还在执行。</p> : null}
+            {failedCount > 0 ? (
+              <p>最近记录里有 {failedCount} 个历史失败任务。失败任务可以直接重试；如果仍失败，先看任务卡片里的处理建议。</p>
+            ) : null}
+            {runningCount > 0 ? <p>{runningCount} 个任务运行中。长时间没有进度变化时，优先确认后台执行器是否还在执行。</p> : null}
           </div>
         ) : null}
 
@@ -164,10 +166,10 @@ export function TaskCenterModal({
                   </div>
                   <p>{job.projectTopic}</p>
                   <small>
-                    {[job.projectStage, formatQueueMeta(job), formatTime(job.createdAt)].filter(Boolean).join(" · ")}
+                    {[getJobStageLabel(job.step), formatQueueMeta(job), formatTime(job.createdAt)].filter(Boolean).join(" · ")}
                   </small>
-                  {job.progressMessage ? <small>{job.progressMessage}</small> : null}
-                  {job.errorMessage ? <small className="task-center-error-text">{job.errorMessage}</small> : null}
+                  {job.progressMessage ? <small>{formatTaskText(job.progressMessage)}</small> : null}
+                  {job.errorMessage ? <small className="task-center-error-text">{formatTaskText(job.errorMessage)}</small> : null}
                   {getJobRecoveryHint(job) ? <small className="task-center-recovery">{getJobRecoveryHint(job)}</small> : null}
                 </div>
                 <div className="task-center-item-actions">
@@ -213,6 +215,18 @@ function getJobRecoveryHint(job: TaskCenterJob) {
     return "";
   }
   const error = (job.errorMessage || "").toLowerCase();
+  if (error.includes("thinkcard") || error.includes("选题判断")) {
+    return "点开当前项目的「选题判断」，补齐主判断、题值理由、读者收益等字段后再重试。";
+  }
+  if (error.includes("stylecore") || error.includes("表达策略")) {
+    return "点开当前项目的「表达策略」，补齐节奏、人物、升维、回环和现实代价后再重试。";
+  }
+  if (error.includes("timeout") || error.includes("aborted")) {
+    if (job.step === "publish-prep") {
+      return "发布包整理已支持规则兜底。可以直接重试；如果模型再次超时，会生成规则兜底版供人工复核。";
+    }
+    return "模型调用超时。可以先重试；如果连续超时，优先缩短输入材料或查看后台日志。";
+  }
   if (error.includes("output") || error.includes("token") || error.includes("too long") || error.includes("过长")) {
     return "模型输出过长。重试前最好压缩输入材料，或先拆小资料/段落。";
   }
@@ -243,12 +257,54 @@ function getStepLabel(step: JobStep) {
     case "drafts":
       return "生成双稿";
     case "review":
-      return "运行 VitalityCheck";
+      return "运行质量检查";
     case "publish-prep":
-      return "生成发布前整理";
+      return "生成发布包";
     default:
       return step;
   }
+}
+
+function getJobStageLabel(step: JobStep) {
+  switch (step) {
+    case "research-brief":
+      return "研究清单";
+    case "source-card-extract":
+    case "source-card-summarize":
+      return "资料整理";
+    case "sector-model":
+      return "板块建模";
+    case "outline":
+      return "论证提纲";
+    case "drafts":
+      return "正文打磨";
+    case "review":
+    case "publish-prep":
+      return "体检发布";
+    default:
+      return formatTaskText(step);
+  }
+}
+
+function formatTaskText(text: string) {
+  return text
+    .replaceAll("The operation was aborted due to timeout", "模型调用超时。")
+    .replaceAll("Operation was aborted due to timeout", "模型调用超时。")
+    .replaceAll("operation was aborted due to timeout", "模型调用超时。")
+    .replaceAll("aborted due to timeout", "模型调用超时。")
+    .replaceAll("AbortError", "请求已超时")
+    .replaceAll("research_brief", "研究清单")
+    .replaceAll("source_card_extract", "链接正文抓取")
+    .replaceAll("source_card_summarize", "资料摘要")
+    .replaceAll("sector_model", "板块建模")
+    .replaceAll("publish_prep", "发布包")
+    .replaceAll("返回的结构化结果不完整", "返回内容不完整")
+    .replaceAll("ThinkCard / HKR", "选题判断")
+    .replaceAll("ThinkCard", "选题判断")
+    .replaceAll("StyleCore", "表达策略")
+    .replaceAll("VitalityCheck", "质量检查")
+    .replaceAll("选题判断 还", "选题判断还")
+    .replaceAll("表达策略 还", "表达策略还");
 }
 
 function formatQueueMeta(job: TaskCenterJob) {

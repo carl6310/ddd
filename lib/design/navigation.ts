@@ -1,50 +1,22 @@
+import { WORKBENCH_FLOW, type WorkbenchFlowId } from "@/lib/workbench/flow-definition";
+
 export const WORKBENCH_NAV_ITEMS = [
   {
-    id: "projects",
-    label: "项目",
-    description: "项目中控台",
+    id: "dashboard",
+    label: "总览",
+    description: "项目驾驶舱",
     disabled: false,
   },
-  {
-    id: "workbench",
-    label: "工作台",
-    description: "写作驾驶舱",
+  ...WORKBENCH_FLOW.map((item) => ({
+    id: item.id,
+    label: item.label,
+    description: item.description,
     disabled: false,
-  },
-  {
-    id: "sources",
-    label: "资料卡",
-    description: "研究资料库",
-    disabled: false,
-  },
-  {
-    id: "outline",
-    label: "提纲",
-    description: "结构编辑器",
-    disabled: false,
-  },
-  {
-    id: "draft",
-    label: "正文",
-    description: "写作编辑器",
-    disabled: false,
-  },
-  {
-    id: "vitality",
-    label: "诊断",
-    description: "内容体检",
-    disabled: false,
-  },
-  {
-    id: "publish",
-    label: "发布",
-    description: "导出中心",
-    disabled: false,
-  },
+  })),
 ] as const;
 
-export type WorkbenchView = (typeof WORKBENCH_NAV_ITEMS)[number]["id"];
+export type WorkbenchView = "dashboard" | WorkbenchFlowId;
 
 export function getWorkbenchViewLabel(view: WorkbenchView) {
-  return WORKBENCH_NAV_ITEMS.find((item) => item.id === view)?.label ?? "工作台";
+  return WORKBENCH_NAV_ITEMS.find((item) => item.id === view)?.label ?? "总览";
 }

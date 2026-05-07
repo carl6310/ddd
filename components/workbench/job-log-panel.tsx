@@ -97,13 +97,13 @@ export function JobLogPanel({
               当前正在执行。全局还有 {queueSummary.queuedCount} 个任务在排队。
             </p>
           ) : null}
-          {job.errorMessage ? <p className="job-toast-error">{job.errorMessage}</p> : null}
+          {job.errorMessage ? <p className="job-toast-error">{formatTaskText(job.errorMessage)}</p> : null}
           {displayMode === "debug" && logs.length > 0 ? (
             <ul className="job-toast-log-list">
               {logs.map((log) => (
                 <li key={log.id} className={`job-toast-log-item job-toast-log-${log.level}`}>
                   <span className="job-toast-log-tag">[{log.level}] {log.code}</span>
-                  <span className="job-toast-log-text">{log.message}</span>
+                  <span className="job-toast-log-text">{formatTaskText(log.message)}</span>
                 </li>
               ))}
             </ul>
@@ -133,9 +133,9 @@ function getStepLabel(step: ProjectJobSummary["step"]) {
     case "drafts":
       return "生成双稿";
     case "review":
-      return "运行 VitalityCheck";
+      return "运行质量检查";
     case "publish-prep":
-      return "生成发布前整理";
+      return "生成发布包";
     default:
       return step;
   }
@@ -143,9 +143,19 @@ function getStepLabel(step: ProjectJobSummary["step"]) {
 
 function getSummaryCopy(job: ProjectJobSummary) {
   if (job.status === "failed") {
-    return job.errorMessage || getStatusCopy(job);
+    return formatTaskText(job.errorMessage || getStatusCopy(job));
   }
-  return job.progressMessage || getStatusCopy(job);
+  return formatTaskText(job.progressMessage || getStatusCopy(job));
+}
+
+function formatTaskText(text: string) {
+  return text
+    .replaceAll("ThinkCard / HKR", "选题判断")
+    .replaceAll("ThinkCard", "选题判断")
+    .replaceAll("StyleCore", "表达策略")
+    .replaceAll("VitalityCheck", "质量检查")
+    .replaceAll("选题判断 还", "选题判断还")
+    .replaceAll("表达策略 还", "表达策略还");
 }
 
 function getStatusCopy(job: ProjectJobSummary) {

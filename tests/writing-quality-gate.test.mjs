@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 
 const { buildWritingQualityGate } = await import("../lib/writing-quality/gate.ts");
 
-test("writing quality gate emits layered gate buckets", () => {
-  const gate = buildWritingQualityGate({
+function baseBundle(patch = {}) {
+  return {
     project: {
       thesis: "塘桥真正的问题不是位置，而是结构。",
     },
@@ -28,6 +28,14 @@ test("writing quality gate emits layered gate buckets", () => {
       narrativeMarkdown: "## 第一段\n这里只是讲了一句，没有引用。",
       editedMarkdown: "",
     },
+    reviewReport: null,
+    publishPackage: null,
+    ...patch,
+  };
+}
+
+test("writing quality gate emits layered gate buckets", () => {
+  const gate = buildWritingQualityGate(baseBundle({
     reviewReport: {
       qualityPyramid: [
         { level: "L2", title: "StructureFlow", status: "warn", summary: "需要继续优化", mustFix: [], shouldFix: ["转场偏弱"], optionalPolish: [] },
@@ -49,11 +57,36 @@ test("writing quality gate emits layered gate buckets", () => {
       ],
       paragraphFlags: [],
     },
-    publishPackage: null,
-  });
+  }));
 
   assert.equal(gate.mode, "soft-block");
   assert.equal(gate.overallStatus, "fail");
   assert.ok(gate.mustFix.length >= 1);
   assert.ok(gate.shouldFix.length >= 1);
+});
+
+test("writing quality gate does not duplicate missing-scene warning after scene check passes", () => {
+  const gate = buildWritingQualityGate(baseBundle({
+    articleDraft: {
+      narrativeMarkdown: "## 第一段\n这里有正文。[SC:sc_a]",
+      editedMarkdown: "",
+    },
+    reviewReport: {
+      qualityPyramid: [
+        { level: "L4", title: "HumanFeel", status: "pass", summary: "已过线", mustFix: [], shouldFix: [], optionalPolish: [] },
+      ],
+      checks: [{ key: "character-scene", title: "人物 / 生活场景", status: "pass", detail: "已过线", evidenceIds: [] }],
+      rewriteIntents: [
+        {
+          targetRange: "paragraph:1",
+          issueType: "missing_scene",
+          whyItFails: "旧段落级提示",
+          suggestedRewriteMode: "补场景",
+        },
+      ],
+      paragraphFlags: [],
+    },
+  }));
+
+  assert.equal(gate.shouldFix.some((item) => item.code === "missing_scene"), false);
 });

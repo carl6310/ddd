@@ -67,10 +67,10 @@ export function WorkbenchWorkspace({
             </div>
             <div className="redesign-focus-actions">
               <Button type="button" variant="secondary" size="sm" onClick={() => onNavigate("overview", "overview-think-card")}>
-                编辑 ThinkCard
+                编辑选题判断
               </Button>
               <Button type="button" variant="secondary" size="sm" onClick={() => onNavigate("overview", "overview-style-core")}>
-                编辑 StyleCore
+                编辑表达策略
               </Button>
             </div>
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ProjectBundle } from "@/lib/types";
+import { ARTICLE_PROTOTYPE_LABELS, TOPIC_READER_PERSONA_LABELS, type ProjectBundle } from "@/lib/types";
 import { getTopicReaderLens } from "@/lib/topic-meta";
 import { canPreparePublish } from "@/lib/workflow";
 import { formatProjectStage } from "@/lib/project-stage-labels";
@@ -18,6 +18,16 @@ import type { WorkbenchInspectorSelection } from "./WorkbenchInspector";
 type OverviewEditorSection = "think-card" | "style-core" | "compatibility" | "vitality";
 type OverviewSurface = "dashboard" | "editor";
 type ReviewRepairGroupId = "must" | "should" | "optional";
+
+const topicVerdictLabels: Record<string, string> = {
+  strong: "值得开题",
+  rework: "需要重构",
+  weak: "暂缓",
+};
+
+const articlePrototypeOptions = Object.entries(ARTICLE_PROTOTYPE_LABELS).map(([value, label]) => ({ value, label }));
+const readerPersonaOptions = Object.entries(TOPIC_READER_PERSONA_LABELS).map(([value, label]) => ({ value, label }));
+const topicVerdictOptions = Object.entries(topicVerdictLabels).map(([value, label]) => ({ value, label }));
 
 interface ReviewRepairTask {
   id: string;
@@ -169,26 +179,26 @@ export function OverviewTab({
     },
     {
       id: "review",
-      label: "5. 运行 VitalityCheck",
+      label: "5. 运行质量检查",
       targetTab: "overview",
       targetSection: "overview-vitality",
       status: hasReview ? "complete" : !hasDrafts ? "blocked" : nextRecommendedStep === "review" ? "current" : "ready",
       disabled: isPending || !hasDrafts,
-      hint: hasReview ? "已更新，结果会在概览里的 VitalityCheck 子页和右侧检查区显示。" : !hasDrafts ? "请先生成双稿。" : "生成后会自动切到概览里的 VitalityCheck 子页。",
+      hint: hasReview ? "已更新，结果会在概览里的质量检查子页和右侧检查区显示。" : !hasDrafts ? "请先生成双稿。" : "生成后会自动切到概览里的质量检查子页。",
       summary: hasReview ? `已生成 ${selectedBundle.reviewReport?.checks.length ?? 0} 条质检检查项。` : "检查结构、证据、风格和作者像度。",
-      resultLabel: "查看 VitalityCheck",
+      resultLabel: "查看质量检查",
       onClick: () => void runProjectStep("review", "质检报告已更新。"),
     },
     {
       id: "publish-prep",
-      label: "6. 生成发布前整理",
+      label: "6. 生成发布包",
       targetTab: "drafts",
       targetSection: "publish-prep",
       status: hasPublishPackage ? "complete" : !canPublish ? "blocked" : nextRecommendedStep === "publish-prep" ? "current" : "ready",
       disabled: isPending || !canPublish,
-      hint: hasPublishPackage ? "已生成，结果在“流转定稿”的发布整理子页里。" : "需要先让 VitalityCheck 过线。",
+      hint: hasPublishPackage ? "已生成，结果在“体检发布”里。" : "需要先让质量检查过线。",
       summary: hasPublishPackage ? `已产出 ${selectedBundle.publishPackage?.titleOptions.length ?? 0} 个标题候选和发布摘要。` : "把过线稿整理成可发布版本。",
-      resultLabel: hasPublishPackage ? "查看发布整理" : undefined,
+      resultLabel: hasPublishPackage ? "查看发布包" : undefined,
       onClick: () => void generatePublishPrep(),
     },
   ];
@@ -372,9 +382,9 @@ export function OverviewTab({
         {surface === "dashboard" ? (
           <Panel className="stack section-panel overview-dashboard-stage">
             <div className="editor-overview-grid">
-              <EditorStatCard label="选题判断" value={`${thinkCardCompletion}/17`} note="ThinkCard 主判断、原型、读者画像、创作锚点和 HKR 已填字段。" />
-              <EditorStatCard label="表达策略" value={`${styleCoreCompletion}/25`} note="StyleCore 风格动作、限制条件、anti-fabrication 和具体性要求目前已填字段。" />
-              <EditorStatCard label="生命力检查" value={`${vitalityIssueCount}`} note="当前未通过的检查项数量。" />
+              <EditorStatCard label="选题判断" value={`${thinkCardCompletion}/17`} note="主判断、原型、读者画像、创作锚点和读者交付已填字段。" />
+              <EditorStatCard label="表达策略" value={`${styleCoreCompletion}/25`} note="风格动作、限制条件、反编造和具体性要求目前已填字段。" />
+              <EditorStatCard label="质量检查" value={`${vitalityIssueCount}`} note="当前未通过的检查项数量。" />
               <EditorStatCard label="写作质量" value={writingQuality.overallScore !== null ? String(writingQuality.overallScore) : "n/a"} note="当前项目的写作质量基线分数。" />
             </div>
             <div className="overview-quick-grid">
@@ -532,7 +542,7 @@ export function OverviewTab({
             表达策略
           </button>
           <button type="button" role="tab" aria-selected={activeEditorSection === "vitality"} className={`section-subnav-button ${activeEditorSection === "vitality" ? "active" : ""}`} onClick={() => setLocalEditorSection("vitality")}>
-            VitalityCheck
+            质量检查
           </button>
           </div>
         ) : null}
@@ -542,13 +552,13 @@ export function OverviewTab({
             <div className="section-panel-header">
               <div className="stack section-header-copy">
                 <h3>选题判断</h3>
-                <p className="subtle">ThinkCard 是这篇文章的主命题来源。</p>
+                <p className="subtle">这里是这篇文章的主命题来源。</p>
               </div>
-              <Chip tone="accent">{selectedBundle.project.thinkCard.topicVerdict}</Chip>
+              <Chip tone="accent">{formatTopicVerdict(selectedBundle.project.thinkCard.topicVerdict)}</Chip>
             </div>
             <div className="editor-overview-grid">
               <EditorStatCard label="完成度" value={`${thinkCardCompletion}/17`} note="先把主判断、原型、读者画像、创作锚点和 HKR 补完整。" />
-              <EditorStatCard label="当前题值" value={selectedBundle.project.thinkCard.topicVerdict} note="`strong / rework / weak` 决定后面是否值得继续往下推。" />
+              <EditorStatCard label="当前题值" value={formatTopicVerdict(selectedBundle.project.thinkCard.topicVerdict)} note="决定这题是否值得继续往下推。" />
               <EditorStatCard label="替代角度" value={String(selectedBundle.project.thinkCard.alternativeAngles.length)} note="保留备选角度，避免正文写到一半才发现命题不成立。" />
             </div>
             <div className="editor-group-grid">
@@ -557,13 +567,13 @@ export function OverviewTab({
                 <TextAreaField label="核心问题" value={selectedBundle.project.coreQuestion} rows={3} onChange={(value) => updateProjectField(setSelectedBundle, { coreQuestion: value })} />
                 <TextAreaField label="素材吃透摘要" value={selectedBundle.project.thinkCard.materialDigest} rows={4} onChange={(value) => updateThinkCardField(setSelectedBundle, { materialDigest: value })} />
                 <TextAreaField label="核心判断" value={selectedBundle.project.thinkCard.coreJudgement} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { coreJudgement: value })} />
-                <SelectField label="文章原型" value={selectedBundle.project.thinkCard.articlePrototype} onChange={(value) => updateThinkCardField(setSelectedBundle, { articlePrototype: value as typeof selectedBundle.project.thinkCard.articlePrototype })} options={["total_judgement", "spatial_segmentation", "buyer_split", "transaction_observation", "decision_service", "risk_deconstruction", "scene_character"]} />
-                <SelectField label="目标读者画像" value={selectedBundle.project.thinkCard.targetReaderPersona} onChange={(value) => updateThinkCardField(setSelectedBundle, { targetReaderPersona: value as typeof selectedBundle.project.thinkCard.targetReaderPersona })} options={["busy_relocator", "improver_buyer", "risk_aware_reader", "local_life_reader"]} />
+                <SelectField label="文章原型" value={selectedBundle.project.thinkCard.articlePrototype} onChange={(value) => updateThinkCardField(setSelectedBundle, { articlePrototype: value as typeof selectedBundle.project.thinkCard.articlePrototype })} options={articlePrototypeOptions} />
+                <SelectField label="目标读者画像" value={selectedBundle.project.thinkCard.targetReaderPersona} onChange={(value) => updateThinkCardField(setSelectedBundle, { targetReaderPersona: value as typeof selectedBundle.project.thinkCard.targetReaderPersona })} options={readerPersonaOptions} />
                 <TextAreaField label="创作锚点" value={selectedBundle.project.thinkCard.creativeAnchor} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { creativeAnchor: value })} />
                 <TextAreaField label="反直觉抓手" value={selectedBundle.project.thinkCard.counterIntuition} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { counterIntuition: value })} />
               </AccordionCard>
               <AccordionCard title="题值判断" description="这里决定这题值不值得继续投入。">
-                <SelectField label="选题值判断" value={selectedBundle.project.thinkCard.topicVerdict} onChange={(value) => updateThinkCardField(setSelectedBundle, { topicVerdict: value as typeof selectedBundle.project.thinkCard.topicVerdict })} options={["strong", "rework", "weak"]} />
+                <SelectField label="选题值判断" value={selectedBundle.project.thinkCard.topicVerdict} onChange={(value) => updateThinkCardField(setSelectedBundle, { topicVerdict: value as typeof selectedBundle.project.thinkCard.topicVerdict })} options={topicVerdictOptions} />
                 <TextAreaField label="值得写 / 不够好的原因" value={selectedBundle.project.thinkCard.verdictReason} rows={4} onChange={(value) => updateThinkCardField(setSelectedBundle, { verdictReason: value })} />
                 <TextAreaField label="改方向建议" value={selectedBundle.project.thinkCard.rewriteSuggestion} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { rewriteSuggestion: value })} />
                 <TextAreaField label="读者收益" value={selectedBundle.project.thinkCard.readerPayoff} rows={3} onChange={(value) => updateThinkCardField(setSelectedBundle, { readerPayoff: value })} />
@@ -616,9 +626,9 @@ export function OverviewTab({
             <div className="section-panel-header">
               <div className="stack section-header-copy">
                 <h3>表达策略</h3>
-                <p className="subtle">StyleCore 是后续提纲、初稿和修稿的写法约束。</p>
+                <p className="subtle">这里是后续提纲、初稿和修稿的写法约束。</p>
               </div>
-              <Chip tone="accent">StyleCore</Chip>
+              <Chip tone="accent">表达策略</Chip>
             </div>
             <div className="editor-overview-grid">
               <EditorStatCard label="完成度" value={`${styleCoreCompletion}/25`} note="先补齐推进、动作资产、作者站位和 anti-fabrication 规则。" />
@@ -700,7 +710,7 @@ export function OverviewTab({
                 <TextAreaField label="现实代价" value={selectedBundle.project.styleCore.costSense} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { costSense: value })} />
                 <TextAreaField label="禁止编造" value={selectedBundle.project.styleCore.forbiddenFabrications.join("\n")} rows={4} onChange={(value) => updateStyleCoreField(setSelectedBundle, { forbiddenFabrications: value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) })} />
                 <TextAreaField label="泛化黑名单" value={selectedBundle.project.styleCore.genericLanguageBlackList.join("\n")} rows={4} onChange={(value) => updateStyleCoreField(setSelectedBundle, { genericLanguageBlackList: value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) })} />
-                <TextAreaField label="Unsupported scene detector" value={selectedBundle.project.styleCore.unsupportedSceneDetector} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { unsupportedSceneDetector: value })} />
+                <TextAreaField label="不可靠场景探测" value={selectedBundle.project.styleCore.unsupportedSceneDetector} rows={3} onChange={(value) => updateStyleCoreField(setSelectedBundle, { unsupportedSceneDetector: value })} />
               </AccordionCard>
             </div>
             <Button type="button" variant="secondary" size="md" onClick={saveProjectFrame} disabled={isPending}>
@@ -726,7 +736,7 @@ export function OverviewTab({
           <Panel className="stack section-panel">
             <div className="section-panel-header">
               <div className="stack section-header-copy">
-                <h3>VitalityCheck</h3>
+                <h3>质量检查</h3>
                 <p className="subtle">你改完正文后，点右侧按钮重新检查，不需要重新生成整套流程。</p>
               </div>
               <div className="action-row">
@@ -747,7 +757,7 @@ export function OverviewTab({
             <div className="editor-overview-grid">
               <EditorStatCard label="总体状态" value={selectedBundle.project.vitalityCheck.overallStatus} note={selectedBundle.project.vitalityCheck.overallVerdict || "还没有总体判断。"} />
               <EditorStatCard label="待修任务" value={String(visibleReviewRepairTasks.length)} note="优先处理必须先修，再看建议修。" />
-              <EditorStatCard label="是否硬阻塞" value={selectedBundle.project.vitalityCheck.hardBlocked ? "是" : "否"} note={selectedBundle.project.vitalityCheck.hardBlocked ? "先不要进发布整理。" : "可以继续润色或进入下一步。"} />
+              <EditorStatCard label="是否硬阻塞" value={selectedBundle.project.vitalityCheck.hardBlocked ? "是" : "否"} note={selectedBundle.project.vitalityCheck.hardBlocked ? "先不要生成发布包。" : "可以继续润色或进入下一步。"} />
             </div>
             <ContainedScrollArea className="vitality-scroll-panel">
               <ReviewRepairList
@@ -818,7 +828,7 @@ function ReviewRepairList({
     {
       id: "must",
       title: "必须先修",
-      description: "会阻止发布整理，或者会让文章判断失真。",
+      description: "会阻止生成发布包，或者会让文章判断失真。",
       emptyText: "没有硬阻塞。",
       tone: "danger",
     },
@@ -842,7 +852,7 @@ function ReviewRepairList({
     return (
       <Card className="vitality-detail-card review-repair-empty-state">
         <h3>修复任务</h3>
-        <p>当前没有需要处理的质检项。可以继续人工润色，或进入发布整理。</p>
+        <p>当前没有需要处理的质检项。可以继续人工润色，或生成发布包。</p>
       </Card>
     );
   }
@@ -925,8 +935,8 @@ function buildReviewRepairTasks(selectedBundle: ProjectBundle): ReviewRepairTask
     tasks.push({
       id: buildRepairTaskId(projectId, "vitality-hard-block", selectedBundle.project.vitalityCheck.overallVerdict),
       group: "must",
-      title: "发布整理被硬阻塞",
-      reason: selectedBundle.project.vitalityCheck.overallVerdict || "当前 VitalityCheck 判定还不能进入发布整理。",
+      title: "发布包被硬阻塞",
+      reason: selectedBundle.project.vitalityCheck.overallVerdict || "当前质量检查判定还不能生成发布包。",
       sourceLabel: "发布门槛",
       locationLabel: "全文",
       targetTab: "overview",
@@ -1397,20 +1407,24 @@ function SelectField({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<string | { value: string; label: string }>;
 }) {
   return (
     <label>
       {label}
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
+          <option key={typeof option === "string" ? option : option.value} value={typeof option === "string" ? option : option.value}>
+            {typeof option === "string" ? option : option.label}
           </option>
         ))}
       </select>
     </label>
   );
+}
+
+function formatTopicVerdict(value: string) {
+  return topicVerdictLabels[value] ?? value;
 }
 
 

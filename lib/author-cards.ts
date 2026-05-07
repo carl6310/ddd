@@ -197,7 +197,7 @@ export function defaultStyleCore(input: {
 export function defaultVitalityCheck(): VitalityCheck {
   return {
     overallStatus: "warn",
-    overallVerdict: "生命力检查尚未运行。",
+    overallVerdict: "质量检查尚未运行。",
     semiBlocked: true,
     hardBlocked: false,
     entries: [
@@ -315,6 +315,8 @@ export function buildCardsFromLegacy(input: {
 }
 
 export function isThinkCardComplete(card: ThinkCard): boolean {
+  const needsRewriteSuggestion = card.topicVerdict !== "strong";
+
   return Boolean(
     card.materialDigest.trim() &&
       card.topicVerdict &&
@@ -330,7 +332,7 @@ export function isThinkCardComplete(card: ThinkCard): boolean {
       card.hkr.happy.trim() &&
       card.hkr.knowledge.trim() &&
       card.hkr.resonance.trim() &&
-      card.rewriteSuggestion.trim() &&
+      (!needsRewriteSuggestion || card.rewriteSuggestion.trim()) &&
       card.aiRole.trim(),
   );
 }
@@ -403,11 +405,17 @@ export function countStyleCoreMissing(core: StyleCore) {
 
 export function getThinkCardGate(card: ThinkCard) {
   if (!isThinkCardComplete(card)) {
-    return { status: "fail" as const, message: "ThinkCard 还没补完整，暂时不能继续。", needsForce: false };
+    if (card.topicVerdict === "rework" && !card.rewriteSuggestion.trim()) {
+      return { status: "fail" as const, message: "需要重做的选题必须先补齐改方向建议。", needsForce: false };
+    }
+    if (card.topicVerdict === "weak" && !card.rewriteSuggestion.trim()) {
+      return { status: "fail" as const, message: "弱选题必须先补齐改方向建议。", needsForce: false };
+    }
+    return { status: "fail" as const, message: "选题判断还没补完整，暂时不能继续。", needsForce: false };
   }
 
   if (card.topicVerdict === "strong") {
-    return { status: "pass" as const, message: "ThinkCard 已过线。", needsForce: false };
+    return { status: "pass" as const, message: "选题判断已过线。", needsForce: false };
   }
 
   if (card.topicVerdict === "rework") {
@@ -432,20 +440,20 @@ export function getThinkCardGate(card: ThinkCard) {
 export function getStyleCoreGate(core: StyleCore, mode: "outline" | "draft") {
   const { missingFields, missingKeyFields } = countStyleCoreMissing(core);
   if (missingFields.length === 0) {
-    return { status: "pass" as const, message: "StyleCore 已过线。", needsForce: false };
+    return { status: "pass" as const, message: "表达策略已过线。", needsForce: false };
   }
 
   if (mode === "draft" && missingKeyFields.length >= 2) {
     return {
       status: "fail" as const,
-      message: `StyleCore 关键项缺失过多：${missingKeyFields.join("、")}。先补齐节奏/人物/升维/回环/代价，再生成正文。`,
+      message: `表达策略关键项缺失过多：${missingKeyFields.join("、")}。先补齐节奏/人物/升维/回环/代价，再生成正文。`,
       needsForce: false,
     };
   }
 
   return {
     status: "warn" as const,
-    message: `StyleCore 还缺这些项：${missingFields.join("、")}。这次可以继续，但建议先补齐。`,
+    message: `表达策略还缺这些项：${missingFields.join("、")}。这次可以继续，但建议先补齐。`,
     needsForce: true,
   };
 }
@@ -510,10 +518,10 @@ export function vitalityStatusFromEntries(entries: VitalityCheckEntry[]): Vitali
   return {
     overallStatus: hardBlocked ? "fail" : hasWarn ? "warn" : "pass",
     overallVerdict: hardBlocked
-      ? "真实性或引用安全还不过线，暂时不能进入发布前整理。"
+      ? "真实性或引用安全还不过线，暂时不能生成发布包。"
       : hasWarn
-        ? "生命力检查给出了若干修改建议。你可以继续润色，也可以按当前稿进入发布前整理。"
-        : "生命力检查已过线，可以进入发布前整理。",
+        ? "质量检查给出了若干修改建议。你可以继续润色，也可以按当前稿生成发布包。"
+        : "质量检查已过线，可以生成发布包。",
     semiBlocked: hardBlocked,
     hardBlocked,
     entries,

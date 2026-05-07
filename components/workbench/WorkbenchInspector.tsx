@@ -4,7 +4,7 @@ import type { ContinuityBeat, OutlineSection, ProjectBundle, ReviewSeverity, Sou
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Panel } from "@/components/ui/surface";
-import { formatProjectStage } from "@/lib/project-stage-labels";
+import { getWorkbenchFlowByProjectStage, getWorkbenchFlowLabel } from "@/lib/workbench/flow-definition";
 import { buildWorkbenchWorkflow, type ActiveTab, type WorkbenchStepPath, type WorkspaceSection } from "./workflow-state";
 import type { WorkbenchDisplayMode } from "./display-mode";
 
@@ -72,7 +72,7 @@ export function WorkbenchInspector({
     selection?.kind === "outline-section" ? selectedBundle.outlineDraft?.sections.find((section) => section.id === selection.sectionId) ?? null : null;
 
   return (
-    <Panel as="aside" className={`status-bar inspector-panel status-bar-${nextAction.tone}`} aria-label="工作台检查器">
+    <Panel as="aside" className={`status-bar inspector-panel status-bar-${nextAction.tone}`} aria-label="流程提示栏">
       {selectedSourceCard ? (
         <InspectorSourceCard
           sourceCard={selectedSourceCard}
@@ -161,7 +161,7 @@ export function WorkbenchInspector({
 
       <div className="status-bar-bottom">
         <div className="status-bar-meta-group">
-          <Chip>{formatProjectStage(selectedBundle.project.stage)}</Chip>
+          <Chip>{getWorkbenchFlowLabel(getWorkbenchFlowByProjectStage(selectedBundle.project.stage))}</Chip>
           <Chip>{activeViewLabel}</Chip>
         </div>
         <div className="status-bar-meta-group">
@@ -230,7 +230,7 @@ function InspectorDraftSection({
           <small>{formatInspectorHealthLabel(healthScore)}</small>
         </div>
         <div>
-          <span>VitalityCheck</span>
+          <span>质量检查</span>
           <Chip tone={getRiskChipTone(vitality.overallStatus)}>{formatInspectorReviewStatus(vitality.overallStatus)}</Chip>
         </div>
       </div>
@@ -241,7 +241,7 @@ function InspectorDraftSection({
       </section>
 
       <section className="inspector-draft-section-card">
-        <span>StyleCore 建议</span>
+        <span>表达策略建议</span>
         <dl className="inspector-draft-style-list">
           <div>
             <dt>表达策略</dt>
@@ -262,7 +262,7 @@ function InspectorDraftSection({
       <InspectorOutlineActionList title="优化建议" emptyLabel="保持当前结构" items={suggestions} />
 
       <section className="inspector-draft-section-card">
-        <span>VitalityCheck 提醒</span>
+        <span>质量检查提醒</span>
         {vitalityIssues.length ? (
           <div className="inspector-draft-vitality-list">
             {vitalityIssues.map((entry) => (

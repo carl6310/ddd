@@ -51,8 +51,8 @@ export const DESIGN_STAGE_DEFINITIONS: DesignStageDefinition[] = [
   },
   {
     stage: "ThinkCard / HKR",
-    label: "ThinkCard",
-    shortLabel: "ThinkCard",
+    label: "选题判断",
+    shortLabel: "判断",
     targetTab: "overview",
     targetSection: "overview-think-card",
     jobSteps: [],
@@ -60,8 +60,8 @@ export const DESIGN_STAGE_DEFINITIONS: DesignStageDefinition[] = [
   },
   {
     stage: "StyleCore",
-    label: "StyleCore",
-    shortLabel: "StyleCore",
+    label: "表达策略",
+    shortLabel: "策略",
     targetTab: "overview",
     targetSection: "overview-style-core",
     jobSteps: [],
@@ -114,7 +114,7 @@ export const DESIGN_STAGE_DEFINITIONS: DesignStageDefinition[] = [
   },
   {
     stage: "VitalityCheck",
-    label: "VitalityCheck",
+    label: "质量检查",
     shortLabel: "质检",
     targetTab: "overview",
     targetSection: "overview-vitality",

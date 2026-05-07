@@ -4,6 +4,7 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import type { DesignCardTone, ProjectDashboardCard, ProjectDashboardViewModel } from "@/lib/design/view-models";
+import { WORKBENCH_FLOW } from "@/lib/workbench/flow-definition";
 import type { ActiveTab, WorkbenchNextAction, WorkbenchStepPath, WorkspaceSection } from "../workflow-state";
 
 type DashboardFilter = "all" | "active" | "review" | "done";
@@ -57,12 +58,12 @@ export function ProjectDashboard({
   const hasMoreProjects = visibleProjectCards.length < projectCards.length;
 
   return (
-    <section className="redesign-project-dashboard" aria-label="项目中控台">
+    <section className="redesign-project-dashboard" aria-label="项目总览">
       <div className="project-dashboard-head">
         <div>
-          <span className="project-dashboard-kicker">项目</span>
-          <h2>项目</h2>
-          <p>管理你的研究与写作项目，洞察进度、把控资料与结构状态。</p>
+          <span className="project-dashboard-kicker">总览</span>
+          <h2>项目总览</h2>
+          <p>管理文章项目，查看当前进度、资料状态和下一步。</p>
         </div>
         <div className="project-dashboard-head-actions">
           <Button type="button" variant="secondary" onClick={onCocreateTopic}>
@@ -183,6 +184,7 @@ function CurrentProjectPanel({
             <span />
           </span>
         </div>
+        <DashboardFlowStrip stageIndex={currentProject.stageIndex} />
         <div className="project-feature-stats" aria-label="当前项目指标">
           <MetricPill label="资料卡" value={`${model.currentStatus.sourceCount}`} />
           <MetricPill label="字数" value={model.currentStatus.draftCharacters.toLocaleString("zh-CN")} />
@@ -197,10 +199,27 @@ function CurrentProjectPanel({
           查看资料
         </Button>
         <Button type="button" variant="secondary" onClick={() => onNavigate("publish", "publish-prep")}>
-          发布整理
+          体检发布
         </Button>
       </div>
     </section>
+  );
+}
+
+function DashboardFlowStrip({ stageIndex }: { stageIndex: number }) {
+  return (
+    <ol className="project-flow-strip" aria-label="文章生产流进度">
+      {WORKBENCH_FLOW.map((step, index) => {
+        const position = index + 1;
+        const status = position < stageIndex ? "complete" : position === stageIndex ? "current" : "pending";
+        return (
+          <li className={`project-flow-step is-${status}`} key={step.id}>
+            <span>{position}</span>
+            <strong>{step.shortLabel}</strong>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

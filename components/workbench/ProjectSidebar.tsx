@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ARTICLE_PROTOTYPE_LABELS,
   TOPIC_READER_PERSONA_LABELS,
   TOPIC_ANGLE_TYPE_LABELS,
   type ArticleProject,
-  type ProjectBundle,
   type PreSourceCard,
   type SignalProviderMode,
   type TopicAngle,
@@ -23,15 +22,15 @@ import { ContainedScrollArea } from "@/components/ui/contained-scroll-area";
 import { Modal } from "@/components/ui/modal";
 import { Card, Panel } from "@/components/ui/surface";
 import { WORKBENCH_NAV_ITEMS, type WorkbenchView } from "@/lib/design/navigation";
-import { formatProjectStage } from "@/lib/project-stage-labels";
+import { getWorkbenchFlowByProjectStage, getWorkbenchFlowLabel } from "@/lib/workbench/flow-definition";
 import { filterAnglesByType } from "@/lib/topic-cocreate-postprocess";
 import { extractUrls } from "@/lib/utils";
 import type { WorkbenchDisplayMode } from "./display-mode";
+import type { WorkbenchWorkflowStep } from "./workflow-state";
 
 interface ProjectSidebarProps {
   projects: ArticleProject[];
   selectedProjectId: string;
-  selectedBundle: ProjectBundle | null;
   setSelectedProjectId: (id: string) => void;
   isPending: boolean;
   setIsPending: (pending: boolean) => void;
@@ -40,6 +39,7 @@ interface ProjectSidebarProps {
   sampleDigest: string;
   displayMode: WorkbenchDisplayMode;
   activeView: WorkbenchView;
+  workflowSteps: WorkbenchWorkflowStep[];
   onViewChange: (view: WorkbenchView) => void;
   actionRequest?: ProjectSidebarActionRequest | null;
 }
@@ -61,7 +61,6 @@ const deepSignalModeOptions: Array<{ value: SignalProviderMode; label: string; t
 export function ProjectSidebar({
   projects,
   selectedProjectId,
-  selectedBundle,
   setSelectedProjectId,
   isPending,
   setIsPending,
@@ -70,6 +69,7 @@ export function ProjectSidebar({
   sampleDigest,
   displayMode,
   activeView,
+  workflowSteps,
   onViewChange,
   actionRequest,
 }: ProjectSidebarProps) {
@@ -137,6 +137,8 @@ export function ProjectSidebar({
     () => coCreationPreSourceCards.filter((card) => card.extractStatus === "ready").length,
     [coCreationPreSourceCards],
   );
+  const dashboardItem = WORKBENCH_NAV_ITEMS.find((item) => item.id === "dashboard");
+  const flowNavItems = WORKBENCH_NAV_ITEMS.filter((item) => item.id !== "dashboard");
 
   useEffect(() => {
     if (!actionRequest) {
@@ -495,48 +497,83 @@ export function ProjectSidebar({
     <>
       <Panel as="aside" className="sidebar">
         <Card as="section" className="stack sidebar-card">
-          <nav className="sidebar-nav" aria-label="工作台导航">
-            {WORKBENCH_NAV_ITEMS.map((item) => (
+          <section className="sidebar-project-list" aria-label="项目列表">
+            <div className="sidebar-section-head">
+              <span>项目列表</span>
+              <button type="button" onClick={() => setOpenModal("create")}>
+                新建
+              </button>
+            </div>
+            <div className="sidebar-project-list-body">
+              {visibleProjects.slice(0, 5).map((project) => (
+                <button
+                  key={project.id}
+                  className={`sidebar-project-button ${project.id === selectedProjectId ? "active" : ""}`}
+                  onClick={() => setSelectedProjectId(project.id)}
+                  title={project.topic}
+                  type="button"
+                >
+                  <strong>{project.topic}</strong>
+                  <span>{formatProjectFlowStage(project.stage)}</span>
+                </button>
+              ))}
+              {projects.length === 0 ? <p className="empty-inline">还没有项目，请新建项目。</p> : null}
+              {projects.length > 0 && visibleProjects.length === 0 ? <p className="empty-inline">没有匹配项目。</p> : null}
+            </div>
+          </section>
+
+          <nav className="sidebar-nav" aria-label="文章生产流">
+            {dashboardItem ? (
               <button
                 type="button"
-                className={`sidebar-nav-item ${activeView === item.id ? "active" : ""}`}
-                key={item.id}
-                onClick={() => onViewChange(item.id)}
-                disabled={item.disabled}
-                aria-current={activeView === item.id ? "page" : undefined}
+                className={`sidebar-nav-item sidebar-dashboard-item ${activeView === dashboardItem.id ? "active" : ""}`}
+                onClick={() => onViewChange(dashboardItem.id)}
+                aria-current={activeView === dashboardItem.id ? "page" : undefined}
               >
                 <span className="sidebar-nav-icon" aria-hidden="true">
-                  {getWorkbenchNavIcon(item.id)}
+                  {getWorkbenchNavIcon(dashboardItem.id)}
                 </span>
                 <span className="sidebar-nav-copy">
-                  <span>{item.label}</span>
-                  <small>{item.description}</small>
+                  <span>{dashboardItem.label}</span>
+                  <small>{dashboardItem.description}</small>
                 </span>
               </button>
-            ))}
-          </nav>
+            ) : null}
 
-          <div className="sidebar-project-progress" aria-label="当前项目进度">
-            <span>当前项目进度</span>
-            <div className="sidebar-progress-ring" style={{ "--progress": `${getProjectProgressPercent(selectedBundle)}%` } as CSSProperties}>
-              <strong>{getProjectProgressPercent(selectedBundle)}%</strong>
+            <div className="sidebar-flow-list">
+              {flowNavItems.map((item, index) => (
+                <button
+                  type="button"
+                  className={`sidebar-nav-item sidebar-flow-item sidebar-flow-${getWorkflowStepStatus(workflowSteps, item.id)} ${activeView === item.id ? "active" : ""}`}
+                  key={item.id}
+                  onClick={() => onViewChange(item.id)}
+                  disabled={item.disabled}
+                  aria-current={activeView === item.id ? "page" : undefined}
+                >
+                  <span className="sidebar-nav-icon" aria-hidden="true">
+                    {index + 1}
+                  </span>
+                  <span className="sidebar-nav-copy">
+                    <span>{item.label}</span>
+                    <small>{getWorkflowStepStatusLabel(workflowSteps, item.id) || item.description}</small>
+                  </span>
+                </button>
+              ))}
             </div>
-            <strong className="sidebar-progress-steps">{getProjectProgressSteps(selectedBundle)}/{getProjectProgressTotal()} 步骤</strong>
-            <button type="button" onClick={() => onViewChange("workbench")}>查看详情</button>
-          </div>
+          </nav>
 
           <details className="mobile-project-switcher">
             <summary>
               <span>当前项目</span>
               <strong>{selectedProject?.topic ?? "还没有选择项目"}</strong>
-              <small>{selectedProject ? `${selectedProject.articleType} · ${formatProjectStage(selectedProject.stage)}` : "先新建或选择一个项目"}</small>
+              <small>{selectedProject ? `${selectedProject.articleType} · ${formatProjectFlowStage(selectedProject.stage)}` : "先新建或选择一个项目"}</small>
             </summary>
             <div className="project-list-tools">
               <input
                 className="project-list-search"
                 value={projectSearch}
                 onChange={(event) => setProjectSearch(event.target.value)}
-                placeholder="搜索项目、阶段、受众"
+                placeholder="搜索项目、流程、受众"
                 aria-label="搜索项目"
               />
               {hiddenTestProjectCount > 0 ? (
@@ -562,7 +599,7 @@ export function ProjectSidebar({
                     <strong className="project-item-title">{project.topic}</strong>
                     <div className="project-item-meta">
                       <small>{project.articleType}</small>
-                      <span className="project-stage-pill">{formatProjectStage(project.stage)}</span>
+                      <span className="project-stage-pill">{formatProjectFlowStage(project.stage)}</span>
                     </div>
                   </button>
               ))}
@@ -780,7 +817,7 @@ export function ProjectSidebar({
 
             <details className="cocreation-coverage cocreation-collapsible">
               <summary className="cocreation-summary-row">
-                <span>诊断与材料</span>
+                <span>信号与材料</span>
                 <small className="cocreation-summary-meta">
                   资料 {coCreationPreSourceCards.length} · 信号 {coCreationSignalBrief?.signals.length ?? 0} · 覆盖 {coCreationResult?.coverageSummary.includedTypes.length ?? 0}
                 </small>
@@ -902,18 +939,18 @@ export function ProjectSidebar({
 
 function getWorkbenchNavIcon(view: WorkbenchView) {
   switch (view) {
-    case "projects":
+    case "dashboard":
       return "▰";
-    case "workbench":
+    case "judgement":
       return "◆";
-    case "sources":
+    case "evidence":
       return "▣";
+    case "model":
+      return "▥";
     case "outline":
       return "☷";
     case "draft":
       return "▤";
-    case "vitality":
-      return "⌁";
     case "publish":
       return "↗";
     default:
@@ -921,37 +958,34 @@ function getWorkbenchNavIcon(view: WorkbenchView) {
   }
 }
 
-function getProjectProgressItems(bundle: ProjectBundle | null) {
-  if (!bundle) {
-    return [];
+function getWorkflowStepStatus(steps: WorkbenchWorkflowStep[], view: WorkbenchView) {
+  if (view === "dashboard") {
+    return "current";
   }
-  return [
-    Boolean(bundle.project.topic && bundle.project.coreQuestion),
-    Boolean(bundle.project.thinkCard.coreJudgement && bundle.project.thinkCard.verdictReason),
-    Boolean(bundle.project.styleCore.rhythm && bundle.project.styleCore.judgement),
-    Boolean(bundle.researchBrief),
-    bundle.sourceCards.length > 0,
-    Boolean(bundle.sectorModel),
-    Boolean(bundle.outlineDraft?.sections.length),
-    Boolean(bundle.articleDraft),
-    Boolean(bundle.reviewReport),
-    Boolean(bundle.publishPackage),
-  ];
+  return steps.find((step) => step.id === view)?.status ?? "pending";
 }
 
-function getProjectProgressSteps(bundle: ProjectBundle | null) {
-  return getProjectProgressItems(bundle).filter(Boolean).length;
-}
-
-function getProjectProgressTotal() {
-  return 10;
-}
-
-function getProjectProgressPercent(bundle: ProjectBundle | null) {
-  if (!bundle) {
-    return 0;
+function getWorkflowStepStatusLabel(steps: WorkbenchWorkflowStep[], view: WorkbenchView) {
+  if (view === "dashboard") {
+    return "";
   }
-  return Math.round((getProjectProgressSteps(bundle) / getProjectProgressTotal()) * 100);
+  const step = steps.find((item) => item.id === view);
+  if (!step) {
+    return "";
+  }
+  switch (step.status) {
+    case "complete":
+      return "已完成";
+    case "current":
+      return "当前步骤";
+    case "blocked":
+      return "未解锁";
+    case "stale":
+      return "需更新";
+    case "pending":
+    default:
+      return "待推进";
+  }
 }
 
 function TopicAngleListItem({
@@ -1132,6 +1166,7 @@ function matchesProjectSearch(project: ArticleProject, query: string) {
     project.audience,
     project.articleType,
     project.stage,
+    formatProjectFlowStage(project.stage),
     project.thesis,
     project.coreQuestion,
     project.notes,
@@ -1139,6 +1174,10 @@ function matchesProjectSearch(project: ArticleProject, query: string) {
     .join(" ")
     .toLowerCase()
     .includes(normalizedQuery);
+}
+
+function formatProjectFlowStage(stage: ArticleProject["stage"]) {
+  return getWorkbenchFlowLabel(getWorkbenchFlowByProjectStage(stage));
 }
 
 function splitLines(value: string) {

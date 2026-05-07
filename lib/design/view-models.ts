@@ -5,13 +5,12 @@ import { analyzeEvidenceCoverage } from "@/lib/evidence/coverage";
 import { canPreparePublish, getResearchGaps } from "@/lib/workflow";
 import {
   buildDesignStageItems,
-  DESIGN_STAGE_DEFINITIONS,
   type DesignActiveTab,
   type DesignStageItem,
   type DesignStaleArtifact,
   type DesignWorkspaceSection,
 } from "./stages";
-import { formatProjectStage } from "@/lib/project-stage-labels";
+import { WORKBENCH_FLOW, getWorkbenchFlowByProjectStage, getWorkbenchFlowLabel, type WorkbenchFlowId } from "@/lib/workbench/flow-definition";
 
 type JobSummary = {
   step: string;
@@ -350,6 +349,7 @@ export interface DraftEditorViewModel {
   hasDraft: boolean;
   canGenerateDraft: boolean;
   canReview: boolean;
+  currentMarkdown: string;
   editedMarkdown: string;
   narrativeMarkdown: string;
   analysisMarkdown: string;
@@ -648,7 +648,7 @@ export function buildProjectDashboardViewModel({
   const outlineSectionCount = selectedBundle.outlineDraft?.sections.length ?? 0;
   const draftCharacters = countDraftCharacters(selectedBundle);
   const stageProgress = getProjectStageProgress(selectedBundle.project.stage);
-  const stageTotal = DESIGN_STAGE_DEFINITIONS.length;
+  const stageTotal = WORKBENCH_FLOW.length;
   const progressPercent = Math.round((stageProgress / stageTotal) * 100);
   const evidence = analyzeEvidenceCoverage(selectedBundle);
   const citationCoverageLabel = formatPercent(evidence.summary.citationCoverage);
@@ -872,7 +872,8 @@ export function buildOutlineEditorViewModel(selectedBundle: ProjectBundle): Outl
 
 export function buildDraftEditorViewModel(selectedBundle: ProjectBundle): DraftEditorViewModel {
   const draft = selectedBundle.articleDraft;
-  const primaryMarkdown = draft?.editedMarkdown || draft?.narrativeMarkdown || draft?.analysisMarkdown || "";
+  const currentMarkdown = selectedBundle.publishPackage?.finalMarkdown || draft?.editedMarkdown || draft?.narrativeMarkdown || draft?.analysisMarkdown || "";
+  const primaryMarkdown = currentMarkdown;
   const styleCore = selectedBundle.project.styleCore;
   const vitality = selectedBundle.project.vitalityCheck;
 
@@ -881,6 +882,7 @@ export function buildDraftEditorViewModel(selectedBundle: ProjectBundle): DraftE
     hasDraft: Boolean(draft),
     canGenerateDraft: Boolean(selectedBundle.outlineDraft && selectedBundle.sectorModel && selectedBundle.sourceCards.length > 0),
     canReview: Boolean(draft),
+    currentMarkdown,
     editedMarkdown: draft?.editedMarkdown ?? "",
     narrativeMarkdown: draft?.narrativeMarkdown ?? "",
     analysisMarkdown: draft?.analysisMarkdown ?? "",
@@ -912,7 +914,7 @@ export function buildDraftEditorViewModel(selectedBundle: ProjectBundle): DraftE
     vitality: {
       statusLabel: formatReviewStatus(vitality.overallStatus),
       tone: reviewStatusToTone(vitality.overallStatus),
-      verdict: vitality.overallVerdict || "正文生成后再运行 VitalityCheck。",
+      verdict: formatUserFacingWorkflowText(vitality.overallVerdict || "正文生成后再运行质量检查。"),
       issueCount: vitality.entries.filter((entry) => entry.status !== "pass").length,
     },
     reviewIssues: buildDraftReviewIssues(selectedBundle),
@@ -998,7 +1000,7 @@ export function buildJudgementWorkspaceViewModel(selectedBundle: ProjectBundle):
     vitality: {
       statusLabel: formatReviewStatus(vitality.overallStatus),
       tone: reviewStatusToTone(vitality.overallStatus),
-      verdict: vitality.overallVerdict || "正文生成后再运行 VitalityCheck。",
+      verdict: formatUserFacingWorkflowText(vitality.overallVerdict || "正文生成后再运行质量检查。"),
       issueCount: vitality.entries.filter((entry) => entry.status !== "pass").length,
       hardBlocked: vitality.hardBlocked,
       canRunReview: Boolean(selectedBundle.articleDraft),
@@ -1041,9 +1043,9 @@ export function buildJudgementWorkspaceViewModel(selectedBundle: ProjectBundle):
     qualityPyramid:
       selectedBundle.reviewReport?.qualityPyramid.map((layer) => ({
         level: layer.level,
-        title: layer.title,
+        title: formatUserFacingWorkflowText(layer.title),
         statusLabel: formatReviewStatus(layer.status),
-        summary: layer.summary,
+        summary: formatUserFacingWorkflowText(layer.summary),
         tone: reviewStatusToTone(layer.status),
       })) ?? [],
     issues: buildJudgementIssues(selectedBundle),
@@ -1119,7 +1121,7 @@ export function buildCompatibilityWorkspaceViewModel(selectedBundle: ProjectBund
     projectTitle: project.topic || "未命名项目",
     summary:
       differenceCount > 0
-        ? "兼容层和当前判断核心有差异。保存 ThinkCard / StyleCore 后，仓储层会重新派生旧字段。"
+        ? "兼容层和当前判断核心有差异。保存选题判断 / 表达策略后，仓储层会重新派生旧字段。"
         : missingCount > 0
           ? "兼容层仍有空字段，但当前主工作流可以继续使用新的判断核心。"
           : "旧兼容层已和当前判断核心保持对齐。",
@@ -1155,8 +1157,8 @@ export function buildPublishCenterViewModel(selectedBundle: ProjectBundle): Publ
     statusTone: reviewStatusToTone(status),
     statusDetail:
       qualityGate?.mustFix[0]?.detail ||
-      vitality.overallVerdict ||
-      (hasReview ? "发布前检查已完成，可以根据检查结果推进整理。" : "正文完成后先运行 VitalityCheck。"),
+      formatUserFacingWorkflowText(vitality.overallVerdict) ||
+      (hasReview ? "发布前检查已完成，可以根据检查结果推进整理。" : "正文完成后先运行质量检查。"),
     gateModeLabel: qualityGate ? formatQualityGateMode(qualityGate.mode) : "等待发布包",
     previewLabel: publishPackage ? "发布包最终稿" : draft ? "正文草稿预览" : "等待正文",
     previewMarkdown,
@@ -1168,9 +1170,9 @@ export function buildPublishCenterViewModel(selectedBundle: ProjectBundle): Publ
     qualityPyramid:
       selectedBundle.reviewReport?.qualityPyramid.map((layer) => ({
         level: layer.level,
-        title: layer.title,
+        title: formatUserFacingWorkflowText(layer.title),
         statusLabel: formatReviewStatus(layer.status),
-        summary: layer.summary,
+        summary: formatUserFacingWorkflowText(layer.summary),
         tone: reviewStatusToTone(layer.status),
       })) ?? [],
     exportOptions: [
@@ -1772,7 +1774,7 @@ function buildPublishCenterChecklist(selectedBundle: ProjectBundle): PublishCent
     },
     {
       id: "review",
-      label: selectedBundle.reviewReport ? "VitalityCheck 已运行" : "先运行 VitalityCheck",
+      label: selectedBundle.reviewReport ? "质量检查已运行" : "先运行质量检查",
       tone: selectedBundle.reviewReport ? "success" : "warning",
     },
     {
@@ -1841,7 +1843,7 @@ function buildJudgementIssues(selectedBundle: ProjectBundle): JudgementWorkspace
       title: entry.title,
       detail: entry.detail,
       tone: reviewStatusToTone(entry.status),
-      sourceLabel: "VitalityCheck",
+      sourceLabel: "质量检查",
     });
   }
 
@@ -1921,16 +1923,16 @@ function formatArgumentShape(shape: string) {
 
 function buildProjectDashboardCard(project: ArticleProject, selectedProjectId: string): ProjectDashboardCard {
   const stageIndex = getProjectStageProgress(project.stage);
-  const progressPercent = Math.round((stageIndex / DESIGN_STAGE_DEFINITIONS.length) * 100);
+  const progressPercent = Math.round((stageIndex / WORKBENCH_FLOW.length) * 100);
 
   return {
     id: project.id,
     title: project.topic || "未命名项目",
     subtitle: [project.articleType, project.audience].filter(Boolean).join(" / "),
     summary: project.coreQuestion || project.thesis || project.notes || "这个项目还缺一个可推进的核心问题。",
-    stageLabel: formatProjectStage(project.stage),
+    stageLabel: getWorkbenchFlowLabel(getWorkbenchFlowByProjectStage(project.stage)),
     stageIndex,
-    progressLabel: `${stageIndex}/${DESIGN_STAGE_DEFINITIONS.length}`,
+    progressLabel: `${stageIndex}/${WORKBENCH_FLOW.length}`,
     progressPercent,
     updatedAtLabel: formatUpdatedAt(project.updatedAt),
     tone: getProjectCardTone(project.stage),
@@ -1939,31 +1941,33 @@ function buildProjectDashboardCard(project: ArticleProject, selectedProjectId: s
 }
 
 function buildStageDistribution(projects: ArticleProject[]) {
-  const counts = new Map<ProjectStage, number>();
+  const counts = new Map<WorkbenchFlowId, number>();
   for (const project of projects) {
-    counts.set(project.stage, (counts.get(project.stage) ?? 0) + 1);
+    const flowId = getWorkbenchFlowByProjectStage(project.stage);
+    counts.set(flowId, (counts.get(flowId) ?? 0) + 1);
   }
 
-  return DESIGN_STAGE_DEFINITIONS.map((definition) => ({
-    label: definition.shortLabel,
-    count: counts.get(definition.stage) ?? 0,
+  return WORKBENCH_FLOW.map((item) => ({
+    label: item.shortLabel,
+    count: counts.get(item.id) ?? 0,
   })).filter((item) => item.count > 0);
 }
 
 function getProjectStageProgress(stage: ProjectStage) {
-  const index = DESIGN_STAGE_DEFINITIONS.findIndex((definition) => definition.stage === stage);
+  const flowId = getWorkbenchFlowByProjectStage(stage);
+  const index = WORKBENCH_FLOW.findIndex((item) => item.id === flowId);
   return index === -1 ? 1 : index + 1;
 }
 
 function getProjectCardTone(stage: ProjectStage): DesignCardTone {
   const progress = getProjectStageProgress(stage);
-  if (progress >= 9) {
+  if (progress >= WORKBENCH_FLOW.length) {
     return "success";
   }
-  if (progress >= 6) {
+  if (progress >= 5) {
     return "accent";
   }
-  if (progress >= 4) {
+  if (progress >= 3) {
     return "warning";
   }
   return "neutral";
@@ -2010,19 +2014,22 @@ function formatQualityLabel(score: number) {
 
 function getPageTitle(activeView: WorkbenchView) {
   switch (activeView) {
-    case "projects":
-      return "项目中控台";
-    case "sources":
-      return "研究资料库";
+    case "dashboard":
+      return "项目总览";
+    case "judgement":
+      return "选题判断";
+    case "evidence":
+      return "资料沉淀";
+    case "model":
+      return "板块建模";
     case "outline":
-      return "结构编辑器";
+      return "论证提纲";
     case "draft":
-      return "写作编辑器";
+      return "正文打磨";
     case "publish":
-      return "发布中心";
-    case "workbench":
+      return "体检发布";
     default:
-      return "写作驾驶舱";
+      return "文章生产线";
   }
 }
 
@@ -2048,7 +2055,7 @@ function getProjectHealth(selectedBundle: ProjectBundle, staleArtifacts: DesignS
   if (vitalityStatus === "fail") {
     return {
       label: "有硬伤",
-      detail: selectedBundle.project.vitalityCheck.overallVerdict || "VitalityCheck 未通过。",
+      detail: formatUserFacingWorkflowText(selectedBundle.project.vitalityCheck.overallVerdict) || "质量检查未通过。",
       tone: "danger" as const,
     };
   }
@@ -2084,7 +2091,7 @@ function buildCoreCards(selectedBundle: ProjectBundle): DesignCoreCard[] {
     {
       id: "think-card",
       eyebrow: "选题判断",
-      title: "ThinkCard",
+      title: "选题判断",
       statusLabel: isThinkReady ? "已形成" : "待补齐",
       tone: isThinkReady ? "success" : "warning",
       body: thinkCard.coreJudgement || selectedBundle.project.thesis || "先把核心判断、题值理由和读者收获补齐。",
@@ -2095,7 +2102,7 @@ function buildCoreCards(selectedBundle: ProjectBundle): DesignCoreCard[] {
     {
       id: "style-core",
       eyebrow: "表达策略",
-      title: "StyleCore",
+      title: "表达策略",
       statusLabel: isStyleReady ? "已形成" : "待补齐",
       tone: isStyleReady ? "success" : "warning",
       body: styleCore.judgement || styleCore.personalView || "先定义节奏、断句、知识落点和作者立场。",
@@ -2106,10 +2113,10 @@ function buildCoreCards(selectedBundle: ProjectBundle): DesignCoreCard[] {
     {
       id: "vitality-check",
       eyebrow: "发布前质检",
-      title: "VitalityCheck",
+      title: "质量检查",
       statusLabel: formatReviewStatus(vitality.overallStatus),
       tone: reviewStatusToTone(vitality.overallStatus),
-      body: vitality.overallVerdict || "正文生成后再运行质量检查。",
+      body: formatUserFacingWorkflowText(vitality.overallVerdict || "正文生成后再运行体检。"),
       detail: vitality.entries.filter((entry) => entry.status !== "pass")[0]?.detail || "检查连续性、证据、论证和发布风险。",
       targetTab: "overview",
       targetSection: "overview-vitality",
@@ -2198,7 +2205,7 @@ function buildWorkspaceLanes(selectedBundle: ProjectBundle): DesignWorkspaceLane
       title: "正文生产",
       statusLabel: selectedBundle.articleDraft ? "有正文" : "未生成",
       body: selectedBundle.articleDraft ? `${draftCharacters} 字正文内容` : "正文双稿还没有生成。",
-      detail: selectedBundle.articleDraft ? "可以进入正文编辑，或先运行 VitalityCheck。" : "提纲完成后再生成分析版和成文版。",
+      detail: selectedBundle.articleDraft ? "可以进入正文编辑，或先运行质量检查。" : "提纲完成后再生成分析版和成文版。",
       tone: selectedBundle.articleDraft ? "success" : "neutral",
       targetTab: "drafts",
       targetSection: "drafts",
@@ -2210,8 +2217,8 @@ function buildWorkspaceLanes(selectedBundle: ProjectBundle): DesignWorkspaceLane
       body: selectedBundle.publishPackage
         ? `${selectedBundle.publishPackage.titleOptions.length} 个标题候选`
         : selectedBundle.reviewReport
-          ? "质检报告已生成，等待发布整理。"
-          : "还没有运行发布前质量检查。",
+          ? "体检报告已生成，等待发布包。"
+          : "还没有运行发布前体检。",
       detail: selectedBundle.project.vitalityCheck.overallVerdict || "Markdown 导出已保留，其他发布形态仍是规划中。",
       tone: selectedBundle.publishPackage ? "success" : selectedBundle.reviewReport ? reviewStatusToTone(selectedBundle.project.vitalityCheck.overallStatus) : "warning",
       targetTab: selectedBundle.reviewReport ? "publish" : "overview",
@@ -2268,7 +2275,7 @@ function buildWorkspaceRisks(selectedBundle: ProjectBundle, staleArtifacts: Desi
     risks.push({
       id: "vitality-issues",
       label: "质检",
-      title: `${vitalityIssues.length} 个 VitalityCheck 提醒`,
+      title: `${vitalityIssues.length} 个质量检查提醒`,
       detail: vitalityIssues[0]?.detail || "需要查看质检项。",
       tone: reviewStatusToTone(selectedBundle.project.vitalityCheck.overallStatus),
       targetTab: "overview",
@@ -2311,6 +2318,19 @@ function formatUpdatedAt(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatUserFacingWorkflowText(text: string) {
+  return text
+    .replaceAll("ThinkCard / HKR", "选题判断")
+    .replaceAll("ThinkCard", "选题判断")
+    .replaceAll("StyleCore", "表达策略")
+    .replaceAll("VitalityCheck", "质量检查")
+    .replaceAll("生命力检查", "质量检查")
+    .replaceAll("WritingLint", "写作硬伤")
+    .replaceAll("StructureFlow", "结构推进")
+    .replaceAll("ContentDepth", "内容深度")
+    .replaceAll("HumanFeel", "人感");
 }
 
 function formatReviewStatus(status: ReviewSeverity) {

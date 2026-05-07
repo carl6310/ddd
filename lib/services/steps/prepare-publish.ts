@@ -1,5 +1,6 @@
 import { buildStyleReference, getArticleDraft, getOutlineDraft, getProject, getResearchBrief, getReviewReport, getSectorModel, listSourceCards, savePublishPackage, updateProject } from "@/lib/repository";
 import { runStructuredTask } from "@/lib/llm";
+import { buildPublishPackage } from "@/lib/publish";
 import { canPreparePublish } from "@/lib/workflow";
 import type { PublishPackage, WritingQualityGateResult } from "@/lib/types";
 import type { JobExecutionContext } from "@/lib/jobs/types";
@@ -9,7 +10,7 @@ import { buildWritingQualityGate } from "@/lib/writing-quality/gate";
 export async function preparePublishStep(input: { projectId: string; context: JobExecutionContext }) {
   const { projectId, context } = input;
 
-  context.setProgress("loading_bundle", "正在读取发布前整理材料。");
+  context.setProgress("loading_bundle", "正在读取发布包材料。");
   const project = getProject(projectId);
   if (!project) {
     throw new JobError("project_missing", "项目不存在。");
@@ -17,7 +18,7 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
 
   const reviewReport = getReviewReport(projectId);
   if (!canPreparePublish(reviewReport, project.vitalityCheck)) {
-    throw new JobError("gate_failed", "生命力检查还没过线，暂时不能生成发布前整理稿。");
+    throw new JobError("gate_failed", "质量检查还没过线，暂时不能生成发布包。");
   }
 
   const articleDraft = getArticleDraft(projectId);
@@ -28,7 +29,7 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
   if (!articleDraft) {
     throw new JobError("missing_draft", "请先生成正文。");
   }
-  context.log("info", "bundle_loaded", "已读取发布前整理材料。", {
+  context.log("info", "bundle_loaded", "已读取发布包材料。", {
     hasReviewReport: Boolean(reviewReport),
     hasOutlineDraft: Boolean(outlineDraft),
   });
@@ -54,25 +55,37 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
   });
   assertPublishQualityGateAllowsPrepare(qualityGate, context);
 
-  context.setProgress("calling_llm", "正在生成发布前整理。");
-  const publishPackage = await runStructuredTask<PublishPackage>(
-    "publish_prep",
-    {
-      project,
-      finalMarkdown,
-      sectorModel,
-      outlineDraft,
-      deterministicReview: reviewReport,
-      styleReference: buildStyleReference(project.topic, project.articleType),
-    },
-    {
-      audit: {
-        jobId: context.job.id,
-        projectId,
+  context.setProgress("calling_llm", "正在生成发布包。");
+  let publishPackage: PublishPackage;
+  try {
+    publishPackage = await runStructuredTask<PublishPackage>(
+      "publish_prep",
+      {
+        project,
+        finalMarkdown,
+        sectorModel,
+        outlineDraft,
+        deterministicReview: reviewReport,
+        styleReference: buildStyleReference(project.topic, project.articleType),
       },
-    },
-  );
-  context.log("info", "llm_call_finished", "发布前整理已生成。", { task: "publish_prep" });
+      {
+        audit: {
+          jobId: context.job.id,
+          projectId,
+        },
+      },
+    );
+    context.log("info", "llm_call_finished", "发布包已生成。", { task: "publish_prep" });
+  } catch (error) {
+    publishPackage = buildPublishPackage({ project, finalMarkdown });
+    publishPackage.publishChecklist = [
+      ...publishPackage.publishChecklist,
+      "模型发布整理超时，本次已使用规则兜底版；发布前建议人工复核标题、摘要和配图位。",
+    ];
+    context.log("warn", "llm_call_failed", "发布包生成超时，已使用规则兜底版。", {
+      message: error instanceof Error ? error.message : "未知错误",
+    });
+  }
 
   if (needsSummaryRefinement(publishPackage.summary)) {
     try {
@@ -101,10 +114,10 @@ export async function preparePublishStep(input: { projectId: string; context: Jo
   }
 
   publishPackage.qualityGate = qualityGate;
-  context.setProgress("saving_result", "正在保存发布前整理结果。");
+  context.setProgress("saving_result", "正在保存发布包。");
   savePublishPackage(projectId, publishPackage);
   updateProject(projectId, { stage: "发布前整理" });
-  context.log("info", "result_saved", "发布前整理结果已保存。");
+  context.log("info", "result_saved", "发布包已保存。");
 }
 
 export function assertPublishQualityGateAllowsPrepare(qualityGate: WritingQualityGateResult, context?: Pick<JobExecutionContext, "log">) {
@@ -128,8 +141,8 @@ export function assertPublishQualityGateAllowsPrepare(qualityGate: WritingQualit
 }
 
 function buildQualityGateBlockedMessage(mustFixTitles: string[]) {
-  const suffix = mustFixTitles.length ? `请先处理：${mustFixTitles.slice(0, 3).join("、")}。` : "请先回到质检/正文修复后再生成发布整理。";
-  return `写作质量门槛未通过，暂时不能生成发布前整理稿。${suffix}`;
+  const suffix = mustFixTitles.length ? `请先处理：${mustFixTitles.slice(0, 3).join("、")}。` : "请先回到体检/正文修复后再生成发布包。";
+  return `写作质量门槛未通过，暂时不能生成发布包。${suffix}`;
 }
 
 function needsSummaryRefinement(summary: string) {

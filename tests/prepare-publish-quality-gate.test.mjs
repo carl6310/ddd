@@ -51,7 +51,7 @@ test("prepare publish blocks when quality gate mode is hard-block", () => {
 
   assert.ok(error instanceof JobError);
   assert.equal(error.code, "quality_gate_failed");
-  assert.match(error.message, /暂时不能生成发布前整理稿/);
+  assert.match(error.message, /暂时不能生成发布包/);
 });
 
 test("prepare publish blocks when quality gate overall status fails", () => {
@@ -69,6 +69,6 @@ test("prepare publish quality gate error message is user-readable", () => {
   const { error } = captureFailure(createGate({ mode: "hard-block" }));
 
   assert.ok(error instanceof JobError);
-  assert.match(error.message, /^写作质量门槛未通过，暂时不能生成发布前整理稿。/);
+  assert.match(error.message, /^写作质量门槛未通过，暂时不能生成发布包。/);
   assert.doesNotMatch(error.message, /hard-block|overallStatus|mustFix|quality_gate_failed/);
 });

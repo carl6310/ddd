@@ -142,7 +142,7 @@ export function DraftsTab({
       }
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["review", "publish-prep"]);
-      setDraftMessage("人工改写稿已保存。VitalityCheck 和发布整理可能需要重生成。");
+      setDraftMessage("人工改写稿已保存。体检和发布包可能需要重生成。");
     } catch (error) {
       setDraftMessage(error instanceof Error ? error.message : "保存人工改写稿失败。");
     } finally {
@@ -183,7 +183,7 @@ export function DraftsTab({
       }
       await refreshProjectsAndBundle(selectedProjectId);
       markArtifactsStale(["outline", "drafts", "review", "publish-prep"]);
-      setDraftMessage("板块建模已保存。提纲、正文、检查和发布整理可能需要重生成。");
+      setDraftMessage("板块建模已保存。提纲、正文、体检和发布包可能需要重生成。");
     } catch (error) {
       setDraftMessage(error instanceof Error ? error.message : "保存板块建模失败。");
     } finally {
@@ -211,7 +211,7 @@ export function DraftsTab({
       markArtifactsStale(["drafts", "review", "publish-prep"]);
       setHasUnsavedOutlineChanges(false);
       setOutlineSavedAt(new Date());
-      setDraftMessage("段落提纲已保存。正文、检查和发布整理可能需要重生成。");
+      setDraftMessage("段落提纲已保存。正文、体检和发布包可能需要重生成。");
     } catch (error) {
       setDraftMessage(error instanceof Error ? error.message : "保存提纲失败。");
     } finally {
@@ -268,7 +268,7 @@ export function DraftsTab({
               ) : null}
               {visibleSections.includes("publish-prep") ? (
                 <button type="button" role="tab" aria-selected={activeSection === "publish-prep"} className={`section-subnav-button ${activeSection === "publish-prep" ? "active" : ""}`} onClick={() => setActiveSection("publish-prep")}>
-                  发布整理
+                  体检发布
                 </button>
               ) : null}
             </div>
@@ -708,7 +708,7 @@ export function DraftsTab({
         {activeSection === "publish-prep" ? (
           <Panel className="stack section-panel publish-prep-stage">
             <div className="section-panel-header">
-              <h3>发布前整理</h3>
+              <h3>发布包</h3>
               {selectedBundle.publishPackage ? (
                 <div className="action-row publish-action-row">
                   <Chip tone="accent">{selectedBundle.publishPackage.titleOptions.length} 个标题候选</Chip>
@@ -719,7 +719,7 @@ export function DraftsTab({
                     disabled={isPending || !canPublish}
                     type="button"
                   >
-                    重新生成发布前整理
+                    重新生成发布包
                   </Button>
                 </div>
               ) : null}
@@ -729,7 +729,7 @@ export function DraftsTab({
                 <Card className="publish-command-strip">
                   <div>
                     <strong>发布包已就绪</strong>
-                    <p>这里集中处理标题、摘要、配图位和 Markdown 导出；正文改过后先重跑检查，再重新生成发布整理。</p>
+                    <p>这里集中处理标题、摘要、配图位和 Markdown 导出；正文改过后先重跑体检，再重新生成发布包。</p>
                   </div>
                   <div className="action-row">
                     <Button
@@ -854,16 +854,16 @@ export function DraftsTab({
             ) : (
               <EmptyState
                 className="workbench-empty-state"
-                title={canPublish ? "可以进入发布整理" : "还不能生成发布整理"}
+                title={canPublish ? "可以生成发布包" : "还不能生成发布包"}
                 action={
                   canPublish ? (
                     <Button variant="primary" size="lg" onClick={() => void generatePublishPrep()} disabled={isPending || !canPublish} type="button">
-                      生成发布前整理
+                      生成发布包
                     </Button>
                   ) : (
                     <div className="action-row">
                       <Button type="button" variant="secondary" size="md" onClick={onOpenVitalityCheck} disabled={isPending}>
-                        去看发布前检查
+                        去看体检结果
                       </Button>
                       <Button
                         type="button"
@@ -881,7 +881,7 @@ export function DraftsTab({
                 {canPublish ? (
                   <p>建议先看完质量金字塔和门槛提示，再生成标题、摘要、配图位和导出包。</p>
                 ) : (
-                  <p>发布整理需要先通过发布前检查。先看阻塞项，修完正文后再重新检查。</p>
+                  <p>发布包需要先通过发布前体检。先看阻塞项，修完正文后再重新体检。</p>
                 )}
               </EmptyState>
             )}

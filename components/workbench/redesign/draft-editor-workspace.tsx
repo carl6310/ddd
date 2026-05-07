@@ -6,11 +6,11 @@ import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Modal } from "@/components/ui/modal";
 import { AutoGrowTextarea } from "@/components/ui/auto-grow-textarea";
-import type { DraftEditorSectionViewModel, DraftEditorViewModel } from "@/lib/design/view-models";
+import type { DesignCardTone, DraftEditorSectionViewModel, DraftEditorViewModel } from "@/lib/design/view-models";
 import type { ActiveTab, WorkbenchStepPath, WorkspaceSection } from "../workflow-state";
 import type { WorkbenchInspectorSelection } from "../WorkbenchInspector";
 
-type DraftVersion = "edited" | "narrative" | "analysis";
+type DraftVersion = "current" | "edited" | "narrative" | "analysis";
 type DraftHeaderAction = {
   id: number;
   kind: "save" | "focus" | "history";
@@ -42,7 +42,7 @@ export function DraftEditorWorkspace({
   onInspectorSelectionChange: (selection: WorkbenchInspectorSelection) => void;
 }) {
   const initialEditorValue = model.editedMarkdown || model.narrativeMarkdown;
-  const [draftVersion, setDraftVersion] = useState<DraftVersion>("narrative");
+  const [draftVersion, setDraftVersion] = useState<DraftVersion>("current");
   const [editorValue, setEditorValue] = useState(initialEditorValue);
   const [focusMode, setFocusMode] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -55,7 +55,13 @@ export function DraftEditorWorkspace({
   const versionOptions = useMemo(() => getDraftVersionOptions(model), [model]);
   const selectedVersionOption = versionOptions.find((option) => option.id === draftVersion) ?? versionOptions[0];
   const displayedText = formatDraftReaderText(
-    draftVersion === "analysis" ? model.analysisMarkdown : draftVersion === "narrative" ? model.narrativeMarkdown : editorValue,
+    draftVersion === "analysis"
+      ? model.analysisMarkdown
+      : draftVersion === "narrative"
+        ? model.narrativeMarkdown
+        : draftVersion === "edited"
+          ? editorValue
+          : model.currentMarkdown,
     model.citationLabels,
   );
 
@@ -107,7 +113,7 @@ export function DraftEditorWorkspace({
     <section className={`redesign-draft-editor ${focusMode ? "is-focus-mode" : ""}`} aria-label="写作编辑器">
       <div className="redesign-draft-hero">
         <div className="redesign-draft-hero-copy">
-          <span>正文编辑器</span>
+          <span>正文打磨</span>
           <h2>{model.projectTitle}</h2>
           <p>
             {model.characterCount} 字 · {model.paragraphCount} 段 · {model.citationCount} 处引用
@@ -121,7 +127,7 @@ export function DraftEditorWorkspace({
             {model.hasDraft ? "重新生成正文" : "生成正文"}
           </Button>
           <Button type="button" variant="primary" disabled={isPending || !model.canReview} onClick={() => void onExecute("review")}>
-            运行 VitalityCheck
+            运行质量检查
           </Button>
         </div>
       </div>
@@ -140,6 +146,8 @@ export function DraftEditorWorkspace({
           detail={`${model.continuityFlagCount} 连续性 / ${model.rewriteSuggestionCount} 改写`}
         />
       </div>
+
+      {model.hasDraft ? <DraftBrief model={model} selectedSection={selectedSection} draftVersion={draftVersion} /> : null}
 
       {!model.hasDraft ? (
         <EmptyState
@@ -233,7 +241,6 @@ export function DraftEditorWorkspace({
               <DraftReader text={displayedText} />
             )}
           </main>
-          <DraftContextPanel model={model} selectedSection={selectedSection} onNavigate={onNavigate} />
         </div>
       )}
       <Modal
@@ -281,98 +288,53 @@ export function DraftEditorWorkspace({
   );
 }
 
-function DraftContextPanel({
+function DraftBrief({
   model,
   selectedSection,
-  onNavigate,
+  draftVersion,
 }: {
   model: DraftEditorViewModel;
   selectedSection: DraftEditorSectionViewModel | null;
-  onNavigate: (tab: ActiveTab, section: WorkspaceSection) => void;
+  draftVersion: DraftVersion;
 }) {
-  const visibleIssues = model.reviewIssues.slice(0, 4);
-  const feedbackEvents = model.feedbackEvents.slice(0, 3);
-
   return (
-    <aside className="redesign-draft-context" aria-label="写作建议">
-      <section className="redesign-draft-style-card">
-        <div className="redesign-draft-panel-head">
-          <span>StyleCore 建议</span>
-          <Chip tone="accent">写作风格</Chip>
-        </div>
-        <dl>
-          <div>
-            <dt>判断姿态</dt>
-            <dd>{model.activeStyle.judgement}</dd>
-          </div>
-          <div>
-            <dt>节奏</dt>
-            <dd>{model.activeStyle.rhythm}</dd>
-          </div>
-          <div>
-            <dt>知识落点</dt>
-            <dd>{model.activeStyle.knowledgeDrop}</dd>
-          </div>
-        </dl>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onNavigate("overview", "overview-style-core")}>
-          查看 StyleCore
-        </Button>
-      </section>
+    <section className="redesign-draft-brief" aria-label="正文打磨摘要">
+      <DraftBriefCard
+        label="正文状态"
+        title={model.vitality.statusLabel}
+        body={`${getDraftVersionLabel(draftVersion)} · ${model.characterCount.toLocaleString("zh-CN")} 字 · ${
+          model.citationCount
+        } 处引用`}
+        tone={model.vitality.tone}
+      />
+      <DraftBriefCard
+        label="当前段落"
+        title={selectedSection ? `${String(selectedSection.index + 1).padStart(2, "0")} · ${selectedSection.heading}` : "未选择段落"}
+        body={selectedSection?.thesis ?? "从左侧提纲选择一个段落，正文区域会同步定位写作任务。"}
+        tone={selectedSection?.tone ?? "accent"}
+      />
+      <DraftBriefCard label="写作约束" title={model.activeStyle.judgement} body={`节奏：${model.activeStyle.rhythm}。`} tone="accent" />
+    </section>
+  );
+}
 
-      <section className={`redesign-draft-vitality-card redesign-tone-${model.vitality.tone}`}>
-        <div className="redesign-draft-panel-head">
-          <span>VitalityCheck</span>
-          <Chip tone={model.vitality.tone}>{model.vitality.statusLabel}</Chip>
-        </div>
-        <p>{model.vitality.verdict}</p>
-        <strong>{model.vitality.issueCount} 条提醒</strong>
-      </section>
-
-      {selectedSection ? (
-        <section className={`redesign-draft-section-card redesign-tone-${selectedSection.tone}`}>
-          <span>当前段落</span>
-          <strong>{selectedSection.heading}</strong>
-          <p>{selectedSection.thesis}</p>
-          <small>
-            {selectedSection.statusLabel} / {selectedSection.evidenceCount} 条证据
-          </small>
-        </section>
-      ) : null}
-
-      <section>
-        <div className="redesign-draft-panel-head">
-          <span>论证检查</span>
-          <Chip tone={visibleIssues.length ? "warning" : "success"}>{visibleIssues.length ? `${visibleIssues.length} 条` : "良好"}</Chip>
-        </div>
-        {visibleIssues.length ? (
-          <div className="redesign-draft-issue-list">
-            {visibleIssues.map((issue) => (
-              <div className={`redesign-draft-issue redesign-tone-${issue.tone}`} key={issue.id}>
-                <strong>{issue.title}</strong>
-                <p>{issue.detail}</p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p>当前没有需要优先处理的质检项。</p>
-        )}
-      </section>
-
-      {feedbackEvents.length ? (
-        <section>
-          <div className="redesign-draft-panel-head">
-            <span>修改记录</span>
-            <Chip>{feedbackEvents.length}</Chip>
-          </div>
-          {feedbackEvents.map((event) => (
-            <div className="redesign-draft-feedback-row" key={event.id}>
-              <strong>{event.label}</strong>
-              <span>{event.sectionHeading}</span>
-            </div>
-          ))}
-        </section>
-      ) : null}
-    </aside>
+function DraftBriefCard({
+  label,
+  title,
+  body,
+  tone,
+}: {
+  label: string;
+  title: string;
+  body: string;
+  tone: DesignCardTone;
+}) {
+  return (
+    <article className={`redesign-draft-brief-card redesign-tone-${tone}`}>
+      <span>{label}</span>
+      <strong>{title}</strong>
+      <p>{body}</p>
+    </article>
   );
 }
 
@@ -444,9 +406,15 @@ function getDraftVersionOptions(model: DraftEditorViewModel): Array<{
 }> {
   return [
     {
+      id: "current",
+      label: "当前稿",
+      detail: model.editedMarkdown ? "当前可读稿" : "当前生成稿",
+      characterCount: countPlainCharacters(model.currentMarkdown),
+    },
+    {
       id: "edited",
-      label: "改写版",
-      detail: model.editedMarkdown ? "人工改写稿" : "等待人工改写",
+      label: "改写编辑",
+      detail: model.editedMarkdown ? "可编辑改写稿" : "等待人工改写",
       characterCount: countPlainCharacters(model.editedMarkdown || model.narrativeMarkdown),
     },
     {
@@ -462,6 +430,19 @@ function getDraftVersionOptions(model: DraftEditorViewModel): Array<{
       characterCount: countPlainCharacters(model.analysisMarkdown),
     },
   ];
+}
+
+function getDraftVersionLabel(version: DraftVersion) {
+  if (version === "current") {
+    return "当前稿";
+  }
+  if (version === "edited") {
+    return "改写编辑";
+  }
+  if (version === "analysis") {
+    return "分析版";
+  }
+  return "成文版";
 }
 
 function parseDraftReaderBlocks(text: string): DraftReaderBlock[] {
@@ -497,6 +478,32 @@ function formatDraftReaderText(value: string, citationLabels: DraftEditorViewMod
   let text = value;
   for (const citation of citationLabels) {
     text = text.replaceAll(`[SC:${citation.id}]`, `〔${citation.label}〕`);
+    text = text.replace(new RegExp(`\\b${escapeRegExp(citation.id)}\\b`, "g"), citation.label);
   }
-  return text.replace(/\[SC:[^\]]+\]/g, "〔资料〕");
+  return text
+    .replace(/\[SC:[^\]]+\]/g, "〔资料〕")
+    .replaceAll("## ThinkCard", "## 选题判断")
+    .replaceAll("## StyleCore", "## 表达策略")
+    .replaceAll("HKR-Happy", "情绪收益")
+    .replaceAll("HKR-Knowledge", "知识收益")
+    .replaceAll("HKR-Resonance", "共鸣收益")
+    .replaceAll("value_reassessment", "价值重估")
+    .replaceAll("total_judgement", "总体判断")
+    .replaceAll("spatial_segmentation", "空间切割")
+    .replaceAll("buyer_split", "客群切分")
+    .replaceAll("transaction_observation", "交易观察")
+    .replaceAll("decision_service", "决策服务")
+    .replaceAll("risk_deconstruction", "风险拆解")
+    .replaceAll("scene_character", "人物/场景")
+    .replaceAll("busy_relocator", "忙碌迁居者")
+    .replaceAll("improver_buyer", "改善型买家")
+    .replaceAll("risk_aware_reader", "风险敏感读者")
+    .replaceAll("local_life_reader", "本地生活读者")
+    .replaceAll("**选题值**：strong", "**选题值**：值得开题")
+    .replaceAll("**选题值**：rework", "**选题值**：需要重构")
+    .replaceAll("**选题值**：weak", "**选题值**：暂缓");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

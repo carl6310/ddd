@@ -41,7 +41,7 @@ export function buildWritingQualityGate(bundle: ProjectBundle): WritingQualityGa
     const paragraphFlags = review.paragraphFlags ?? [];
 
     if (rewriteIntents.some((intent) => intent.issueType === "weak_ending_echo")) {
-      mustFix.push(createItem("weak_ending_echo", "结尾回环偏弱", "结尾没有真正回扣开头判断，建议先补回环再做发布整理。"));
+      mustFix.push(createItem("weak_ending_echo", "结尾回环偏弱", "结尾没有真正回扣开头判断，建议先补回环再生成发布包。"));
     }
 
     if (rewriteIntents.some((intent) => intent.issueType === "generic_language")) {
@@ -52,7 +52,8 @@ export function buildWritingQualityGate(bundle: ProjectBundle): WritingQualityGa
       shouldFix.push(createItem("missing_cost", "现实代价不够透", "部分关键段仍缺少门槛、代价或不成立条件。"));
     }
 
-    if (rewriteIntents.some((intent) => intent.issueType === "missing_scene")) {
+    const hasScenePassed = review.checks.some((check) => check.key === "character-scene" && check.status === "pass");
+    if (!hasScenePassed && rewriteIntents.some((intent) => intent.issueType === "missing_scene")) {
       shouldFix.push(createItem("missing_scene", "人物/生活场景偏弱", "正文仍有段落缺少生活场景承接。"));
     }
 

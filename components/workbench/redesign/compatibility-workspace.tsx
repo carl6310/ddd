@@ -63,7 +63,7 @@ export function CompatibilityWorkspace({
             </div>
           </div>
           <div className="redesign-compatibility-note">
-            <strong>主工作流以 ThinkCard / StyleCore 为准。</strong>
+            <strong>主工作流以选题判断 / 表达策略为准。</strong>
             <p>HKRR、HAMD 和旧动作卡仍保留为兼容字段，供旧提示词、正文生成和质检链路读取。</p>
           </div>
           <div className="redesign-compatibility-note">
